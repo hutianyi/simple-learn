@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<model type="com.apple.IDECoreDataModeler.DataModel" documentVersion="1.0" lastSavedToolsVersion="26000" systemVersion="25.0" minimumToolsVersion="Automatic" sourceLanguage="Swift" userDefinedModelVersionIdentifier="2">
+    <entity name="WordEntity" representedClassName="WordEntity" syncable="YES">
+        <attribute name="importPosition" optional="NO" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="chinese" optional="NO" attributeType="String"/>
+        <attribute name="createdAt" optional="NO" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="english" optional="NO" attributeType="String"/>
+        <attribute name="id" optional="NO" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="normalizedEnglish" optional="NO" attributeType="String"/>
+        <attribute name="updatedAt" optional="NO" attributeType="Date" usesScalarValueType="NO"/>
+        <relationship name="events" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="ReviewEventEntity" inverseName="word" inverseEntity="ReviewEventEntity"/>
+        <relationship name="reviewStates" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="ReviewStateEntity" inverseName="word" inverseEntity="ReviewStateEntity"/>
+        <uniquenessConstraints>
+            <uniquenessConstraint>
+                <constraint value="normalizedEnglish"/>
+            </uniquenessConstraint>
+        </uniquenessConstraints>
+    </entity>
+    <entity name="ReviewStateEntity" representedClassName="ReviewStateEntity" syncable="YES">
+        <attribute name="consecutiveKnown" optional="NO" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="createdAt" optional="NO" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="direction" optional="NO" attributeType="String"/>
+        <attribute name="fsrsCardData" optional="YES" attributeType="Binary" allowsExternalBinaryDataStorage="YES"/>
+        <attribute name="fsrsMigrationVersion" optional="NO" attributeType="Integer 16" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="id" optional="NO" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="knownCount" optional="NO" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="lapseCount" optional="NO" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="lastResult" optional="YES" attributeType="String"/>
+        <attribute name="lastReviewDate" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="level" optional="NO" attributeType="Integer 16" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="nextReviewDate" optional="NO" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="totalReviews" optional="NO" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="unknownCount" optional="NO" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="updatedAt" optional="NO" attributeType="Date" usesScalarValueType="NO"/>
+        <relationship name="events" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="ReviewEventEntity" inverseName="reviewState" inverseEntity="ReviewEventEntity"/>
+        <relationship name="word" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="WordEntity" inverseName="reviewStates" inverseEntity="WordEntity"/>
+    </entity>
+    <entity name="ReviewEventEntity" representedClassName="ReviewEventEntity" syncable="YES">
+        <attribute name="direction" optional="NO" attributeType="String"/>
+        <attribute name="id" optional="NO" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="isSameSessionRetry" optional="NO" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="levelAfter" optional="NO" attributeType="Integer 16" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="levelBefore" optional="NO" attributeType="Integer 16" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="practiceMode" optional="NO" attributeType="String"/>
+        <attribute name="result" optional="NO" attributeType="String"/>
+        <attribute name="reviewedAt" optional="NO" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="sessionID" optional="NO" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="wordChineseSnapshot" optional="NO" attributeType="String"/>
+        <attribute name="wordEnglishSnapshot" optional="NO" attributeType="String"/>
+        <relationship name="reviewState" optional="NO" maxCount="1" deletionRule="Nullify" destinationEntity="ReviewStateEntity" inverseName="events" inverseEntity="ReviewStateEntity"/>
+        <relationship name="session" optional="NO" maxCount="1" deletionRule="Nullify" destinationEntity="StudySessionEntity" inverseName="events" inverseEntity="StudySessionEntity"/>
+        <relationship name="word" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="WordEntity" inverseName="events" inverseEntity="WordEntity"/>
+    </entity>
+    <entity name="StudySessionEntity" representedClassName="StudySessionEntity" syncable="YES">
+        <attribute name="baseTaskCount" optional="NO" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="completed" optional="NO" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="extraAnswered" optional="NO" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="extraKnown" optional="NO" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="extraUnknown" optional="NO" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="finishedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="formalAnswered" optional="NO" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="formalKnown" optional="NO" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="formalUnknown" optional="NO" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="id" optional="NO" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="mode" optional="NO" attributeType="String"/>
+        <attribute name="retryAnswered" optional="NO" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="startedAt" optional="NO" attributeType="Date" usesScalarValueType="NO"/>
+        <relationship name="events" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="ReviewEventEntity" inverseName="session" inverseEntity="ReviewEventEntity"/>
+    </entity>
+</model>

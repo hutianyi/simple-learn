@@ -1,0 +1,27 @@
+SimpleXue / 简单学
+==================
+Copyright (c) 2026 Hutianyi
+
+SimpleXue integrates the author's SimpleJi (WordMemoryCards), SimpleLian,
+SimpleMo (DictationApp), and SimpleSuan apps, and adds SimpleTing.
+The integrated project is released under the root MIT License.
+Original module documentation and notices are retained under Attributions/.
+
+SimpleJi was independently implemented with architectural and interaction
+ideas informed by TOEFL Vocab:
+https://github.com/a1mohamad/toefl-vocabs-ios-app
+Copyright (c) 2026 Amir Mohammad Askari
+License: MIT
+The original license and notice are preserved in Attributions/简单记/.
+Upstream TOEFL / 504 word lists, screenshots and publisher content are excluded.
+The REUSE_PLAN.md mentioned in the historical module documents belongs to the
+original WordMemoryCards repository and is not part of this integrated snapshot.
+
+FSRS scheduling is provided by swift-fsrs:
+https://github.com/open-spaced-repetition/swift-fsrs
+Revision: 4fbaf20184d62f82a9f44f343337c61a2c5483e9
+Copyright (c) 2023 Ben Smiley
+License: MIT (see Attributions/swift-fsrs/LICENSE)
+
+User-imported vocabulary, questions, articles and backups are not distributed
+with this repository and retain their respective ownership.

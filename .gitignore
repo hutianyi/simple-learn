@@ -1,0 +1,26 @@
+# macOS and Xcode local files
+.DS_Store
+DerivedData/
+build/
+.build/
+*.xcuserstate
+xcuserdata/
+
+# Device containers, personal backups and local records
+*.xcappdata/
+PrivateBackups/
+Reports/
+/简单学项目设计与开发进度.md
+/简单听-开发方案与进度.md
+/简单背-完整设计与开发方案.md
+
+# Credentials and signing material
+.env
+.env.*
+*.p12
+*.p8
+*.pem
+*.key
+*.mobileprovision
+*.provisionprofile
+*.cer

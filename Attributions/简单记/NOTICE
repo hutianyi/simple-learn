@@ -1,0 +1,26 @@
+Third-Party Notices
+===================
+
+WordMemoryCards is an independently developed, iPad-first vocabulary app. It
+draws on architectural and interaction ideas from TOEFL Vocab, including
+general-purpose approaches to practice flow, text-to-speech, haptics, reports,
+backup, and XcodeGen project organization. Some of those ideas were adapted
+while implementing this project.
+
+Upstream project: TOEFL Vocab
+Upstream repository: https://github.com/a1mohamad/toefl-vocabs-ios-app
+Copyright (c) 2026 Amir Mohammad Askari
+License: MIT
+
+The upstream MIT license and copyright notice are preserved in LICENSE. A
+detailed record of what was retained, rewritten, and intentionally excluded is
+available in REUSE_PLAN.md.
+
+The upstream TOEFL / 504 vocabulary lists, bundled content, screenshots, and
+publisher-owned source material are not included in WordMemoryCards. Users
+provide and retain ownership of their own vocabulary content.
+
+FSRS scheduling is provided by swift-fsrs:
+Repository: https://github.com/open-spaced-repetition/swift-fsrs
+Copyright (c) 2023 Ben Smiley
+License: MIT

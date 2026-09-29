@@ -1,0 +1,482 @@
+[
+  {
+    "source": "简单记/Sources/WordMemoryCards/Core/Settings/SettingsStore.swift",
+    "destination": "Modules/SimpleJi/Sources/Core/Settings/SettingsStore.swift",
+    "sha256": "ebdf070b12252d5df1a7ec5f5710f3bd333ef94cffd0041d58c7234e4044f0df"
+  },
+  {
+    "source": "简单记/Sources/WordMemoryCards/Core/SRS/SRSScheduler.swift",
+    "destination": "Modules/SimpleJi/Sources/Core/SRS/SRSScheduler.swift",
+    "sha256": "d8b396f0367f5ea0e24d329f29aa0a521f078275f8954f8290d74003509ed7a8"
+  },
+  {
+    "source": "简单记/Sources/WordMemoryCards/Core/SRS/WeaknessScorer.swift",
+    "destination": "Modules/SimpleJi/Sources/Core/SRS/WeaknessScorer.swift",
+    "sha256": "63bba5b7128fdf4dcd593a3f5229a76f784c70739eecfb26562ddbb423bbffbb"
+  },
+  {
+    "source": "简单记/Sources/WordMemoryCards/Core/SRS/ReviewTask.swift",
+    "destination": "Modules/SimpleJi/Sources/Core/SRS/ReviewTask.swift",
+    "sha256": "b3bff6091ae8854bb65a18bcf9f69a8f60390e5237aa0f595ef311a867b20567"
+  },
+  {
+    "source": "简单记/Sources/WordMemoryCards/Core/SRS/ReviewQueueBuilder.swift",
+    "destination": "Modules/SimpleJi/Sources/Core/SRS/ReviewQueueBuilder.swift",
+    "sha256": "7ae79b0160d766ed55497a6ada0a8cc3d1dd51e72a57ebcd453646e716145d2d"
+  },
+  {
+    "source": "简单记/Sources/WordMemoryCards/Core/SRS/ReviewRepository.swift",
+    "destination": "Modules/SimpleJi/Sources/Core/SRS/ReviewRepository.swift",
+    "sha256": "5d72bfdcc86a083f38987f020e9c7f0139feb35bee4f5577636e4027f2a70fa3"
+  },
+  {
+    "source": "简单记/Sources/WordMemoryCards/Core/SRS/FSRSMigrationService.swift",
+    "destination": "Modules/SimpleJi/Sources/Core/SRS/FSRSMigrationService.swift",
+    "sha256": "c65fc259f465107c999bb8e55b87ed091c77831626d6a9d9b78aa12bcdc2be8e"
+  },
+  {
+    "source": "简单记/Sources/WordMemoryCards/Core/Models/ReviewDirection.swift",
+    "destination": "Modules/SimpleJi/Sources/Core/Models/ReviewDirection.swift",
+    "sha256": "99a8879d10bea1a66b9d379b0ca756605db38339daa8fbf5cd208230ca74d9e9"
+  },
+  {
+    "source": "简单记/Sources/WordMemoryCards/Core/Speech/SpeechService.swift",
+    "destination": "Modules/SimpleJi/Sources/Core/Speech/SpeechService.swift",
+    "sha256": "6290dfef88cbcaf5e27b7747f47d020f955dd75c697bfd2ad4041f319e4b5518"
+  },
+  {
+    "source": "简单记/Sources/WordMemoryCards/Core/Speech/VoiceResolver.swift",
+    "destination": "Modules/SimpleJi/Sources/Core/Speech/VoiceResolver.swift",
+    "sha256": "bb74ba3514445c0bcd57ef6894ac147514018a2caf83471ac81b3a0f694bca61"
+  },
+  {
+    "source": "简单记/Sources/WordMemoryCards/Core/Feedback/Haptics.swift",
+    "destination": "Modules/SimpleJi/Sources/Core/Feedback/Haptics.swift",
+    "sha256": "de31c103e03538b370362e58f4dda8d28384e933e1f1a73aec11a457b8db4b26"
+  },
+  {
+    "source": "简单记/Sources/WordMemoryCards/Core/Dictation/DictationModels.swift",
+    "destination": "Modules/SimpleJi/Sources/Core/Dictation/DictationModels.swift",
+    "sha256": "c39f885f488e73119da3c8959bdfacd9c54bfdb20f72081d3e4998026b86d2a2"
+  },
+  {
+    "source": "简单记/Sources/WordMemoryCards/Core/Dictation/DictationRepository.swift",
+    "destination": "Modules/SimpleJi/Sources/Core/Dictation/DictationRepository.swift",
+    "sha256": "4cd56c7056852a9042a5897d5c518fa95a09879b4ae39d4cc874fd6e7bba49e5"
+  },
+  {
+    "source": "简单记/Sources/WordMemoryCards/Core/Persistence/LearningProgressResetService.swift",
+    "destination": "Modules/SimpleJi/Sources/Core/Persistence/LearningProgressResetService.swift",
+    "sha256": "b215fadb56e8d68dfee27ecf890f8454f4222527ae796fafc8879a5d47b3b68b"
+  },
+  {
+    "source": "简单记/Sources/WordMemoryCards/Core/Persistence/PersistenceController.swift",
+    "destination": "Modules/SimpleJi/Sources/Core/Persistence/PersistenceController.swift",
+    "sha256": "99337d7bff1b560bf50ab796578ff8d66d491009e41314999f7b72115e4b7937"
+  },
+  {
+    "source": "简单记/Sources/WordMemoryCards/Core/Persistence/ManagedObjects.swift",
+    "destination": "Modules/SimpleJi/Sources/Core/Persistence/ManagedObjects.swift",
+    "sha256": "e015893e3fef03ed1180cc349d12e529847537662b6c69cb663850271c00481b"
+  },
+  {
+    "source": "简单记/Sources/WordMemoryCards/Core/Persistence/WordMemoryCards.xcdatamodeld/.xccurrentversion",
+    "destination": "Modules/SimpleJi/Sources/Core/Persistence/WordMemoryCards.xcdatamodeld/.xccurrentversion",
+    "sha256": "ed15dfb301369a211092b4fb0b69234aa4855c45cb6bc69bd1552c8105f5ab0f"
+  },
+  {
+    "source": "简单记/Sources/WordMemoryCards/Core/Persistence/WordMemoryCards.xcdatamodeld/WordMemoryCardsV3.xcdatamodel/contents",
+    "destination": "Modules/SimpleJi/Sources/Core/Persistence/WordMemoryCards.xcdatamodeld/WordMemoryCardsV3.xcdatamodel/contents",
+    "sha256": "672b3068081498266ad2e6e59cf9ed0ec4f8c9cfdac0a0efcde368544c7128bf"
+  },
+  {
+    "source": "简单记/Sources/WordMemoryCards/Core/Persistence/WordMemoryCards.xcdatamodeld/WordMemoryCardsV2.xcdatamodel/contents",
+    "destination": "Modules/SimpleJi/Sources/Core/Persistence/WordMemoryCards.xcdatamodeld/WordMemoryCardsV2.xcdatamodel/contents",
+    "sha256": "66948b22c28dac8525b904f44ba44169968d8631a4044134e8e187c71fef6abb"
+  },
+  {
+    "source": "简单记/Sources/WordMemoryCards/Core/Persistence/WordMemoryCards.xcdatamodeld/WordMemoryCards.xcdatamodel/contents",
+    "destination": "Modules/SimpleJi/Sources/Core/Persistence/WordMemoryCards.xcdatamodeld/WordMemoryCards.xcdatamodel/contents",
+    "sha256": "6d6945d41cf80487739539aafa4207919d7b397b2aa3fa471493e9acd2b19c1a"
+  },
+  {
+    "source": "简单记/Sources/WordMemoryCards/Core/Backup/BackupService.swift",
+    "destination": "Modules/SimpleJi/Sources/Core/Backup/BackupService.swift",
+    "sha256": "5ed9b61538fed09edfb3fe58609e3052bc4175cc4f73a605a508a7429155f9be"
+  },
+  {
+    "source": "简单记/Sources/WordMemoryCards/Core/Backup/BackupModels.swift",
+    "destination": "Modules/SimpleJi/Sources/Core/Backup/BackupModels.swift",
+    "sha256": "1855c8395e420efe704cc9853a9557df7a2ad6949ab95cb6057a7a54b6840bfb"
+  },
+  {
+    "source": "简单记/Sources/WordMemoryCards/Core/Import/ImportAnalyzer.swift",
+    "destination": "Modules/SimpleJi/Sources/Core/Import/ImportAnalyzer.swift",
+    "sha256": "1f32f72f80b5e82b5a8534afcbc6c7c2dac765c0b7a1d43c1fce956cb7c638fe"
+  },
+  {
+    "source": "简单记/Sources/WordMemoryCards/Core/Import/VocabularyRepository.swift",
+    "destination": "Modules/SimpleJi/Sources/Core/Import/VocabularyRepository.swift",
+    "sha256": "4db8ceede4815742f2dd0641b7c38f50ecc8b0914e34ab077dd9d18cc99040bb"
+  },
+  {
+    "source": "简单记/Sources/WordMemoryCards/Core/Import/ImportModels.swift",
+    "destination": "Modules/SimpleJi/Sources/Core/Import/ImportModels.swift",
+    "sha256": "6b6d955b74412f622c81f5ea1e2cf6dd29aa4326d62f26c33bd010cc871b3739"
+  },
+  {
+    "source": "简单记/Sources/WordMemoryCards/Core/Import/VocabularyParser.swift",
+    "destination": "Modules/SimpleJi/Sources/Core/Import/VocabularyParser.swift",
+    "sha256": "fc987d48e37229eaff4aa4f5e30f4f2f8d63d06b77787e76a637ac6aceeb0ded"
+  },
+  {
+    "source": "简单记/Sources/WordMemoryCards/Core/Import/EnglishNormalizer.swift",
+    "destination": "Modules/SimpleJi/Sources/Core/Import/EnglishNormalizer.swift",
+    "sha256": "0e57a247ab4461d2960951cd8e87f7690d324df2e677490254870da6e70c2185"
+  },
+  {
+    "source": "简单记/Sources/WordMemoryCards/App/AppRouter.swift",
+    "destination": "Modules/SimpleJi/Sources/App/AppRouter.swift",
+    "sha256": "15d74efce3d32b76f16c6e38abf1a2b9d1bebb3cac4df5965726046d24a5d0fd"
+  },
+  {
+    "source": "简单记/Sources/WordMemoryCards/App/RootView.swift",
+    "destination": "Modules/SimpleJi/Sources/App/RootView.swift",
+    "sha256": "e4a35c73e22c38f8359a146daae42d1886300fe0d4e35dbd5c36e517b59eeb12"
+  },
+  {
+    "source": "简单记/Sources/WordMemoryCards/Features/Statistics/StatisticsView.swift",
+    "destination": "Modules/SimpleJi/Sources/Features/Statistics/StatisticsView.swift",
+    "sha256": "bd10e044bcb29cbe1daa5c92ef42c082e28b2620413ff5d63a5835154f49af4d"
+  },
+  {
+    "source": "简单记/Sources/WordMemoryCards/Features/Settings/SettingsView.swift",
+    "destination": "Modules/SimpleJi/Sources/Features/Settings/SettingsView.swift",
+    "sha256": "81d9f1342dbdffeffee63e1c931d20ee94bf75b7058e4587d16aed63d38a5ad4"
+  },
+  {
+    "source": "简单记/Sources/WordMemoryCards/Features/Settings/BackupViewModel.swift",
+    "destination": "Modules/SimpleJi/Sources/Features/Settings/BackupViewModel.swift",
+    "sha256": "fc784b025e8b87b957f4bbb1e49e8d743f65d91952f8ae681c10c9b1a6322f31"
+  },
+  {
+    "source": "简单记/Sources/WordMemoryCards/Features/Home/HomeView.swift",
+    "destination": "Modules/SimpleJi/Sources/Features/Home/HomeView.swift",
+    "sha256": "5e740304a89d524b465036e4a2bf2e2d9d56043d95f57f52559848a4467c7c35"
+  },
+  {
+    "source": "简单记/Sources/WordMemoryCards/Features/AddWords/AddWordsViewModel.swift",
+    "destination": "Modules/SimpleJi/Sources/Features/AddWords/AddWordsViewModel.swift",
+    "sha256": "13e9ad1d55184a4b344a2d8906658f9da67934e1bdc3e3aaad7f4521bcf54d76"
+  },
+  {
+    "source": "简单记/Sources/WordMemoryCards/Features/AddWords/AddWordsView.swift",
+    "destination": "Modules/SimpleJi/Sources/Features/AddWords/AddWordsView.swift",
+    "sha256": "43d684c121163d904c352929609140c0824633fa3b774c13dc50d5db6a8a3aa3"
+  },
+  {
+    "source": "简单记/Sources/WordMemoryCards/Features/WordLibrary/WordDetailView.swift",
+    "destination": "Modules/SimpleJi/Sources/Features/WordLibrary/WordDetailView.swift",
+    "sha256": "5db6247ee6eca299a0791e61bde7cb415dd9c2a385475ce2527226fdf3a495ca"
+  },
+  {
+    "source": "简单记/Sources/WordMemoryCards/Features/WordLibrary/WordLibraryView.swift",
+    "destination": "Modules/SimpleJi/Sources/Features/WordLibrary/WordLibraryView.swift",
+    "sha256": "19d93829b3738bd85d20736e2f59822ee5c8bf27ef0f2f7a9757c7e709bcf0ae"
+  },
+  {
+    "source": "简单记/Sources/WordMemoryCards/Features/Dictation/DictationViewModel.swift",
+    "destination": "Modules/SimpleJi/Sources/Features/Dictation/DictationViewModel.swift",
+    "sha256": "11d99113f7bc8d6cf9075727d73618ca727056889aeb94e40a825b5d563b7d55"
+  },
+  {
+    "source": "简单记/Sources/WordMemoryCards/Features/Dictation/DictationView.swift",
+    "destination": "Modules/SimpleJi/Sources/Features/Dictation/DictationView.swift",
+    "sha256": "1d390aeef2705790a689721db2bc77d57cc133c40769c3be1a9b5aca5924274b"
+  },
+  {
+    "source": "简单记/Sources/WordMemoryCards/Features/Dictation/PencilCanvas.swift",
+    "destination": "Modules/SimpleJi/Sources/Features/Dictation/PencilCanvas.swift",
+    "sha256": "09e42b9134c9cd987a3408dac68f2c2f98431c3dd8c84e9113104f52cb9e421b"
+  },
+  {
+    "source": "简单记/Sources/WordMemoryCards/Features/Review/ReviewSessionView.swift",
+    "destination": "Modules/SimpleJi/Sources/Features/Review/ReviewSessionView.swift",
+    "sha256": "115b41f914a731d011bb28e9acb434e6456f41b182af281c80b1dad9b1da1cc1"
+  },
+  {
+    "source": "简单记/Sources/WordMemoryCards/Features/Review/ReviewSessionViewModel.swift",
+    "destination": "Modules/SimpleJi/Sources/Features/Review/ReviewSessionViewModel.swift",
+    "sha256": "c6284d1a37b4ac351b9d224946c5c6111b6196b5bcac6bc85325726b0f9310f1"
+  },
+  {
+    "source": "简单记/Sources/WordMemoryCards/Shared/DesignSystem.swift",
+    "destination": "Modules/SimpleJi/Sources/Shared/DesignSystem.swift",
+    "sha256": "18473e780782cf9fbc857f97503334ff54b5a5cc37a2751f5e33dbbe1f6b2c36"
+  },
+  {
+    "source": "简单记/Tests/WordMemoryCardsTests/PersistenceControllerTests.swift",
+    "destination": "Modules/SimpleJi/Tests/PersistenceControllerTests.swift",
+    "sha256": "784a995fe0defbbb328abbe609332f67744f316a71c14fe5ba9aa2522aa35508"
+  },
+  {
+    "source": "简单记/Tests/WordMemoryCardsTests/ImportAnalyzerTests.swift",
+    "destination": "Modules/SimpleJi/Tests/ImportAnalyzerTests.swift",
+    "sha256": "f235b51e917ef1cbb987c971cdaa0b7c06ce596c35c0f62eeb5adc7459c94a4d"
+  },
+  {
+    "source": "简单记/Tests/WordMemoryCardsTests/FSRSMigrationServiceTests.swift",
+    "destination": "Modules/SimpleJi/Tests/FSRSMigrationServiceTests.swift",
+    "sha256": "66de9bf25dd6c6caf9923323e3277b8225fdd974170855bea245cd1db2246864"
+  },
+  {
+    "source": "简单记/Tests/WordMemoryCardsTests/ReviewRepositoryTests.swift",
+    "destination": "Modules/SimpleJi/Tests/ReviewRepositoryTests.swift",
+    "sha256": "8cd5268d4f004e10c125cd820385d6fb8ee6a9a597ac4387478428ae77999faf"
+  },
+  {
+    "source": "简单记/Tests/WordMemoryCardsTests/BackupServiceTests.swift",
+    "destination": "Modules/SimpleJi/Tests/BackupServiceTests.swift",
+    "sha256": "9e7ed5b7bfd1254cd1dea101c5682a6c02505c17d41cc0a39d2cb884ae99de33"
+  },
+  {
+    "source": "简单记/Tests/WordMemoryCardsTests/SRSSchedulerTests.swift",
+    "destination": "Modules/SimpleJi/Tests/SRSSchedulerTests.swift",
+    "sha256": "3e369e35197e13056db5f4b0a174bede5e307bd5373c3662648fd9207a3ee1e9"
+  },
+  {
+    "source": "简单记/Tests/WordMemoryCardsTests/SpeechServiceTests.swift",
+    "destination": "Modules/SimpleJi/Tests/SpeechServiceTests.swift",
+    "sha256": "2a69e2eccf05ffa8fbae33a53442582cbf2a7c865d426a09a5839f393db73750"
+  },
+  {
+    "source": "简单记/Tests/WordMemoryCardsTests/VocabularyRepositoryTests.swift",
+    "destination": "Modules/SimpleJi/Tests/VocabularyRepositoryTests.swift",
+    "sha256": "970a5c165e0d99b966d52373ce413e5f6bb53ec76b4c99384e68ced402cf10c9"
+  },
+  {
+    "source": "简单记/Tests/WordMemoryCardsTests/BackupViewModelAlertTests.swift",
+    "destination": "Modules/SimpleJi/Tests/BackupViewModelAlertTests.swift",
+    "sha256": "9bd1518d81f2e39be62a6eb55c0b6ad8994b0d12243ae79a49f4d0b6e69ce43d"
+  },
+  {
+    "source": "简单记/Tests/WordMemoryCardsTests/WeaknessScorerTests.swift",
+    "destination": "Modules/SimpleJi/Tests/WeaknessScorerTests.swift",
+    "sha256": "cebc4ef10bc6cd76dc3ca91e621bd24e8e18cee91fee9c6cca9c92e3758abce1"
+  },
+  {
+    "source": "简单记/Tests/WordMemoryCardsTests/DictationRepositoryTests.swift",
+    "destination": "Modules/SimpleJi/Tests/DictationRepositoryTests.swift",
+    "sha256": "e3fc11d638afcc6baf7be2201a12863fcc9a1607a4a4616663fe78929cd5bbd8"
+  },
+  {
+    "source": "简单记/Tests/WordMemoryCardsTests/LearningProgressResetServiceTests.swift",
+    "destination": "Modules/SimpleJi/Tests/LearningProgressResetServiceTests.swift",
+    "sha256": "6c53d1ab9c701ebf1737eca3151624e77b11d3b08e6abdb26f2be9ad57b31a94"
+  },
+  {
+    "source": "简单记/Tests/WordMemoryCardsTests/VocabularyParserTests.swift",
+    "destination": "Modules/SimpleJi/Tests/VocabularyParserTests.swift",
+    "sha256": "29f55c15c10754a8abaa5437e7027759cd751dc563fbc5c7f21c666740c484c4"
+  },
+  {
+    "source": "简单记/Tests/WordMemoryCardsTests/ReviewQueueBuilderTests.swift",
+    "destination": "Modules/SimpleJi/Tests/ReviewQueueBuilderTests.swift",
+    "sha256": "cc9c9dff22f29c2861ebbf589f27143a7d5421f58ecafdadc915415bbdb66f31"
+  },
+  {
+    "source": "简单练/SimpleLian/Resources/Assets.xcassets/Contents.json",
+    "destination": "Modules/SimpleLian/Sources/Resources/Assets.xcassets/Contents.json",
+    "sha256": "0fd49ba3c3585c709678e0046a821c3c60685ec7063720d30d3a3448be3a208b"
+  },
+  {
+    "source": "简单练/SimpleLian/Models/Enums.swift",
+    "destination": "Modules/SimpleLian/Sources/Models/Enums.swift",
+    "sha256": "125e468ae2145cda4d3183af0cafe62d6af4118126d1b45447c8431ebba48e80"
+  },
+  {
+    "source": "简单练/SimpleLian/Models/Models.swift",
+    "destination": "Modules/SimpleLian/Sources/Models/Models.swift",
+    "sha256": "3977fc6c1488f25b5b18caa014dc1933737fbc674814466c5b4881739e42660e"
+  },
+  {
+    "source": "简单练/SimpleLian/Views/DataView.swift",
+    "destination": "Modules/SimpleLian/Sources/Views/DataView.swift",
+    "sha256": "312d8474da7f70104f36d6fd589b222aeb376a2f1ef0341e389c7a2cf9ece4a0"
+  },
+  {
+    "source": "简单练/SimpleLian/Views/PracticeFlowView.swift",
+    "destination": "Modules/SimpleLian/Sources/Views/PracticeFlowView.swift",
+    "sha256": "f55832372cda5b74197bbb611310f51579026d7ec1b54c6248b1f5a20d447119"
+  },
+  {
+    "source": "简单练/SimpleLian/Views/MarkdownView.swift",
+    "destination": "Modules/SimpleLian/Sources/Views/MarkdownView.swift",
+    "sha256": "78fe9ec1b8d1335c1b01628ac3e6634d777a3af06d665781b153f3a7830a80ee"
+  },
+  {
+    "source": "简单练/SimpleLian/Views/RootView.swift",
+    "destination": "Modules/SimpleLian/Sources/Views/RootView.swift",
+    "sha256": "3570d6f5d03f12126f7f6049fddfd95494ffff82e755eeaa0de6b4dab7deb561"
+  },
+  {
+    "source": "简单练/SimpleLian/Views/LibraryView.swift",
+    "destination": "Modules/SimpleLian/Sources/Views/LibraryView.swift",
+    "sha256": "b474eb6c6109266e184d0aab34c08c2847d9dbee68ce61cd77fbf91b68226a9f"
+  },
+  {
+    "source": "简单练/SimpleLian/Views/TodayView.swift",
+    "destination": "Modules/SimpleLian/Sources/Views/TodayView.swift",
+    "sha256": "b00ae282f73e54f744cf42186e8a764c86b9542d9babdabdc87460c067f0d579"
+  },
+  {
+    "source": "简单练/SimpleLian/Views/ImportView.swift",
+    "destination": "Modules/SimpleLian/Sources/Views/ImportView.swift",
+    "sha256": "6af4c063a80715aff8f8cf8cb951a9036a62c875699f640fa1386987356a8533"
+  },
+  {
+    "source": "简单练/SimpleLian/Services/BackupService.swift",
+    "destination": "Modules/SimpleLian/Sources/Services/BackupService.swift",
+    "sha256": "56a32e1a82df094b447ed288a817e958ef2cb275a73660c4fe08f3925dbb7c1a"
+  },
+  {
+    "source": "简单练/SimpleLian/Services/PracticeService.swift",
+    "destination": "Modules/SimpleLian/Sources/Services/PracticeService.swift",
+    "sha256": "d73cf00169cf24d9c49c3951aae8b7a78f265a6df053544a6d45629933cae7bb"
+  },
+  {
+    "source": "简单练/SimpleLian/Services/ImportService.swift",
+    "destination": "Modules/SimpleLian/Sources/Services/ImportService.swift",
+    "sha256": "081544e3ef5775cd57ebac83de471ea0738313e1db2a52a6dc7371b1d5668bd7"
+  },
+  {
+    "source": "简单练/Core/Sources/SimpleLianCore/MarkdownTable.swift",
+    "destination": "Modules/SimpleLian/Core/MarkdownTable.swift",
+    "sha256": "432bc7b537a074ed84b983965192ae40f11b3da6494aa84444a873f9e2fb244e"
+  },
+  {
+    "source": "简单练/Core/Sources/SimpleLianCore/ImportPayload.swift",
+    "destination": "Modules/SimpleLian/Core/ImportPayload.swift",
+    "sha256": "121ca1a7a94686019ea252e2a6022180d2dc512a05b1eaa81a755b5f5411519c"
+  },
+  {
+    "source": "简单练/Core/Sources/SimpleLianCore/QuestionSelection.swift",
+    "destination": "Modules/SimpleLian/Core/QuestionSelection.swift",
+    "sha256": "b9e4109efaba74c913dadbc6de6bb4ef8e47a3575a923831d00ba8977187c99e"
+  },
+  {
+    "source": "简单练/Core/Sources/SimpleLianCore/ImportParser.swift",
+    "destination": "Modules/SimpleLian/Core/ImportParser.swift",
+    "sha256": "2314130a678cf4dc4ebf48d874707a6f65c7cf491b1cac1c8340d1004eb7d76d"
+  },
+  {
+    "source": "简单练/Core/Sources/SimpleLianCore/ReviewScheduler.swift",
+    "destination": "Modules/SimpleLian/Core/ReviewScheduler.swift",
+    "sha256": "f9cb8a231c9454c00a8d9f25b7dee55aa44721b17e16783f0a676cc24481293f"
+  },
+  {
+    "source": "简单练/Core/Sources/SimpleLianCore/PayloadValidator.swift",
+    "destination": "Modules/SimpleLian/Core/PayloadValidator.swift",
+    "sha256": "88ead69c6b142abe473a9a44ba6570919197bc18c6b55f1636bb0139d730783e"
+  },
+  {
+    "source": "简单练/SimpleLianTests/SchedulerTests.swift",
+    "destination": "Modules/SimpleLian/Tests/SchedulerTests.swift",
+    "sha256": "dacc271715959197305c8fb7d49898129d1a27ad32851820ff1347f3cd7b76e6"
+  },
+  {
+    "source": "简单练/Core/Tests/SimpleLianCoreTests/SimpleLianCoreTests.swift",
+    "destination": "Modules/SimpleLian/CoreTests/SimpleLianCoreTests.swift",
+    "sha256": "6cbcd0cf1345125af511b6c8cd3d91f55a91187d72747699795a3ab2aa8673d5"
+  },
+  {
+    "source": "简单默/默写小程序/默写小程序/DictationTiming.swift",
+    "destination": "Modules/SimpleMo/Sources/DictationTiming.swift",
+    "sha256": "a9fe2135549e4437b1917ab7175283747ca9d68c3a96ce3e125e1d30881971ea"
+  },
+  {
+    "source": "简单默/默写小程序/默写小程序/DictationCore.swift",
+    "destination": "Modules/SimpleMo/Sources/DictationCore.swift",
+    "sha256": "ba78c7d995b4eb8b5223fa345e112dca8a12894244b77b079147c748ba978c6a"
+  },
+  {
+    "source": "简单默/默写小程序/默写小程序/DictationSession.swift",
+    "destination": "Modules/SimpleMo/Sources/DictationSession.swift",
+    "sha256": "a00cd017eae4851bc8fb8bb1735da701263d87e5b5ca26f96caa65851e895f65"
+  },
+  {
+    "source": "简单默/默写小程序/默写小程序/ContentView.swift",
+    "destination": "Modules/SimpleMo/Sources/ContentView.swift",
+    "sha256": "c11042053de7a2fa2473d1dd02ad1a5061ef5684526b6c276f07a20e6c1ae107"
+  },
+  {
+    "source": "简单默/默写小程序/默写小程序/Assets.xcassets/Contents.json",
+    "destination": "Modules/SimpleMo/Sources/Assets.xcassets/Contents.json",
+    "sha256": "0fd49ba3c3585c709678e0046a821c3c60685ec7063720d30d3a3448be3a208b"
+  },
+  {
+    "source": "简单默/默写小程序/默写小程序/Assets.xcassets/AccentColor.colorset/Contents.json",
+    "destination": "Modules/SimpleMo/Sources/Assets.xcassets/AccentColor.colorset/Contents.json",
+    "sha256": "9af65086fa30b49252fae1a1225731691de794f7775af74d71befeb507d12b7c"
+  },
+  {
+    "source": "简单默/默写小程序/默写小程序Tests/DictationCoreTests.swift",
+    "destination": "Modules/SimpleMo/Tests/DictationCoreTests.swift",
+    "sha256": "40cd042fe34140e8e440ced66451243616de3020f5ab7380f8e7aaf789dcc78c"
+  },
+  {
+    "source": "简单算/SimpleSuan/AppDataStore.swift",
+    "destination": "Modules/SimpleSuan/Sources/AppDataStore.swift",
+    "sha256": "6c8a44a7cfeab97dd1bd632ef96d60de3ca7e1f9c46b4bd5308d582068b3fcf8"
+  },
+  {
+    "source": "简单算/SimpleSuan/StatisticsViews.swift",
+    "destination": "Modules/SimpleSuan/Sources/StatisticsViews.swift",
+    "sha256": "cd67f72000245b20e83d70509a172e001b078804effc4eb9e541760cbdf2393f"
+  },
+  {
+    "source": "简单算/SimpleSuan/PersistenceService.swift",
+    "destination": "Modules/SimpleSuan/Sources/PersistenceService.swift",
+    "sha256": "f69b3e9ce098fe1c539446c30bbe164a5d3d3b2fde2e5606499fb5790702bc64"
+  },
+  {
+    "source": "简单算/SimpleSuan/PracticeViews.swift",
+    "destination": "Modules/SimpleSuan/Sources/PracticeViews.swift",
+    "sha256": "8d9fef4d6434180278e313ab8ddda12427d5750e41a8feab34201993d72cc4f8"
+  },
+  {
+    "source": "简单算/SimpleSuan/PracticeViewModel.swift",
+    "destination": "Modules/SimpleSuan/Sources/PracticeViewModel.swift",
+    "sha256": "e33d7d335898e05c57e27c00880ae0f30cd523c1255303b5b5375b0cb8ef7d25"
+  },
+  {
+    "source": "简单算/SimpleSuan/Models.swift",
+    "destination": "Modules/SimpleSuan/Sources/Models.swift",
+    "sha256": "be9bc2b54fe381339ebd4262791ef3794a985e64b53e0c6f4a32916eb14943db"
+  },
+  {
+    "source": "简单算/SimpleSuan/StatisticsCalculator.swift",
+    "destination": "Modules/SimpleSuan/Sources/StatisticsCalculator.swift",
+    "sha256": "da1f3598d0ac9da9a3f7e9dbf91c231a17423998475df3884751936e4bae1450"
+  },
+  {
+    "source": "简单算/SimpleSuan/QuestionGenerator.swift",
+    "destination": "Modules/SimpleSuan/Sources/QuestionGenerator.swift",
+    "sha256": "5a53b9b581006042321fc230aac01b714eef6ca3710578faf69a1e31c298fd73"
+  },
+  {
+    "source": "简单算/SimpleSuan/ContentView.swift",
+    "destination": "Modules/SimpleSuan/Sources/ContentView.swift",
+    "sha256": "438f0695f904b74ce2cd7bf77d6dbacce35df7b13013519aa3c2009b8211198a"
+  },
+  {
+    "source": "简单算/SimpleSuan/Assets.xcassets/Contents.json",
+    "destination": "Modules/SimpleSuan/Sources/Assets.xcassets/Contents.json",
+    "sha256": "0fd49ba3c3585c709678e0046a821c3c60685ec7063720d30d3a3448be3a208b"
+  },
+  {
+    "source": "简单算/SimpleSuanTests/SimpleSuanTests.swift",
+    "destination": "Modules/SimpleSuan/Tests/SimpleSuanTests.swift",
+    "sha256": "b377584d6f8d807c928fcb4e8f93985e841dbf1b924c4d14af003274b205fa11"
+  }
+]

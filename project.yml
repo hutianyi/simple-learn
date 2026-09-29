@@ -1,0 +1,184 @@
+name: SimpleXue
+options:
+  deploymentTarget:
+    iOS: "27.0"
+  developmentLanguage: zh-Hans
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    IPHONEOS_DEPLOYMENT_TARGET: "27.0"
+    TARGETED_DEVICE_FAMILY: "2"
+    SUPPORTS_MACCATALYST: NO
+    GENERATE_INFOPLIST_FILE: YES
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "4"
+    CODE_SIGN_STYLE: Automatic
+packages:
+  FSRS:
+    url: https://github.com/open-spaced-repetition/swift-fsrs.git
+    revision: 4fbaf20184d62f82a9f44f343337c61a2c5483e9
+
+targets:
+  SimpleXue:
+    type: application
+    platform: iOS
+    sources: [App]
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: 简单学
+        CFBundleName: 简单学
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UIBackgroundModes: [audio]
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+          UISceneConfigurations: {}
+        UILaunchScreen: {}
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.hutianyi.SimpleXue
+        CURRENT_PROJECT_VERSION: "4"
+        GENERATE_INFOPLIST_FILE: NO
+        TARGETED_DEVICE_FAMILY: "2"
+        INFOPLIST_KEY_CFBundleDisplayName: 简单学
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UIBackgroundModes: audio
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    dependencies:
+      - target: StudyShell
+      - target: WordMemoryCards
+      - target: SimpleLian
+      - target: DictationApp
+      - target: SimpleSuan
+      - target: SimpleTing
+  StudyShell:
+    type: framework
+    platform: iOS
+    sources: [Shared]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.hutianyi.SimpleXue.StudyShell
+  WordMemoryCards:
+    type: framework
+    platform: iOS
+    sources: [Modules/SimpleJi/Sources]
+    dependencies:
+      - target: StudyShell
+      - package: FSRS
+        product: FSRS
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.hutianyi.SimpleXue.WordMemoryCards
+  SimpleLian:
+    type: framework
+    platform: iOS
+    sources: [Modules/SimpleLian/Sources, Modules/SimpleLian/Core]
+    dependencies:
+      - target: StudyShell
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.hutianyi.SimpleXue.SimpleLian
+        SWIFT_VERSION: "6.0"
+        SWIFT_STRICT_CONCURRENCY: minimal
+  DictationApp:
+    type: framework
+    platform: iOS
+    sources: [Modules/SimpleMo/Sources]
+    dependencies:
+      - target: StudyShell
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.hutianyi.SimpleXue.SimpleMo
+  SimpleSuan:
+    type: framework
+    platform: iOS
+    sources: [Modules/SimpleSuan/Sources]
+    dependencies:
+      - target: StudyShell
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.hutianyi.SimpleXue.SimpleSuan
+  SimpleTing:
+    type: framework
+    platform: iOS
+    sources: [Modules/SimpleTing/Sources]
+    dependencies:
+      - target: StudyShell
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.hutianyi.SimpleXue.SimpleTing
+  SimpleTingTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [Modules/SimpleTing/Tests]
+    dependencies:
+      - target: SimpleTing
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.hutianyi.SimpleXue.SimpleTingTests
+  WordMemoryCardsTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [Modules/SimpleJi/Tests]
+    dependencies:
+      - target: WordMemoryCards
+      - target: StudyShell
+      - package: FSRS
+        product: FSRS
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.hutianyi.SimpleXue.WordMemoryCardsTests
+  SimpleLianTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [Modules/SimpleLian/Tests]
+    dependencies:
+      - target: SimpleLian
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.hutianyi.SimpleXue.SimpleLianTests
+  DictationAppTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [Modules/SimpleMo/Tests]
+    dependencies:
+      - target: DictationApp
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.hutianyi.SimpleXue.SimpleMoTests
+  SimpleSuanTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [Modules/SimpleSuan/Tests]
+    dependencies:
+      - target: SimpleSuan
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.hutianyi.SimpleXue.SimpleSuanTests
+  SimpleXueUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [Tests/UI]
+    dependencies:
+      - target: SimpleXue
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.hutianyi.SimpleXue.UITests
+schemes:
+  SimpleXue:
+    build:
+      targets:
+        SimpleXue: all
+    test:
+      parallelizable: false
+      targets:
+        - WordMemoryCardsTests
+        - SimpleLianTests
+        - DictationAppTests
+        - SimpleSuanTests
+        - SimpleTingTests
+        - SimpleXueUITests
