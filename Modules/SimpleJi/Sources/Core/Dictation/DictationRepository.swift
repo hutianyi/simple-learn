@@ -205,21 +205,20 @@ final class DictationRepository {
                 .sorted { $0.createdAt < $1.createdAt }
             for entity in allDays where entity.phase != DictationPhase.complete.rawValue {
                 var day = try Self.snapshot(entity)
-                let countBefore = day.items.count
+                let savedDay = day
                 day.items.removeAll {
                     masteredTerms.contains(EnglishNormalizer.normalize($0.english))
                 }
-                if day.items.count != countBefore {
-                    switch day.phase {
-                    case .firstPass where day.items.allSatisfy({ $0.formalResult != nil }):
-                        day.phase = day.firstPassWrong > 0 ? .firstPassSummary : .complete
-                    case .firstPassSummary where day.firstPassWrong == 0,
-                         .remediationCopy where day.unresolved == 0,
-                         .retest where day.unresolved == 0:
-                        day.phase = .complete
-                    default: break
-                    }
-                    Self.advanceRemediation(&day)
+                // Restored queues can retain an old phase after all corrections have passed.
+                switch day.phase {
+                case .firstPass where day.items.allSatisfy({ $0.formalResult != nil }):
+                    day.phase = day.unresolved > 0 ? .firstPassSummary : .complete
+                case .firstPassSummary where day.unresolved == 0:
+                    day.phase = .complete
+                default: break
+                }
+                Self.advanceRemediation(&day)
+                if day != savedDay {
                     try Self.save(day, to: entity, now: now, in: context)
                 }
                 if day.dayKey == today,
@@ -240,7 +239,7 @@ final class DictationRepository {
                 if day.dayKey != today && day.phase == .firstPass {
                     day.items.removeAll { $0.formalResult == nil && !$0.awaitsVerification }
                     day.phase = day.items.contains(where: \.awaitsVerification) ? .firstPass
-                        : (day.firstPassWrong > 0 ? .firstPassSummary : .complete)
+                        : (day.unresolved > 0 ? .firstPassSummary : .complete)
                     try Self.save(day, to: entity, now: now, in: context)
                 }
                 if day.items.contains(where: \.isDeferred) {
@@ -336,6 +335,7 @@ final class DictationRepository {
             var day = try Self.snapshot(entity)
             guard day.phase == .firstPassSummary else { throw DictationError.invalidPhase }
             day.phase = .remediationCopy
+            Self.advanceRemediation(&day)
             try Self.save(day, to: entity, now: now, in: context)
             return day
         }
@@ -503,7 +503,7 @@ final class DictationRepository {
                 fsrsBefore: cardBefore, fsrsAfter: decision.cardData
             )
             if day.items.allSatisfy({ $0.formalResult != nil }) {
-                day.phase = day.firstPassWrong > 0 ? .firstPassSummary : .complete
+                day.phase = day.unresolved > 0 ? .firstPassSummary : .complete
             }
             try Self.save(day, to: entity, now: now, in: context)
             return .result(day, correct: correct, reason: reason)

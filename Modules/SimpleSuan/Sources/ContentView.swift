@@ -15,7 +15,7 @@ struct ContentView: View {
 struct StartPracticeView: View {
     @State private var mode: PracticeMode = .mixed
     @State private var mixedOperations = Set(OperationType.allCases)
-    @State private var questionCount = 20
+    @State private var questionCount = 40
     @State private var practice: PracticeViewModel?
     var body: some View {
         VStack(spacing: 28) {

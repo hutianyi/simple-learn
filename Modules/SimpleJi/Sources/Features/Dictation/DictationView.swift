@@ -128,7 +128,8 @@ struct DictationView: View {
             switch day.phase {
             case .firstPass, .remediationCopy, .retest:
                 if viewModel.hasDeferredWork { deferredView }
-                else { practiceView }
+                else if viewModel.activeItem != nil { practiceView }
+                else { statusView("当前没有可练习的单词，请返回首页重新进入。", symbol: "exclamationmark.triangle") }
             case .firstPassSummary:
                 firstPassSummary(day)
             case .complete:

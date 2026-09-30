@@ -167,6 +167,81 @@ final class DictationRepositoryTests: XCTestCase {
         XCTAssertEqual(paused.items.first?.interruptionCount, 1)
     }
 
+    func testRestoringCompletedRemediationRepairsStalePhasesWithoutChangingResults() async throws {
+        for phase in [DictationPhase.remediationCopy, .retest, .firstPassSummary, .firstPass] {
+            for offset in [0.0, 86_400.0] {
+                let (controller, repository, finished) = try await completedRemediationFixture()
+                let context = controller.container.viewContext
+                context.refreshAllObjects()
+                let entity = try XCTUnwrap(try context.fetch(DictationDayEntity.fetchRequest()).first)
+                let state = try XCTUnwrap(try context.fetch(DictationStateEntity.fetchRequest()).first)
+                let fsrs = state.fsrsCardData
+                let eventCount = try context.count(for: DictationEventEntity.fetchRequest())
+                entity.phase = phase.rawValue
+                try context.save()
+
+                let restored = try await repository.loadOrCreateDay(
+                    limit: 20, now: now.addingTimeInterval(offset)
+                )
+                context.refreshAllObjects()
+                XCTAssertEqual(entity.phase, DictationPhase.complete.rawValue, "\(phase), offset \(offset)")
+                XCTAssertEqual(try JSONDecoder().decode([DictationItem].self, from: entity.tasksData), finished.items)
+                XCTAssertEqual(state.fsrsCardData, fsrs)
+                XCTAssertEqual(state.totalFormal, 1)
+                XCTAssertEqual(try context.count(for: DictationEventEntity.fetchRequest()), eventCount)
+                if offset == 0 {
+                    XCTAssertEqual(restored.id, finished.id)
+                    XCTAssertEqual(restored.phase, .complete)
+                    XCTAssertEqual(restored.firstPassWrong, 1)
+                } else {
+                    XCTAssertNotEqual(restored.id, finished.id)
+                }
+            }
+        }
+    }
+
+    func testAdditionalBaselineWordsDoNotReopenAlreadyCompletedRemediation() async throws {
+        let (controller, repository, finished) = try await completedRemediationFixture()
+        let context = controller.container.viewContext
+        let wordID = try seedBareWord("pear", chinese: "梨", at: now.addingTimeInterval(-86_400), in: context)
+        try context.save()
+        let campaign = BaselineCampaignSnapshot(selectedWordIDs: [wordID], activatedAt: now)
+        let reopened = try await repository.loadOrCreateDay(limit: 20, campaign: campaign, now: now)
+        XCTAssertEqual(reopened.id, finished.id)
+        XCTAssertEqual(reopened.phase, .firstPass)
+        XCTAssertEqual(reopened.items.count, 2)
+        let result = try await repository.submitFormal(dayID: reopened.id, wordID: wordID, recognized: "pear", now: now)
+        guard case .result(let completed, let correct, _) = result else { return XCTFail("Expected formal result") }
+        XCTAssertTrue(correct)
+        XCTAssertEqual(completed.phase, .complete)
+        XCTAssertEqual(completed.firstPassWrong, 1)
+        XCTAssertEqual(completed.unresolved, 0)
+        XCTAssertEqual(completed.items.first, finished.items.first)
+    }
+
+    private func completedRemediationFixture() async throws -> (PersistenceController, DictationRepository, DictationDay) {
+        let controller = PersistenceController(inMemory: true)
+        let context = controller.container.viewContext
+        let wordID = try seedBareWord("apple", chinese: "苹果", at: now.addingTimeInterval(-86_400), in: context)
+        try context.save()
+        let repository = DictationRepository(container: controller.container,
+                                            calendar: DictationEligibility.calendar(timeZone: timezone))
+        let campaign = BaselineCampaignSnapshot(selectedWordIDs: [wordID], activatedAt: now)
+        let day = try await repository.loadOrCreateDay(limit: 20, campaign: campaign, now: now)
+        _ = try await repository.submitFormal(dayID: day.id, wordID: wordID, recognized: "aple", now: now)
+        _ = try await repository.beginRemediation(dayID: day.id, now: now)
+        for _ in 0..<3 {
+            _ = try await repository.recordRemediationCopy(dayID: day.id, wordID: wordID, recognized: "apple", now: now)
+        }
+        let result = try await repository.submitRetest(dayID: day.id, wordID: wordID, recognized: "apple", now: now)
+        guard case .result(let finished, let correct, _) = result else {
+            throw DictationRepository.DictationError.invalidPhase
+        }
+        XCTAssertTrue(correct)
+        XCTAssertEqual(finished.phase, .complete)
+        return (controller, repository, finished)
+    }
+
     func testAutomaticBaselineExcludesTodaysWordsAndUsesFiftyPerDay() async throws {
         let controller = PersistenceController(inMemory: true)
         let context = controller.container.viewContext
