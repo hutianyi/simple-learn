@@ -7,6 +7,7 @@ extension Notification.Name {
 
 @MainActor
 public final class AudioPlaybackCoordinator {
+    public enum Configuration { case playback, recording }
     public static let shared = AudioPlaybackCoordinator()
     private var ownership = AudioOwnership()
     private var serial: UInt64 = 0
@@ -22,7 +23,7 @@ public final class AudioPlaybackCoordinator {
         if value == nil { queueRelease(expectedOwner: nil) }
     }
 
-    public func activate(owner: String, duckOthers: Bool = false) async throws -> Bool {
+    public func activate(owner: String, duckOthers: Bool = false, configuration: Configuration = .playback) async throws -> Bool {
         guard owns(owner) else { return false }
         serial &+= 1
         let expectedSerial = serial
@@ -32,7 +33,12 @@ public final class AudioPlaybackCoordinator {
             await previous?.value
             guard let self, self.serial == expectedSerial, self.ownership.permits(owner, revision: revision) else { return false }
             let audio = AVAudioSession.sharedInstance()
-            try audio.setCategory(.playback, mode: .spokenAudio, options: duckOthers ? [.duckOthers] : [])
+            switch configuration {
+            case .playback:
+                try audio.setCategory(.playback, mode: .spokenAudio, options: duckOthers ? [.duckOthers] : [])
+            case .recording:
+                try audio.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker])
+            }
             let activated = try await audio.activate(options: [])
             return activated && self.serial == expectedSerial && self.ownership.permits(owner, revision: revision)
         }

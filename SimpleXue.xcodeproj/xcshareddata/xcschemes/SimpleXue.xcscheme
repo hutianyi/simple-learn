@@ -99,6 +99,17 @@
             parallelizable = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
+               BlueprintIdentifier = "A25C2AA5344373E78BB06882"
+               BuildableName = "SimpleBeiTests.xctest"
+               BlueprintName = "SimpleBeiTests"
+               ReferencedContainer = "container:SimpleXue.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
                BlueprintIdentifier = "87556F111E46F52AD28C9792"
                BuildableName = "SimpleXueUITests.xctest"
                BlueprintName = "SimpleXueUITests"

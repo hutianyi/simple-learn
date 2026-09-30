@@ -4,7 +4,7 @@ final class ModuleNavigationTests: XCTestCase {
     func testEachModuleCanOpenAndReturnHome() {
         let app = XCUIApplication()
         app.launch()
-        for module in ["ji", "mo", "suan", "lian"] {
+        for module in ["ji", "mo", "suan", "lian", "ting", "bei"] {
             let entry = app.buttons["module.\(module)"]
             XCTAssertTrue(entry.waitForExistence(timeout: 10))
             entry.tap()
