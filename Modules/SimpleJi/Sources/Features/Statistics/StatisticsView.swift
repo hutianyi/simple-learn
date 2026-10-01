@@ -4,20 +4,35 @@ import SwiftUI
 
 struct StatisticsView: View {
     @EnvironmentObject private var router: AppRouter
-    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \WordEntity.createdAt, ascending: true)])
-    private var words: FetchedResults<WordEntity>
-    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \ReviewStateEntity.nextReviewDate, ascending: true)])
-    private var states: FetchedResults<ReviewStateEntity>
-    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \ReviewEventEntity.reviewedAt, ascending: false)])
-    private var events: FetchedResults<ReviewEventEntity>
-    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \StudySessionEntity.startedAt, ascending: false)])
-    private var sessions: FetchedResults<StudySessionEntity>
-    @FetchRequest(sortDescriptors: [NSSortDescriptor(key: "createdAt", ascending: false)])
-    private var dictationDays: FetchedResults<DictationDayEntity>
-    @FetchRequest(sortDescriptors: [])
-    private var dictationEvents: FetchedResults<DictationEventEntity>
+    @FetchRequest private var words: FetchedResults<WordEntity>
+    @FetchRequest private var states: FetchedResults<ReviewStateEntity>
+    @FetchRequest private var events: FetchedResults<ReviewEventEntity>
+    @FetchRequest private var sessions: FetchedResults<StudySessionEntity>
+    @FetchRequest private var dictationDays: FetchedResults<DictationDayEntity>
+    @FetchRequest private var dictationEvents: FetchedResults<DictationEventEntity>
 
     private let calendar = Calendar.current
+
+    init() {
+        let wordRequest = WordEntity.fetchRequest()
+        wordRequest.sortDescriptors = [NSSortDescriptor(keyPath: \WordEntity.createdAt, ascending: true)]
+        _words = FetchRequest(fetchRequest: wordRequest)
+        let stateRequest = ReviewStateEntity.fetchRequest()
+        stateRequest.sortDescriptors = [NSSortDescriptor(keyPath: \ReviewStateEntity.nextReviewDate, ascending: true)]
+        _states = FetchRequest(fetchRequest: stateRequest)
+        let eventRequest = ReviewEventEntity.fetchRequest()
+        eventRequest.sortDescriptors = [NSSortDescriptor(keyPath: \ReviewEventEntity.reviewedAt, ascending: false)]
+        _events = FetchRequest(fetchRequest: eventRequest)
+        let sessionRequest = StudySessionEntity.fetchRequest()
+        sessionRequest.sortDescriptors = [NSSortDescriptor(keyPath: \StudySessionEntity.startedAt, ascending: false)]
+        _sessions = FetchRequest(fetchRequest: sessionRequest)
+        let dayRequest = DictationDayEntity.fetchRequest()
+        dayRequest.sortDescriptors = [NSSortDescriptor(key: "createdAt", ascending: false)]
+        _dictationDays = FetchRequest(fetchRequest: dayRequest)
+        let dictationEventRequest = DictationEventEntity.fetchRequest()
+        dictationEventRequest.sortDescriptors = []
+        _dictationEvents = FetchRequest(fetchRequest: dictationEventRequest)
+    }
 
     var body: some View {
         ScrollView {

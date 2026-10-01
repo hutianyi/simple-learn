@@ -7,9 +7,9 @@ struct HomeView: View {
 
     @FetchRequest private var dueStates: FetchedResults<ReviewStateEntity>
     @FetchRequest private var words: FetchedResults<WordEntity>
-    @FetchRequest(sortDescriptors: []) private var dictationStates: FetchedResults<DictationStateEntity>
-    @FetchRequest(sortDescriptors: []) private var dictationDays: FetchedResults<DictationDayEntity>
-    @FetchRequest(sortDescriptors: []) private var dictationEvents: FetchedResults<DictationEventEntity>
+    @FetchRequest private var dictationStates: FetchedResults<DictationStateEntity>
+    @FetchRequest private var dictationDays: FetchedResults<DictationDayEntity>
+    @FetchRequest private var dictationEvents: FetchedResults<DictationEventEntity>
     private let today: String
     private let startOfToday: Date
     private let tomorrow: Date
@@ -22,15 +22,22 @@ struct HomeView: View {
         self.startOfToday = start
         self.tomorrow = tomorrow
 
-        _dueStates = FetchRequest(
-            sortDescriptors: [],
-            predicate: NSPredicate(format: "nextReviewDate < %@", tomorrow as NSDate),
-            animation: .default
-        )
-        _words = FetchRequest(
-            sortDescriptors: [NSSortDescriptor(keyPath: \WordEntity.createdAt, ascending: true)],
-            animation: .default
-        )
+        let dueRequest = ReviewStateEntity.fetchRequest()
+        dueRequest.sortDescriptors = []
+        dueRequest.predicate = NSPredicate(format: "nextReviewDate < %@", tomorrow as NSDate)
+        _dueStates = FetchRequest(fetchRequest: dueRequest, animation: .default)
+        let wordRequest = WordEntity.fetchRequest()
+        wordRequest.sortDescriptors = [NSSortDescriptor(keyPath: \WordEntity.createdAt, ascending: true)]
+        _words = FetchRequest(fetchRequest: wordRequest, animation: .default)
+        let stateRequest = DictationStateEntity.fetchRequest()
+        stateRequest.sortDescriptors = []
+        _dictationStates = FetchRequest(fetchRequest: stateRequest)
+        let dayRequest = DictationDayEntity.fetchRequest()
+        dayRequest.sortDescriptors = []
+        _dictationDays = FetchRequest(fetchRequest: dayRequest)
+        let eventRequest = DictationEventEntity.fetchRequest()
+        eventRequest.sortDescriptors = []
+        _dictationEvents = FetchRequest(fetchRequest: eventRequest)
     }
 
     var body: some View {

@@ -18,9 +18,16 @@ final class PersistenceController: ObservableObject {
         #endif
     }
 
+    // Re-entering the module must not register another model for the same managed object classes.
+    private static let sharedModel: NSManagedObjectModel? = {
+        guard let url = modelBundle.url(forResource: "WordMemoryCards", withExtension: "momd") else {
+            return nil
+        }
+        return NSManagedObjectModel(contentsOf: url)
+    }()
+
     init(inMemory: Bool = false) {
-        guard let url = Self.modelBundle.url(forResource: "WordMemoryCards", withExtension: "momd"),
-              let model = NSManagedObjectModel(contentsOf: url) else {
+        guard let model = Self.sharedModel else {
             container = NSPersistentContainer(name: "WordMemoryCards", managedObjectModel: NSManagedObjectModel())
             loadErrorMessage = "缺少简单记数据库模型，请保留数据并重新构建 App。"
             return

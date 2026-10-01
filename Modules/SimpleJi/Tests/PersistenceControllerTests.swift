@@ -4,6 +4,28 @@ import XCTest
 
 final class PersistenceControllerTests: XCTestCase {
     @MainActor
+    func testModuleReentryPreservesEntityResolutionAndStoreIsolation() throws {
+        let first = PersistenceController(inMemory: true)
+        let second = PersistenceController(inMemory: true)
+        let context = first.container.viewContext
+        let word = NSEntityDescription.insertNewObject(forEntityName: "WordEntity", into: context)
+        word.setValuesForKeys([
+            "id": UUID(), "english": "apple", "normalizedEnglish": "apple",
+            "chinese": "苹果", "createdAt": Date(), "updatedAt": Date()
+        ])
+        try context.save()
+
+        let inferred = NSFetchRequest<WordEntity>()
+        inferred.entity = WordEntity.entity()
+        XCTAssertEqual(inferred.entity?.name, "WordEntity")
+        guard inferred.entity != nil else { return }
+        XCTAssertEqual(try context.fetch(inferred).map(\.english), ["apple"])
+        XCTAssertEqual(try second.container.viewContext.count(for: WordEntity.fetchRequest()), 0)
+        XCTAssertTrue(first.container.managedObjectModel === second.container.managedObjectModel)
+        XCTAssertFalse(first.container.viewContext === second.container.viewContext)
+    }
+
+    @MainActor
     func testPreviousStoreMigratesWithoutLosingWords() throws {
         let bundle = PersistenceController.modelBundle
         let modelDirectory = try XCTUnwrap(bundle.url(forResource: "WordMemoryCards", withExtension: "momd"))
