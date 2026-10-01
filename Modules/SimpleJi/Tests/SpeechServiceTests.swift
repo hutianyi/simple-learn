@@ -72,6 +72,56 @@ final class SpeechServiceTests: XCTestCase {
         await verifyActivationFailure(.failure(NSError(domain: "SpeechServiceTests", code: 1)))
     }
 
+    func testRepeatsTwiceAndCompletesOnlyAfterSecondUtterance() async {
+        let firstPlayed = expectation(description: "First pronunciation played")
+        let played = expectation(description: "Both pronunciations played")
+        played.expectedFulfillmentCount = 2
+        let finished = expectation(description: "Sequence finished")
+        var utterances: [AVSpeechUtterance] = []
+        var completionCount = 0
+        let service = SpeechService(activation: { true }) { utterance in
+            utterances.append(utterance)
+            if utterances.count == 1 { firstPlayed.fulfill() }
+            played.fulfill()
+        }
+        service.speak("gas", language: .english, preferredIdentifier: nil, rate: 0.46,
+                      repetitions: 2, onCompletion: { completionCount += 1; finished.fulfill() })
+        await fulfillment(of: [firstPlayed], timeout: 1)
+        guard utterances.count == 1 else { return }
+        XCTAssertEqual(completionCount, 0)
+        XCTAssertEqual(utterances[0].postUtteranceDelay, 0.5)
+        service.speechSynthesizer(AVSpeechSynthesizer(), didFinish: utterances[0])
+        await fulfillment(of: [played], timeout: 1)
+        XCTAssertEqual(utterances.map(\.speechString), ["gas", "gas"])
+        XCTAssertEqual(completionCount, 0)
+        XCTAssertEqual(utterances[1].postUtteranceDelay, 0)
+        service.speechSynthesizer(AVSpeechSynthesizer(), didFinish: utterances[1])
+        await fulfillment(of: [finished], timeout: 1)
+        XCTAssertEqual(completionCount, 1)
+        XCTAssertNil(service.speakingText)
+        service.stop()
+        XCTAssertEqual(completionCount, 1)
+    }
+
+    func testStoppingRepeatedSpeechPreventsLateSecondPronunciation() async {
+        let played = expectation(description: "First pronunciation")
+        var utterances: [AVSpeechUtterance] = []
+        var completionCount = 0
+        let service = SpeechService(activation: { true }) { utterance in
+            utterances.append(utterance)
+            played.fulfill()
+        }
+        service.speak("gas", language: .english, preferredIdentifier: nil, rate: 0.46,
+                      repetitions: 2, onCompletion: { completionCount += 1 })
+        await fulfillment(of: [played], timeout: 1)
+        service.stop()
+        service.speechSynthesizer(AVSpeechSynthesizer(), didFinish: utterances[0])
+        await Task.yield()
+        XCTAssertEqual(utterances.count, 1)
+        XCTAssertEqual(completionCount, 1)
+        XCTAssertNil(service.speakingText)
+    }
+
     private func verifyActivationFailure(_ result: Result<Bool, Error>) async {
         let started = expectation(description: "Activation started")
         let played = expectation(description: "Failed activation must not play")

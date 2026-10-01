@@ -15,11 +15,14 @@ final class SpeechService: NSObject, ObservableObject {
         let language: SpeechLanguage
         let preferredIdentifier: String?
         let rate: Double
+        let repetitions: Int
     }
 
     private var synthesizer = AVSpeechSynthesizer()
     private var activeUtterance: AVSpeechUtterance?
     private var pendingRequest: Request?
+    private var remainingRepetitions = 0
+    private var completion: (() -> Void)?
     private var didTryBasicFallback = false
     private var activationTask: Task<Void, Never>?
     private let activationOverride: (() async throws -> Bool)?
@@ -54,7 +57,9 @@ final class SpeechService: NSObject, ObservableObject {
         _ text: String,
         language: SpeechLanguage,
         preferredIdentifier: String?,
-        rate: Double
+        rate: Double,
+        repetitions: Int = 1,
+        onCompletion: (() -> Void)? = nil
     ) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
@@ -65,9 +70,12 @@ final class SpeechService: NSObject, ObservableObject {
             text: trimmed,
             language: language,
             preferredIdentifier: preferredIdentifier,
-            rate: min(max(rate, 0.30), 0.62)
+            rate: min(max(rate, 0.30), 0.62),
+            repetitions: max(1, repetitions)
         )
         pendingRequest = request
+        remainingRepetitions = request.repetitions
+        completion = onCompletion
         didTryBasicFallback = false
         perform(request, forceBasicFallback: false)
     }
@@ -88,7 +96,13 @@ final class SpeechService: NSObject, ObservableObject {
         activeUtterance = nil
         isSpeaking = false
         speakingText = nil
-        if clearPending { pendingRequest = nil }
+        if clearPending {
+            pendingRequest = nil
+            remainingRepetitions = 0
+            let finished = completion
+            completion = nil
+            finished?()
+        }
     }
 
     private func perform(_ request: Request, forceBasicFallback: Bool) {
@@ -129,7 +143,7 @@ final class SpeechService: NSObject, ObservableObject {
         )
         utterance.rate = Float(request.rate)
         utterance.pitchMultiplier = 1
-        utterance.postUtteranceDelay = 0
+        utterance.postUtteranceDelay = remainingRepetitions > 1 ? 0.5 : 0
 
         speakingText = request.text
         activeUtterance = utterance
@@ -224,10 +238,13 @@ extension SpeechService: AVSpeechSynthesizerDelegate {
     ) {
         Task { @MainActor [weak self] in
             guard let self, self.activeUtterance === utterance else { return }
-            self.isSpeaking = false
-            self.speakingText = nil
-            self.pendingRequest = nil
-            self.activeUtterance = nil
+            self.remainingRepetitions -= 1
+            if self.remainingRepetitions > 0, let request = self.pendingRequest {
+                self.isSpeaking = false
+                self.beginSpeaking(request, forceBasicFallback: self.didTryBasicFallback)
+                return
+            }
+            self.stop(clearPending: true)
         }
     }
 
@@ -237,9 +254,7 @@ extension SpeechService: AVSpeechSynthesizerDelegate {
     ) {
         Task { @MainActor [weak self] in
             guard let self, self.activeUtterance === utterance else { return }
-            self.isSpeaking = false
-            self.speakingText = nil
-            self.activeUtterance = nil
+            self.stop(clearPending: true)
         }
     }
 }

@@ -35,6 +35,8 @@ final class DictationViewModel: ObservableObject {
     private let settings: SettingsStore
     private let dailyLimit: Int
     private var feedbackTask: Task<Void, Never>?
+    private var feedbackDelayElapsed = false
+    private var feedbackNarrationFinished = false
     private let recognitionOverride: ((PKDrawing) async throws -> String?)?
 
     init(container: NSPersistentContainer, settings: SettingsStore,
@@ -372,6 +374,8 @@ final class DictationViewModel: ObservableObject {
             notice = nil
             if !correct {
                 let item = Feedback(answer: answer, recognized: recognized, reason: reason)
+                feedbackDelayElapsed = false
+                feedbackNarrationFinished = false
                 feedback = item
                 if showRecognition { showRecognitionNotice(recognized) }
                 else { scheduleFeedbackDismiss(item) }
@@ -398,8 +402,20 @@ final class DictationViewModel: ObservableObject {
         feedbackTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(5))
             guard !Task.isCancelled, self?.feedback?.id == item.id else { return }
-            self?.feedback = nil
+            self?.feedbackDelayElapsed = true
+            self?.dismissFeedbackIfReady(item.id)
         }
+    }
+
+    func finishFeedbackNarration(_ id: UUID) {
+        guard feedback?.id == id else { return }
+        feedbackNarrationFinished = true
+        dismissFeedbackIfReady(id)
+    }
+
+    private func dismissFeedbackIfReady(_ id: UUID) {
+        guard feedback?.id == id, feedbackDelayElapsed, feedbackNarrationFinished else { return }
+        feedback = nil
     }
 
     private func recognize(_ drawing: PKDrawing) async throws -> String? {

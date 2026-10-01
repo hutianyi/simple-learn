@@ -41,6 +41,7 @@ struct DictationView: View {
         .toolbar(.hidden, for: .navigationBar)
         .task { speech.stop(); await viewModel.start(); presentPendingVerification() }
         .onChange(of: copyNarrationKey, initial: true) { _, _ in narrateCurrentCopy() }
+        .task(id: feedbackNarrationKey) { narrateFeedback() }
         .onDisappear { speech.stop() }
         .onChange(of: viewModel.verificationKey) { _, _ in presentPendingVerification() }
         .onReceive(Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()) { _ in
@@ -284,7 +285,26 @@ struct DictationView: View {
         return viewModel.questionKey
     }
 
+    private var feedbackNarrationKey: UUID? {
+        guard scenePhase == .active, keyboardPrompt == nil,
+              viewModel.recognitionNotice == nil, viewModel.errorMessage == nil else { return nil }
+        return viewModel.feedback?.id
+    }
+
+    private func narrateFeedback() {
+        guard let id = feedbackNarrationKey, let feedback = viewModel.feedback else { return }
+        speech.speak(
+            feedback.answer,
+            language: .english,
+            preferredIdentifier: settings.englishVoiceIdentifier,
+            rate: settings.englishSpeechRate,
+            repetitions: 2,
+            onCompletion: { viewModel.finishFeedbackNarration(id) }
+        )
+    }
+
     private func narrateCurrentCopy() {
+        guard viewModel.feedback == nil else { return }
         speech.stop()
         guard copyNarrationKey != nil, scenePhase == .active,
               keyboardPrompt == nil, viewModel.recognitionNotice == nil,
@@ -410,7 +430,7 @@ struct DictationView: View {
                 Text("识别为：\(recognized)")
                     .foregroundStyle(AppPalette.textSecondary)
             }
-            Text("约 5 秒后进入下一题")
+            Text("看一看正确拼写，听两遍发音后继续")
                 .foregroundStyle(AppPalette.textSecondary)
         }
         .padding(28)

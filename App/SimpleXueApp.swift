@@ -47,14 +47,15 @@ struct LearningHomeView: View {
         Group {
             if let selected {
                 VStack(spacing: 0) {
-                    HStack {
-                        Button { AudioPlaybackCoordinator.shared.selectOwner(nil); self.selected = nil } label: { Label("切换功能", systemImage: "square.grid.2x2") }
-                            .disabled(!session.canLeave)
-                            .accessibilityIdentifier("shell.switch")
-                        Spacer()
+                    ZStack {
                         Text(selected.title).font(.headline)
-                        Spacer()
-                        if !session.canLeave { Text(session.reasons.contains("ting.playback") ? "请先停止播放" : "请先结束本轮").font(.caption).foregroundStyle(.secondary) }
+                        HStack {
+                            Button { AudioPlaybackCoordinator.shared.selectOwner(nil); self.selected = nil } label: { Label("切换功能", systemImage: "square.grid.2x2") }
+                                .disabled(!session.canLeave)
+                                .accessibilityIdentifier("shell.switch")
+                            Spacer()
+                            if !session.canLeave { Text(session.reasons.contains("ting.playback") ? "请先停止播放" : "请先结束本轮").font(.caption).foregroundStyle(.secondary) }
+                        }
                     }
                     .padding(.horizontal, 24).padding(.vertical, 12)
                     .background(.bar)
