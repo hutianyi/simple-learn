@@ -144,6 +144,9 @@ enum BackupService {
                 )
             }
 
+            let completionDays = try context.fetch(StudyCompletionDayEntity.fetchRequest()).map {
+                try JSONDecoder().decode(StudyCompletionDay.self, from: $0.snapshotData)
+            }
             return BackupData(
                 words: words.sorted { $0.normalizedEnglish < $1.normalizedEnglish },
                 reviewStates: states.sorted { $0.id.uuidString < $1.id.uuidString },
@@ -152,7 +155,8 @@ enum BackupService {
                 settings: settings,
                 dictationStates: dictationStates.sorted { $0.wordID.uuidString < $1.wordID.uuidString },
                 dictationDays: dictationDays.sorted { $0.dayKey < $1.dayKey },
-                dictationEvents: dictationEvents.sorted { $0.submittedAt < $1.submittedAt }
+                dictationEvents: dictationEvents.sorted { $0.submittedAt < $1.submittedAt },
+                completionDays: completionDays.sorted { $0.dayKey < $1.dayKey }
             )
         }
 
@@ -191,6 +195,20 @@ enum BackupService {
         }
 
         let data = envelope.data
+        var completionKeys = Set<String>()
+        for day in data.completionDays ?? [] {
+            guard completionKeys.insert(day.dayKey).inserted,
+                  let zone = TimeZone(identifier: day.timeZoneID) else {
+                throw BackupError.invalidData("每日完成记录重复或时区无效")
+            }
+            if let completedAt = day.completedAt {
+                guard day.isComplete,
+                      DictationEligibility.dayKey(for: completedAt,
+                        calendar: DictationEligibility.calendar(timeZone: zone)) == day.dayKey else {
+                    throw BackupError.invalidData("每日完成记录与完成日期不符")
+                }
+            }
+        }
         let wordIDs = Set(data.words.map(\.id))
         guard wordIDs.count == data.words.count else {
             throw BackupError.invalidData("存在重复的单词 ID")
@@ -369,6 +387,12 @@ enum BackupService {
 
         try await context.perform {
             do {
+                try deleteAll(StudyCompletionDayEntity.fetchRequest(), in: context)
+                for item in envelope.data.completionDays ?? [] {
+                    let day = StudyCompletionDayEntity(context: context)
+                    day.dayKey = item.dayKey
+                    day.snapshotData = try JSONEncoder().encode(item)
+                }
                 try deleteAll(DictationEventEntity.fetchRequest(), in: context)
                 try deleteAll(DictationDayEntity.fetchRequest(), in: context)
                 try deleteAll(DictationStateEntity.fetchRequest(), in: context)

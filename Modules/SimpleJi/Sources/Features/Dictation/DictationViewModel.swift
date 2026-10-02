@@ -33,7 +33,6 @@ final class DictationViewModel: ObservableObject {
 
     private let repository: DictationRepository
     private let settings: SettingsStore
-    private let dailyLimit: Int
     private var feedbackTask: Task<Void, Never>?
     private var feedbackDelayElapsed = false
     private var feedbackNarrationFinished = false
@@ -44,7 +43,6 @@ final class DictationViewModel: ObservableObject {
         recognitionOverride = recognition
         repository = DictationRepository(container: container)
         self.settings = settings
-        dailyLimit = settings.dictationLimit.rawValue
     }
 
     var activeItem: DictationItem? {
@@ -105,7 +103,8 @@ final class DictationViewModel: ObservableObject {
     }
 
     func start() async {
-        guard day == nil else { return }
+        guard day == nil || day?.limit != settings.dictationLimit.rawValue else { return }
+        guard !isBusy else { return }
         isLoading = true
         do {
             if settings.baselineCampaign == nil {
@@ -114,7 +113,7 @@ final class DictationViewModel: ObservableObject {
                 )
             }
             day = try await repository.loadOrCreateDay(
-                limit: dailyLimit, campaign: settings.baselineCampaign,
+                limit: settings.dictationLimit.rawValue, campaign: settings.baselineCampaign,
                 masteredTerms: settings.masteredDictationTerms
             )
             await refreshBaselineProgress()
@@ -346,7 +345,7 @@ final class DictationViewModel: ObservableObject {
         defer { isBusy = false }
         do {
             day = try await repository.loadOrCreateDay(
-                limit: dailyLimit, campaign: settings.baselineCampaign,
+                limit: settings.dictationLimit.rawValue, campaign: settings.baselineCampaign,
                 masteredTerms: settings.masteredDictationTerms
             )
             notice = nil

@@ -162,3 +162,16 @@ extension StudySessionEntity {
     @NSManaged var extraUnknown: Int32
     @NSManaged var events: Set<ReviewEventEntity>
 }
+
+
+@objc(StudyCompletionDayEntity)
+final class StudyCompletionDayEntity: NSManagedObject {}
+
+extension StudyCompletionDayEntity {
+    @nonobjc class func fetchRequest() -> NSFetchRequest<StudyCompletionDayEntity> {
+        NSFetchRequest<StudyCompletionDayEntity>(entityName: "StudyCompletionDayEntity")
+    }
+
+    @NSManaged var dayKey: String
+    @NSManaged var snapshotData: Data
+}

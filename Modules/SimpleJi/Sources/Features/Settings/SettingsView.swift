@@ -45,7 +45,7 @@ struct SettingsView: View {
                         Text(option.title).tag(option)
                     }
                 }
-                Text("常规默写默认每天 20 个，可在这里调整；一次性旧词摸底期间每天最多 50 个。")
+                Text("常规默写默认每天 20 个，调整后当天立即生效，已默写的词计入上限；已开始的题和错词订正会保留。一次性旧词摸底期间每天最多 50 个。")
                     .font(.footnote)
                     .foregroundStyle(AppPalette.textSecondary)
             } header: {

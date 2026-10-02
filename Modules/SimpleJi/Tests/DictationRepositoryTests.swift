@@ -805,6 +805,173 @@ final class DictationRepositoryTests: XCTestCase {
         XCTAssertEqual(timeout?.reason, "timeout")
     }
 
+    func testLoweringUnlimitedDayAppliesImmediatelyAndKeepsOverduePriority() async throws {
+        let (controller, repository, ids) = try regularLimitFixture(count: 113)
+        let original = try await repository.loadOrCreateDay(limit: 0, now: now)
+        XCTAssertEqual(original.items.count, 113)
+        let limited = try await repository.loadOrCreateDay(limit: 50, now: now)
+        XCTAssertEqual(limited.id, original.id)
+        XCTAssertEqual(limited.limit, 50)
+        XCTAssertEqual(limited.items.map(\.wordID), Array(ids.prefix(50)))
+        let reopened = try await repository.loadOrCreateDay(limit: 50, now: now)
+        XCTAssertEqual(reopened.items, limited.items)
+        let context = controller.container.viewContext
+        context.refreshAllObjects()
+        XCTAssertEqual(try context.count(for: DictationEventEntity.fetchRequest()), 0)
+        XCTAssertEqual(try context.fetch(DictationStateEntity.fetchRequest()).filter { $0.lastFormalDay != nil }.count, 0)
+
+        for index in 0..<50 {
+            _ = try await repository.submitFormal(dayID: limited.id, wordID: ids[index],
+                recognized: "word\(index)", now: now)
+        }
+        let tomorrow = try await repository.loadOrCreateDay(limit: 50, now: now.addingTimeInterval(86_400))
+        XCTAssertTrue(Set(ids[50...]).isSuperset(of: Set(tomorrow.items.map(\.wordID))))
+        XCTAssertEqual(tomorrow.items.count, 50)
+    }
+
+    func testRaisingLimitReopensCompletedDayAndUnlimitedAddsRemainingWords() async throws {
+        let (_, repository, ids) = try regularLimitFixture(count: 15)
+        let day = try await repository.loadOrCreateDay(limit: 3, now: now)
+        for index in 0..<3 {
+            _ = try await repository.submitFormal(dayID: day.id, wordID: ids[index],
+                recognized: "word\(index)", now: now)
+        }
+        let expanded = try await repository.loadOrCreateDay(limit: 10, now: now)
+        XCTAssertEqual(expanded.id, day.id)
+        XCTAssertEqual(expanded.items.count, 10)
+        XCTAssertEqual(expanded.firstPassAnswered, 3)
+        XCTAssertEqual(expanded.phase, .firstPass)
+        let unlimited = try await repository.loadOrCreateDay(limit: 0, now: now)
+        XCTAssertEqual(unlimited.items.count, 15)
+        XCTAssertEqual(unlimited.firstPassAnswered, 3)
+        XCTAssertEqual(Set(unlimited.items.map(\.wordID)).count, 15)
+    }
+
+    func testLoweringBelowAnsweredCountKeepsResultsAndRequiresWrongWordRemediation() async throws {
+        let (controller, repository, ids) = try regularLimitFixture(count: 15)
+        let day = try await repository.loadOrCreateDay(limit: 0, now: now)
+        for index in 0..<12 {
+            _ = try await repository.submitFormal(dayID: day.id, wordID: ids[index],
+                recognized: index == 0 ? "wrong" : "word\(index)", now: now)
+        }
+        let context = controller.container.viewContext
+        context.refreshAllObjects()
+        let cardsBefore = try context.fetch(DictationStateEntity.fetchRequest()).map { $0.fsrsCardData }
+        let limited = try await repository.loadOrCreateDay(limit: 10, now: now)
+        XCTAssertEqual(limited.limit, 10)
+        XCTAssertEqual(limited.items.count, 12)
+        XCTAssertEqual(limited.firstPassAnswered, 12)
+        XCTAssertEqual(limited.firstPassWrong, 1)
+        XCTAssertEqual(limited.phase, .firstPassSummary)
+        context.refreshAllObjects()
+        XCTAssertEqual(try context.fetch(DictationStateEntity.fetchRequest()).map { $0.fsrsCardData }, cardsBefore)
+        XCTAssertEqual(try context.count(for: DictationEventEntity.fetchRequest()), 12)
+        let practice = try await repository.beginRemediation(dayID: day.id, now: now)
+        XCTAssertEqual(practice.phase, .remediationCopy)
+        let reopened = try await repository.loadOrCreateDay(limit: 3, now: now)
+        XCTAssertEqual(reopened.phase, .remediationCopy)
+        XCTAssertEqual(reopened.items, practice.items)
+    }
+
+    func testLoweringLimitPreservesPendingKeyboardVerification() async throws {
+        let (_, repository, ids) = try regularLimitFixture(count: 15)
+        let day = try await repository.loadOrCreateDay(limit: 0, now: now)
+        for index in 0..<10 {
+            _ = try await repository.submitFormal(dayID: day.id, wordID: ids[index],
+                recognized: "word\(index)", now: now)
+        }
+        _ = try await repository.stageVerification(dayID: day.id, wordID: ids[10],
+            recognized: "incorrect", now: now)
+        let verification = try await repository.beginKeyboardVerification(dayID: day.id,
+            wordID: ids[10], now: now)
+        let limited = try await repository.loadOrCreateDay(limit: 10, now: now)
+        XCTAssertEqual(limited.items.count, 11)
+        XCTAssertEqual(limited.items.last, verification.items[10])
+        XCTAssertEqual(limited.phase, .firstPass)
+    }
+
+    func testRaisingLimitDuringRemediationKeepsCopyProgressAndFirstResults() async throws {
+        let (_, repository, ids) = try regularLimitFixture(count: 15)
+        let day = try await repository.loadOrCreateDay(limit: 1, now: now)
+        _ = try await repository.submitFormal(dayID: day.id, wordID: ids[0], recognized: "wrong", now: now)
+        _ = try await repository.beginRemediation(dayID: day.id, now: now)
+        let practice = try await repository.recordRemediationCopy(dayID: day.id,
+            wordID: ids[0], recognized: "word0", now: now)
+        let expanded = try await repository.loadOrCreateDay(limit: 10, now: now)
+        XCTAssertEqual(expanded.items.count, 10)
+        XCTAssertEqual(expanded.items.first, practice.items.first)
+        XCTAssertEqual(expanded.firstPassAnswered, 1)
+        XCTAssertEqual(expanded.unresolved, 1)
+        XCTAssertEqual(expanded.phase, .firstPass)
+    }
+
+    func testLimitChangeDoesNotTrimPreviousDayRemediationOrBaselineDay() async throws {
+        let (_, repository, ids) = try regularLimitFixture(count: 15)
+        let day = try await repository.loadOrCreateDay(limit: 1, now: now)
+        _ = try await repository.submitFormal(dayID: day.id, wordID: ids[0], recognized: "wrong", now: now)
+        let practice = try await repository.beginRemediation(dayID: day.id, now: now)
+        let nextDay = try await repository.loadOrCreateDay(limit: 10, now: now.addingTimeInterval(86_400))
+        XCTAssertEqual(nextDay.id, day.id)
+        XCTAssertEqual(nextDay.limit, 1)
+        XCTAssertEqual(nextDay.items, practice.items)
+
+        let (controller, baselineRepository, baseline, _, campaign) = try await verificationFixture(wordCount: 2)
+        let changed = try await baselineRepository.loadOrCreateDay(limit: 10, campaign: campaign, now: now)
+        XCTAssertEqual(changed.items, baseline.items)
+        XCTAssertEqual(changed.limit, 50)
+        XCTAssertEqual(try controller.container.viewContext.count(for: DictationEventEntity.fetchRequest()), 0)
+    }
+
+    func testViewModelReadsLimitAtStartInsteadOfCachingInitializationValue() async throws {
+        let instant = Date()
+        let (controller, _, _) = try regularLimitFixture(count: 15, date: instant)
+        let suite = "DictationLimitTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let settings = SettingsStore(defaults: defaults)
+        settings.dictationLimit = .unlimited
+        settings.baselineCampaign = BaselineCampaignSnapshot(selectedWordIDs: [], activatedAt: instant)
+        let model = DictationViewModel(container: controller.container, settings: settings)
+        settings.dictationLimit = .ten
+        await model.start()
+        XCTAssertNil(model.errorMessage)
+        XCTAssertEqual(model.day?.items.count, 10)
+        settings.dictationLimit = .unlimited
+        await model.start()
+        XCTAssertEqual(model.day?.items.count, 15)
+        settings.dictationLimit = .ten
+        await model.start()
+        XCTAssertEqual(model.day?.items.count, 10)
+    }
+
+    private func regularLimitFixture(count: Int, date: Date? = nil) throws
+        -> (PersistenceController, DictationRepository, [UUID]) {
+        let instant = date ?? now
+        let controller = PersistenceController(inMemory: true)
+        let context = controller.container.viewContext
+        var ids: [UUID] = []
+        for index in 0..<count {
+            let id = try seedBareWord("word\(index)", chinese: "词\(index)",
+                at: instant.addingTimeInterval(-172_800 + Double(index)), in: context)
+            let word = try XCTUnwrap(try context.fetch(WordEntity.fetchRequest()).first { $0.id == id })
+            let state = DictationStateEntity(context: context)
+            state.id = UUID()
+            state.wordID = id
+            state.word = word
+            state.englishVersion = "word\(index)"
+            state.initialCopyCount = 3
+            state.initialCopyStartedAt = instant.addingTimeInterval(-86_400)
+            state.initialCopyCompletedAt = instant.addingTimeInterval(-86_400)
+            state.totalFormal = 1
+            state.nextReviewDate = instant.addingTimeInterval(-86_400 + Double(index))
+            state.fsrsCardData = try SRSScheduler.encodeCard(SRSScheduler.emptyCard(due: instant))
+            ids.append(id)
+        }
+        try context.save()
+        return (controller, DictationRepository(container: controller.container,
+            calendar: DictationEligibility.calendar(timeZone: timezone)), ids)
+    }
+
     private func verificationFixture(wordCount: Int = 1) async throws
         -> (PersistenceController, DictationRepository, DictationDay, [UUID], BaselineCampaignSnapshot) {
         let controller = PersistenceController(inMemory: true)

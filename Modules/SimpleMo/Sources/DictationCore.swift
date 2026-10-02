@@ -6,7 +6,7 @@ enum DictationLanguage: String, Equatable {
 }
 
 enum DictationCore {
-    private static let separators = CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: ",，;；"))
+    private static let separators = CharacterSet.newlines.union(CharacterSet(charactersIn: "\t"))
 
     static func parseWords(from text: String) -> [String] {
         text.components(separatedBy: separators)

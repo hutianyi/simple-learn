@@ -14,6 +14,7 @@ struct ContentView: View {
     @AppStorage("dictation.input") private var inputText = "苹果\n认真\n美丽\numbrella\nwonderful"
     @AppStorage("dictation.shuffle") private var shuffleWords = false
     @AppStorage("dictation.rate") private var speechRate = 0.42
+    @AppStorage("dictation.automaticTiming") private var automaticTiming = true
     @AppStorage("dictation.repeatAfter") private var repeatAfterSeconds = DictationTimingConfiguration.defaultRepeatAfterSeconds
     @AppStorage("dictation.advanceAfter") private var advanceAfterSeconds = DictationTimingConfiguration.defaultAdvanceAfterSeconds
     @Environment(\.scenePhase) private var scenePhase
@@ -79,7 +80,7 @@ struct ContentView: View {
                                 .background(Color(uiColor: .secondarySystemBackground))
                                 .clipShape(RoundedRectangle(cornerRadius: 10))
                                 .accessibilityLabel("默写内容")
-                            Text("空格、换行、逗号和分号都可以分隔词语。")
+                            Text("仅换行和制表符分隔条目；空格、逗号和分号保留在条目内，可输入词组或完整句子。")
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
                         }
@@ -96,7 +97,6 @@ struct ContentView: View {
                 // 使 ultraThinMaterial 背景横向铺满窗口而不是只覆盖中央内容。
                 ViewThatFits(in: .horizontal) {
                     HStack(spacing: 12) {
-                        NavigationLink("数据") { MoDataView() }.buttonStyle(.bordered)
                         settingsLink()
                         startButton
                     }
@@ -120,6 +120,7 @@ struct ContentView: View {
             DictationSettingsView(
                 session: session,
                 shuffleWords: $shuffleWords,
+                automaticTiming: $automaticTiming,
                 repeatAfterSeconds: $repeatAfterSeconds,
                 advanceAfterSeconds: $advanceAfterSeconds,
                 speechRate: $speechRate
@@ -135,7 +136,7 @@ struct ContentView: View {
 
     private var startButton: some View {
         Button {
-            session.start(words: words, shuffled: shuffleWords, rate: speechRate, timing: timing)
+            session.start(words: words, shuffled: shuffleWords, rate: speechRate, timing: timing, automaticTiming: automaticTiming)
         } label: {
             Label("开始默写", systemImage: "play.fill")
                 .frame(maxWidth: .infinity)
@@ -172,21 +173,26 @@ struct ContentView: View {
                     Text("还剩 \(session.secondsRemaining) 秒")
                         .font(.system(size: 34, weight: .bold, design: .rounded))
                         .monospacedDigit()
-                    Text("将在开始后 \(session.timing.advanceAfterSeconds) 秒自动进入下一个")
+                    Text(session.isReading ? "正在朗读，倒计时已暂停" : "读完后计时，本条写字时间 \(session.writingSecondsTotal) 秒")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
                 .foregroundStyle(countdownColor)
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel("本词剩余 \(session.secondsRemaining) 秒")
+                if let error = session.speechError {
+                    Text(error).font(.footnote).foregroundStyle(.red)
+                }
                 // 正常宽度横排；窄窗口 / 大字号空间不足时自动退化为竖排。
                 ViewThatFits(in: .horizontal) {
                     HStack(spacing: 14) {
                         repeatCurrentButton
+                        extendTimeButton
                         nextButton
                     }
                     VStack(spacing: 14) {
                         repeatCurrentButton
+                        extendTimeButton
                         nextButton
                     }
                 }
@@ -208,6 +214,17 @@ struct ContentView: View {
         }
         .buttonStyle(.bordered)
         .controlSize(.large)
+    }
+
+    private var extendTimeButton: some View {
+        Button { session.extendTime() } label: {
+            Label(session.hasExtendedTime ? "已加 30 秒" : "加 30 秒", systemImage: "plus.circle")
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.large)
+        .disabled(session.hasExtendedTime)
     }
 
     private var nextButton: some View {
@@ -283,6 +300,7 @@ struct ContentView: View {
 private struct DictationSettingsView: View {
     @ObservedObject var session: DictationSession
     @Binding var shuffleWords: Bool
+    @Binding var automaticTiming: Bool
     @Binding var repeatAfterSeconds: Int
     @Binding var advanceAfterSeconds: Int
     @Binding var speechRate: Double
@@ -308,12 +326,26 @@ private struct DictationSettingsView: View {
 
             Section("默写流程") {
                 Toggle("随机顺序", isOn: $shuffleWords)
-                Stepper(value: $repeatAfterSeconds, in: 5...(advanceAfterSeconds - 5), step: 5) {
-                    settingRow(title: "自动重读", seconds: repeatAfterSeconds)
+                Toggle("按内容长度自动计时", isOn: $automaticTiming)
+                if automaticTiming {
+                    Text("读完两遍后至少留 60 秒。英文按字母和单词数量加时；中文每字加 5 秒。剩余 30 秒时提醒并重读。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Stepper(value: $repeatAfterSeconds, in: 5...(advanceAfterSeconds - 5), step: 5) {
+                        settingRow(title: "自动重读", seconds: repeatAfterSeconds)
+                    }
+                    Stepper(value: $advanceAfterSeconds, in: (repeatAfterSeconds + 5)...DictationTimingConfiguration.maximumAdvanceAfterSeconds, step: 5) {
+                        settingRow(title: "自动进入下一个", seconds: advanceAfterSeconds)
+                    }
                 }
-                Stepper(value: $advanceAfterSeconds, in: (repeatAfterSeconds + 5)...DictationTimingConfiguration.maximumAdvanceAfterSeconds, step: 5) {
-                    settingRow(title: "自动进入下一个", seconds: advanceAfterSeconds)
-                }
+                Text("朗读期间暂停计时；每条最多加一次 30 秒，也可提前进入下一条。")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("数据管理") {
+                NavigationLink("备份与恢复") { MoDataView() }
             }
 
             Section {
@@ -322,8 +354,7 @@ private struct DictationSettingsView: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .toolbar { ToolbarItem(placement: .topBarTrailing) { NavigationLink("数据") { MoDataView() } } }
-            .navigationTitle("设置")
+        .navigationTitle("设置")
         .navigationBarTitleDisplayMode(.inline)
     }
 
@@ -331,7 +362,7 @@ private struct DictationSettingsView: View {
         HStack {
             Text(title)
             Spacer()
-            Text("开始后 \(seconds) 秒").foregroundStyle(.secondary)
+            Text("读完后 \(seconds) 秒").foregroundStyle(.secondary)
         }
     }
 

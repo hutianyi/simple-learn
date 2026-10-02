@@ -39,7 +39,7 @@ struct DictationView: View {
         }
         .navigationBarBackButtonHidden()
         .toolbar(.hidden, for: .navigationBar)
-        .task { speech.stop(); await viewModel.start(); presentPendingVerification() }
+        .task(id: settings.dictationLimit) { speech.stop(); await viewModel.start(); presentPendingVerification() }
         .onChange(of: copyNarrationKey, initial: true) { _, _ in narrateCurrentCopy() }
         .task(id: feedbackNarrationKey) { narrateFeedback() }
         .onDisappear { speech.stop() }

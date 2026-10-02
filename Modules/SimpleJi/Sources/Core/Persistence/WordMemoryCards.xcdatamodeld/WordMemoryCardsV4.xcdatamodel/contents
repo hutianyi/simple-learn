@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<model type="com.apple.IDECoreDataModeler.DataModel" documentVersion="1.0" lastSavedToolsVersion="26000" systemVersion="25.0" minimumToolsVersion="Automatic" sourceLanguage="Swift" userDefinedModelVersionIdentifier="4">
+    <entity name="WordEntity" representedClassName="WordEntity" syncable="YES">
+        <attribute name="importPosition" optional="NO" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="chinese" optional="NO" attributeType="String"/>
+        <attribute name="createdAt" optional="NO" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="english" optional="NO" attributeType="String"/>
+        <attribute name="id" optional="NO" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="normalizedEnglish" optional="NO" attributeType="String"/>
+        <attribute name="updatedAt" optional="NO" attributeType="Date" usesScalarValueType="NO"/>
+        <relationship name="events" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="ReviewEventEntity" inverseName="word" inverseEntity="ReviewEventEntity"/>
+        <relationship name="reviewStates" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="ReviewStateEntity" inverseName="word" inverseEntity="ReviewStateEntity"/>
+        <relationship name="dictationState" optional="YES" maxCount="1" deletionRule="Cascade" destinationEntity="DictationStateEntity" inverseName="word" inverseEntity="DictationStateEntity"/>
+        <uniquenessConstraints>
+            <uniquenessConstraint>
+                <constraint value="normalizedEnglish"/>
+            </uniquenessConstraint>
+        </uniquenessConstraints>
+    </entity>
+    <entity name="ReviewStateEntity" representedClassName="ReviewStateEntity" syncable="YES">
+        <attribute name="consecutiveKnown" optional="NO" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="createdAt" optional="NO" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="direction" optional="NO" attributeType="String"/>
+        <attribute name="fsrsCardData" optional="YES" attributeType="Binary" allowsExternalBinaryDataStorage="YES"/>
+        <attribute name="fsrsMigrationVersion" optional="NO" attributeType="Integer 16" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="id" optional="NO" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="knownCount" optional="NO" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="lapseCount" optional="NO" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="lastResult" optional="YES" attributeType="String"/>
+        <attribute name="lastReviewDate" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="level" optional="NO" attributeType="Integer 16" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="nextReviewDate" optional="NO" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="totalReviews" optional="NO" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="unknownCount" optional="NO" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="updatedAt" optional="NO" attributeType="Date" usesScalarValueType="NO"/>
+        <relationship name="events" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="ReviewEventEntity" inverseName="reviewState" inverseEntity="ReviewEventEntity"/>
+        <relationship name="word" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="WordEntity" inverseName="reviewStates" inverseEntity="WordEntity"/>
+    </entity>
+    <entity name="ReviewEventEntity" representedClassName="ReviewEventEntity" syncable="YES">
+        <attribute name="direction" optional="NO" attributeType="String"/>
+        <attribute name="id" optional="NO" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="isSameSessionRetry" optional="NO" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="levelAfter" optional="NO" attributeType="Integer 16" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="levelBefore" optional="NO" attributeType="Integer 16" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="practiceMode" optional="NO" attributeType="String"/>
+        <attribute name="result" optional="NO" attributeType="String"/>
+        <attribute name="reviewedAt" optional="NO" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="sessionID" optional="NO" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="wordChineseSnapshot" optional="NO" attributeType="String"/>
+        <attribute name="wordEnglishSnapshot" optional="NO" attributeType="String"/>
+        <relationship name="reviewState" optional="NO" maxCount="1" deletionRule="Nullify" destinationEntity="ReviewStateEntity" inverseName="events" inverseEntity="ReviewStateEntity"/>
+        <relationship name="session" optional="NO" maxCount="1" deletionRule="Nullify" destinationEntity="StudySessionEntity" inverseName="events" inverseEntity="StudySessionEntity"/>
+        <relationship name="word" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="WordEntity" inverseName="events" inverseEntity="WordEntity"/>
+    </entity>
+    <entity name="StudySessionEntity" representedClassName="StudySessionEntity" syncable="YES">
+        <attribute name="baseTaskCount" optional="NO" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="completed" optional="NO" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="extraAnswered" optional="NO" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="extraKnown" optional="NO" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="extraUnknown" optional="NO" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="finishedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="formalAnswered" optional="NO" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="formalKnown" optional="NO" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="formalUnknown" optional="NO" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="id" optional="NO" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="mode" optional="NO" attributeType="String"/>
+        <attribute name="retryAnswered" optional="NO" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="startedAt" optional="NO" attributeType="Date" usesScalarValueType="NO"/>
+        <relationship name="events" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="ReviewEventEntity" inverseName="session" inverseEntity="ReviewEventEntity"/>
+    </entity>
+    <entity name="DictationStateEntity" representedClassName="DictationStateEntity" syncable="YES">
+        <attribute name="id" optional="NO" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="wordID" optional="NO" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="englishVersion" optional="NO" attributeType="String"/>
+        <attribute name="initialCopyCount" optional="NO" attributeType="Integer 16" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="initialCopyStartedAt" optional="NO" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="initialCopyCompletedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="fsrsCardData" optional="YES" attributeType="Binary" allowsExternalBinaryDataStorage="YES"/>
+        <attribute name="nextReviewDate" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="formalNotBefore" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="lastFormalDay" optional="YES" attributeType="String"/>
+        <attribute name="totalFormal" optional="NO" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="lastResult" optional="YES" attributeType="String"/>
+        <relationship name="word" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="WordEntity" inverseName="dictationState" inverseEntity="WordEntity"/>
+        <uniquenessConstraints><uniquenessConstraint><constraint value="wordID"/></uniquenessConstraint></uniquenessConstraints>
+    </entity>
+    <entity name="DictationDayEntity" representedClassName="DictationDayEntity" syncable="YES">
+        <attribute name="id" optional="NO" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="dayKey" optional="NO" attributeType="String"/>
+        <attribute name="timeZoneID" optional="NO" attributeType="String"/>
+        <attribute name="limit" optional="NO" attributeType="Integer 32" defaultValueString="20" usesScalarValueType="YES"/>
+        <attribute name="phase" optional="NO" attributeType="String"/>
+        <attribute name="tasksData" optional="NO" attributeType="Binary" allowsExternalBinaryDataStorage="YES"/>
+        <attribute name="createdAt" optional="NO" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="updatedAt" optional="NO" attributeType="Date" usesScalarValueType="NO"/>
+        <uniquenessConstraints><uniquenessConstraint><constraint value="dayKey"/></uniquenessConstraint></uniquenessConstraints>
+    </entity>
+    <entity name="DictationEventEntity" representedClassName="DictationEventEntity" syncable="YES">
+        <attribute name="id" optional="NO" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="wordID" optional="NO" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="dayID" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="dayKey" optional="NO" attributeType="String"/>
+        <attribute name="kind" optional="NO" attributeType="String"/>
+        <attribute name="formalKey" optional="YES" attributeType="String"/>
+        <attribute name="result" optional="NO" attributeType="String"/>
+        <attribute name="reason" optional="YES" attributeType="String"/>
+        <attribute name="recognizedText" optional="YES" attributeType="String"/>
+        <attribute name="answerSnapshot" optional="NO" attributeType="String"/>
+        <attribute name="chineseSnapshot" optional="NO" attributeType="String"/>
+        <attribute name="submittedAt" optional="NO" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="remainingSeconds" optional="NO" attributeType="Double" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="round" optional="NO" attributeType="Integer 16" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="fsrsBefore" optional="YES" attributeType="Binary" allowsExternalBinaryDataStorage="YES"/>
+        <attribute name="fsrsAfter" optional="YES" attributeType="Binary" allowsExternalBinaryDataStorage="YES"/>
+        <uniquenessConstraints><uniquenessConstraint><constraint value="id"/></uniquenessConstraint><uniquenessConstraint><constraint value="formalKey"/></uniquenessConstraint></uniquenessConstraints>
+    </entity>
+    <entity name="StudyCompletionDayEntity" representedClassName="StudyCompletionDayEntity" syncable="YES">
+        <attribute name="dayKey" optional="NO" attributeType="String"/>
+        <attribute name="snapshotData" optional="NO" attributeType="Binary"/>
+        <uniquenessConstraints><uniquenessConstraint><constraint value="dayKey"/></uniquenessConstraint></uniquenessConstraints>
+    </entity>
+</model>

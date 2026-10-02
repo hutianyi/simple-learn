@@ -13,6 +13,7 @@ struct MoBackup: Codable {
         let speechRate: Double
         let repeatAfterSeconds: Int
         let advanceAfterSeconds: Int
+        var automaticTiming: Bool? = nil
     }
 
     static func snapshot(defaults: UserDefaults = Self.defaults) -> MoBackup {
@@ -20,13 +21,15 @@ struct MoBackup: Codable {
             shuffleWords: defaults.bool(forKey: "dictation.shuffle"),
             speechRate: defaults.object(forKey: "dictation.rate") as? Double ?? 0.42,
             repeatAfterSeconds: defaults.object(forKey: "dictation.repeatAfter") as? Int ?? 15,
-            advanceAfterSeconds: defaults.object(forKey: "dictation.advanceAfter") as? Int ?? 30))
+            advanceAfterSeconds: defaults.object(forKey: "dictation.advanceAfter") as? Int ?? 30,
+            automaticTiming: defaults.object(forKey: "dictation.automaticTiming") as? Bool ?? true))
     }
 
     static func decode(_ data: Data) throws -> MoBackup {
         let value = try JSONDecoder().decode(MoBackup.self, from: data)
         guard value.app == "SimpleMo", value.formatVersion == 1,
               value.settings.speechRate.isFinite, (0.32...0.55).contains(value.settings.speechRate),
+              value.settings.advanceAfterSeconds <= DictationTimingConfiguration.maximumAdvanceAfterSeconds,
               DictationTimingConfiguration(repeatAfterSeconds: value.settings.repeatAfterSeconds,
                 advanceAfterSeconds: value.settings.advanceAfterSeconds).isValid else {
             throw CocoaError(.fileReadCorruptFile)
@@ -35,6 +38,7 @@ struct MoBackup: Codable {
     }
 
     func apply(defaults: UserDefaults = Self.defaults) {
+        defaults.set(settings.automaticTiming ?? true, forKey: "dictation.automaticTiming")
         defaults.set(settings.inputText, forKey: "dictation.input")
         defaults.set(settings.shuffleWords, forKey: "dictation.shuffle")
         defaults.set(settings.speechRate, forKey: "dictation.rate")

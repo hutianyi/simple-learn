@@ -86,6 +86,7 @@ final class ReviewRepository {
         context.mergePolicy = NSErrorMergePolicy
         context.undoManager = nil
         return try await context.perform {
+            try StudyCompletionRepository.refresh(in: context, now: startedAt, calendar: self.calendar)
             let session = StudySessionEntity(context: context)
             session.id = UUID()
             session.mode = mode.rawValue
@@ -117,6 +118,7 @@ final class ReviewRepository {
                     throw RepositoryError.invalidDirection
                 }
 
+                try StudyCompletionRepository.refresh(in: context, now: reviewedAt, calendar: self.calendar)
                 let levelBefore = Int(state.level)
                 let levelAfter = levelBefore
                 var nextReviewDate = state.nextReviewDate
@@ -187,6 +189,7 @@ final class ReviewRepository {
                     }
                 }
 
+                try StudyCompletionRepository.refresh(in: context, now: reviewedAt, calendar: self.calendar)
                 try context.save()
                 return RecordedAnswer(
                     levelBefore: levelBefore,

@@ -4,6 +4,10 @@ import SwiftUI
 
 struct StatisticsView: View {
     @EnvironmentObject private var router: AppRouter
+    @EnvironmentObject private var persistence: PersistenceController
+    @ObservedObject var settings: SettingsStore
+    @State private var completionError: String?
+    @FetchRequest private var completionDays: FetchedResults<StudyCompletionDayEntity>
     @FetchRequest private var words: FetchedResults<WordEntity>
     @FetchRequest private var states: FetchedResults<ReviewStateEntity>
     @FetchRequest private var events: FetchedResults<ReviewEventEntity>
@@ -13,7 +17,11 @@ struct StatisticsView: View {
 
     private let calendar = Calendar.current
 
-    init() {
+    init(settings: SettingsStore) {
+        self.settings = settings
+        let completionRequest = StudyCompletionDayEntity.fetchRequest()
+        completionRequest.sortDescriptors = [NSSortDescriptor(key: "dayKey", ascending: false)]
+        _completionDays = FetchRequest(fetchRequest: completionRequest)
         let wordRequest = WordEntity.fetchRequest()
         wordRequest.sortDescriptors = [NSSortDescriptor(keyPath: \WordEntity.createdAt, ascending: true)]
         _words = FetchRequest(fetchRequest: wordRequest)
@@ -48,10 +56,14 @@ struct StatisticsView: View {
                     metric("今日首答正确率", value: todayAccuracyText, symbol: "percent")
                     metric("今日默写首次正确率", value: todayDictationAccuracyText, symbol: "pencil")
                     metric("旧词摸底首次正确", value: baselineAccuracyText, symbol: "list.clipboard")
-                    metric("连续学习天数", value: "\(studyStreak) 天", symbol: "flame.fill")
+                    metric("连续完成天数", value: studyStreakText, symbol: "flame.fill")
                     metric("累计正式复习次数", value: formalEvents.count, symbol: "arrow.triangle.2.circlepath")
                     metric("累计不认识次数", value: formalUnknownCount, symbol: "xmark.circle")
                 }
+
+                Text(completionError ?? "当天卡片全部复习一遍、默写及错词抄写与重默全部完成才计入；今天未完成时保留截至昨天的连续天数。")
+                    .font(.footnote)
+                    .foregroundStyle(AppPalette.textSecondary)
 
                 if trend.count >= 2 {
                     VStack(alignment: .leading, spacing: 12) {
@@ -131,6 +143,15 @@ struct StatisticsView: View {
             .padding(22)
             .frame(maxWidth: 900)
             .frame(maxWidth: .infinity)
+        }
+        .task(id: "\(events.count)|\(dictationEvents.count)|\(states.count)|\(settings.dictationLimit.rawValue)|\(settings.masteredDictationTerms.count)") {
+            do {
+                try await StudyCompletionRepository(container: persistence.container).refresh(
+                    scope: StudyCompletionScope(
+                        baselineWordIDs: settings.baselineCampaign.map { Set($0.selectedWordIDs) },
+                        masteredTerms: settings.masteredDictationTerms))
+                completionError = nil
+            } catch { completionError = "无法核对当天完成情况：\(error.localizedDescription)" }
         }
         .background(AppPalette.background.ignoresSafeArea())
         .navigationTitle("学习统计")
@@ -215,20 +236,13 @@ struct StatisticsView: View {
         return "\(Int((Double(known) / Double(todayFormalEvents.count) * 100).rounded()))%"
     }
 
-    private var studyStreak: Int {
-        let studiedDays = Set(
-            events
-                .filter { !$0.isSameSessionRetry }
-                .map { calendar.startOfDay(for: $0.reviewedAt) }
-        )
-        var cursor = calendar.startOfDay(for: Date())
-        var count = 0
-        while studiedDays.contains(cursor) {
-            count += 1
-            guard let previous = calendar.date(byAdding: .day, value: -1, to: cursor) else { break }
-            cursor = previous
-        }
-        return count
+    private var studyStreakText: String {
+        do {
+            let records = try completionDays.map {
+                try JSONDecoder().decode(StudyCompletionDay.self, from: $0.snapshotData)
+            }
+            return "\(StudyStreak.count(completedDays: records, calendar: calendar)) 天"
+        } catch { return "记录异常" }
     }
 
     private var weakStates: [ReviewStateEntity] {

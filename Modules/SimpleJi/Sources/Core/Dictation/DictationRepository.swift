@@ -129,6 +129,7 @@ final class DictationRepository {
                 english: word.english, chinese: word.chinese, now: now,
                 round: viaKeyboard || correct ? 0 : failures + 1
             )
+            try StudyCompletionRepository.refresh(in: context, now: now, calendar: calendar)
             try context.save()
             return InitialCopyPrompt(
                 wordID: word.id,
@@ -200,6 +201,10 @@ final class DictationRepository {
         let calendar = self.calendar
         let baselineDailyLimit = self.baselineDailyLimit
         return try await context.perform {
+            try StudyCompletionRepository.refresh(in: context, now: now, calendar: calendar,
+                scope: StudyCompletionScope(baselineWordIDs: campaign.map { Set($0.selectedWordIDs) },
+                    masteredTerms: masteredTerms))
+            if context.hasChanges { try context.save() }
             let today = DictationEligibility.dayKey(for: now, calendar: calendar)
             let allDays = try context.fetch(DictationDayEntity.fetchRequest())
                 .sorted { $0.createdAt < $1.createdAt }
@@ -219,7 +224,7 @@ final class DictationRepository {
                 }
                 Self.advanceRemediation(&day)
                 if day != savedDay {
-                    try Self.save(day, to: entity, now: now, in: context)
+                    try Self.save(day, to: entity, now: now, in: context, calendar: self.calendar)
                 }
                 if day.dayKey == today,
                    let index = Self.activeTimedIndex(in: day),
@@ -234,20 +239,23 @@ final class DictationRepository {
                         english: item.english, chinese: item.chinese, now: now,
                         round: item.remediationRound
                     )
-                    try Self.save(day, to: entity, now: now, in: context)
+                    try Self.save(day, to: entity, now: now, in: context, calendar: self.calendar)
                 }
                 if day.dayKey != today && day.phase == .firstPass {
                     day.items.removeAll { $0.formalResult == nil && !$0.awaitsVerification }
                     day.phase = day.items.contains(where: \.awaitsVerification) ? .firstPass
                         : (day.unresolved > 0 ? .firstPassSummary : .complete)
-                    try Self.save(day, to: entity, now: now, in: context)
+                    try Self.save(day, to: entity, now: now, in: context, calendar: self.calendar)
                 }
                 if day.items.contains(where: \.isDeferred) {
                     for index in day.items.indices { day.items[index].deferred = nil }
                     Self.advanceRemediation(&day)
-                    try Self.save(day, to: entity, now: now, in: context)
+                    try Self.save(day, to: entity, now: now, in: context, calendar: self.calendar)
                 }
-                if day.phase != .complete { return day }
+                if day.phase != .complete {
+                    if day.dayKey != today { return day }
+                    break
+                }
             }
             let wordRequest = WordEntity.fetchRequest()
             wordRequest.relationshipKeyPathsForPrefetching = ["dictationState"]
@@ -262,24 +270,6 @@ final class DictationRepository {
                         && !masteredTerms.contains(EnglishNormalizer.normalize(word.english))
                 }
             let dayLimit = baselinePending.isEmpty ? limit : baselineDailyLimit
-            if let existing = allDays.first(where: { $0.dayKey == today }) {
-                var day = try Self.snapshot(existing)
-                guard day.phase == .complete, !baselinePending.isEmpty else { return day }
-                day.limit = max(day.items.count, day.limit == 0 ? dayLimit : max(day.limit, dayLimit))
-                let slots = day.limit == 0 ? Int.max : max(0, day.limit - day.items.count)
-                let additions = Self.baselineItems(
-                    campaign: campaign, wordsByID: wordsByID,
-                    completed: completedBaseline,
-                    excluding: Set(day.items.map(\.wordID)),
-                    masteredTerms: masteredTerms, limit: slots
-                )
-                if !additions.isEmpty {
-                    day.items.append(contentsOf: additions)
-                    day.phase = .firstPass
-                    try Self.save(day, to: existing, now: now, in: context)
-                }
-                return day
-            }
 
             let tomorrow = DictationEligibility.nextDay(after: now, calendar: calendar)
             let candidates = words.compactMap { word -> (word: WordEntity, due: Date, priority: Int)? in
@@ -300,6 +290,56 @@ final class DictationRepository {
                 if $0.word.createdAt != $1.word.createdAt { return $0.word.createdAt < $1.word.createdAt }
                 return $0.word.id.uuidString < $1.word.id.uuidString
             }
+            if let existing = allDays.first(where: { $0.dayKey == today }) {
+                var day = try Self.snapshot(existing)
+                if !baselinePending.isEmpty || day.items.contains(where: \.belongsToBaseline) {
+                    guard day.phase == .complete, !baselinePending.isEmpty else { return day }
+                    day.limit = max(day.items.count, day.limit == 0 ? dayLimit : max(day.limit, dayLimit))
+                    let slots = day.limit == 0 ? Int.max : max(0, day.limit - day.items.count)
+                    let additions = Self.baselineItems(
+                        campaign: campaign, wordsByID: wordsByID,
+                        completed: completedBaseline,
+                        excluding: Set(day.items.map(\.wordID)),
+                        masteredTerms: masteredTerms, limit: slots
+                    )
+                    if !additions.isEmpty {
+                        day.items.append(contentsOf: additions)
+                        day.phase = .firstPass
+                        try Self.save(day, to: existing, now: now, in: context, calendar: self.calendar)
+                    }
+                    return day
+                }
+                guard day.limit != limit else { return day }
+                day.limit = limit
+                // Keep results and any question already attempted; only postpone untouched words.
+                let hasProgress: (DictationItem) -> Bool = {
+                    $0.formalResult != nil || $0.awaitsVerification || $0.isWriting
+                        || $0.remainingSeconds < 30 || $0.recognitionFailures > 0
+                        || $0.interruptionCount > 0
+                }
+                var slots = limit == 0 ? Int.max : max(0, limit - day.items.filter(hasProgress).count)
+                day.items = day.items.filter { item in
+                    if hasProgress(item) { return true }
+                    guard slots > 0 else { return false }
+                    slots -= 1
+                    return true
+                }
+                let existingIDs = Set(day.items.map(\.wordID))
+                let additions = candidates.filter { !existingIDs.contains($0.word.id) }.prefix(slots)
+                day.items.append(contentsOf: additions.map {
+                    DictationItem(wordID: $0.word.id, english: $0.word.english, chinese: $0.word.chinese)
+                })
+                if day.items.contains(where: { $0.formalResult == nil }) {
+                    day.phase = .firstPass
+                } else if day.unresolved == 0 {
+                    day.phase = .complete
+                } else if day.phase == .firstPass || day.phase == .complete {
+                    day.phase = .firstPassSummary
+                }
+                try Self.save(day, to: existing, now: now, in: context, calendar: self.calendar)
+                return day
+            }
+
             var items = Self.baselineItems(
                 campaign: campaign, wordsByID: wordsByID,
                 completed: completedBaseline,
@@ -323,7 +363,7 @@ final class DictationRepository {
             entity.timeZoneID = day.timeZoneID
             entity.limit = Int32(dayLimit)
             entity.createdAt = now
-            try Self.save(day, to: entity, now: now, in: context)
+            try Self.save(day, to: entity, now: now, in: context, calendar: self.calendar)
             return day
         }
     }
@@ -336,7 +376,7 @@ final class DictationRepository {
             guard day.phase == .firstPassSummary else { throw DictationError.invalidPhase }
             day.phase = .remediationCopy
             Self.advanceRemediation(&day)
-            try Self.save(day, to: entity, now: now, in: context)
+            try Self.save(day, to: entity, now: now, in: context, calendar: self.calendar)
             return day
         }
     }
@@ -364,7 +404,7 @@ final class DictationRepository {
                              kind: "recognitionMismatch", correct: nil, recognized: recognized,
                              english: item.english, chinese: item.chinese, now: now,
                              remaining: item.remainingSeconds, round: item.remediationRound)
-            try Self.save(day, to: entity, now: now, in: context)
+            try Self.save(day, to: entity, now: now, in: context, calendar: self.calendar)
             return day
         }
     }
@@ -378,7 +418,7 @@ final class DictationRepository {
                   day.items[index].awaitsVerification else { throw DictationError.invalidPhase }
             if day.items[index].keyboardDeadline == nil {
                 day.items[index].keyboardDeadline = now.addingTimeInterval(DictationKeyboardClock.duration)
-                try Self.save(day, to: entity, now: now, in: context)
+                try Self.save(day, to: entity, now: now, in: context, calendar: self.calendar)
             }
             return day
         }
@@ -453,7 +493,7 @@ final class DictationRepository {
                     english: item.english, chinese: item.chinese, now: now,
                     remaining: item.remainingSeconds
                 )
-                try Self.save(day, to: entity, now: now, in: context)
+                try Self.save(day, to: entity, now: now, in: context, calendar: self.calendar)
                 return .retry(day)
             }
             let correct = input.reason == nil
@@ -505,7 +545,7 @@ final class DictationRepository {
             if day.items.allSatisfy({ $0.formalResult != nil }) {
                 day.phase = day.unresolved > 0 ? .firstPassSummary : .complete
             }
-            try Self.save(day, to: entity, now: now, in: context)
+            try Self.save(day, to: entity, now: now, in: context, calendar: self.calendar)
             return .result(day, correct: correct, reason: reason)
         }
     }
@@ -544,7 +584,7 @@ final class DictationRepository {
                 now: now, round: day.items[index].remediationRound
             )
             Self.advanceRemediation(&day)
-            try Self.save(day, to: entity, now: now, in: context)
+            try Self.save(day, to: entity, now: now, in: context, calendar: self.calendar)
             return day
         }
     }
@@ -581,7 +621,7 @@ final class DictationRepository {
                     english: item.english, chinese: item.chinese, now: now,
                     remaining: item.remainingSeconds, round: item.remediationRound
                 )
-                try Self.save(day, to: entity, now: now, in: context)
+                try Self.save(day, to: entity, now: now, in: context, calendar: self.calendar)
                 return .retry(day)
             }
             let correct = input.reason == nil
@@ -617,7 +657,7 @@ final class DictationRepository {
                 remaining: item.remainingSeconds, round: item.remediationRound
             )
             Self.advanceRemediation(&day)
-            try Self.save(day, to: entity, now: now, in: context)
+            try Self.save(day, to: entity, now: now, in: context, calendar: self.calendar)
             return .result(day, correct: correct, reason: reason)
         }
     }
@@ -638,7 +678,7 @@ final class DictationRepository {
                              kind: "deferred", correct: nil, recognized: nil,
                              english: item.english, chinese: item.chinese, now: now, round: item.remediationRound)
             Self.advanceRemediation(&day)
-            try Self.save(day, to: entity, now: now, in: context)
+            try Self.save(day, to: entity, now: now, in: context, calendar: self.calendar)
             return day
         }
     }
@@ -733,7 +773,7 @@ final class DictationRepository {
                   day.items[index].wordID == wordID else { return }
             day.items[index].remainingSeconds = min(30, max(0, remaining))
             day.items[index].isWriting = isWriting
-            try Self.save(day, to: entity, now: now, in: context)
+            try Self.save(day, to: entity, now: now, in: context, calendar: self.calendar)
         }
     }
 
@@ -870,12 +910,13 @@ final class DictationRepository {
 
     private static func save(
         _ day: DictationDay, to entity: DictationDayEntity, now: Date,
-        in context: NSManagedObjectContext
+        in context: NSManagedObjectContext, calendar: Calendar
     ) throws {
         entity.limit = Int32(day.limit)
         entity.phase = day.phase.rawValue
         entity.tasksData = try JSONEncoder().encode(day.items)
         entity.updatedAt = now
+        try StudyCompletionRepository.refresh(in: context, now: now, calendar: calendar)
         try context.save()
     }
 }

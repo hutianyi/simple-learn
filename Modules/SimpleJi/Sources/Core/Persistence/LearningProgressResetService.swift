@@ -14,6 +14,7 @@ enum LearningProgressResetService {
 
         try await context.perform {
             do {
+                for day in try context.fetch(StudyCompletionDayEntity.fetchRequest()) { context.delete(day) }
                 for event in try context.fetch(DictationEventEntity.fetchRequest()) {
                     context.delete(event)
                 }

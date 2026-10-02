@@ -30,7 +30,7 @@ struct RootView: View {
         } message: {
             Text(persistence.loadErrorMessage ?? "发生未知错误。")
         }
-        .alert("无法准备旧词摸底", isPresented: baselineErrorBinding) {
+        .alert("无法准备今日学习记录", isPresented: baselineErrorBinding) {
             Button("好", role: .cancel) {}
         } message: {
             Text(baselineErrorMessage ?? "发生未知错误。")
@@ -38,12 +38,17 @@ struct RootView: View {
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { homeDate = Date() }
         }
-        .task(id: persistence.isReady) {
-            guard persistence.isReady, settings.baselineCampaign == nil else { return }
+        .task(id: "\(persistence.isReady)|\(DictationEligibility.dayKey(for: homeDate))") {
+            guard persistence.isReady else { return }
             do {
-                let campaign = try await DictationRepository(container: persistence.container)
-                    .automaticBaselineCampaign(masteredTerms: settings.masteredDictationTerms)
-                if settings.baselineCampaign == nil { settings.baselineCampaign = campaign }
+                if settings.baselineCampaign == nil {
+                    settings.baselineCampaign = try await DictationRepository(container: persistence.container)
+                        .automaticBaselineCampaign(masteredTerms: settings.masteredDictationTerms)
+                }
+                try await StudyCompletionRepository(container: persistence.container).refresh(
+                    scope: StudyCompletionScope(
+                        baselineWordIDs: settings.baselineCampaign.map { Set($0.selectedWordIDs) },
+                        masteredTerms: settings.masteredDictationTerms))
             } catch {
                 baselineErrorMessage = error.localizedDescription
             }
@@ -82,7 +87,7 @@ struct RootView: View {
                 container: persistence.container
             )
         case .statistics:
-            StatisticsView()
+            StatisticsView(settings: settings)
         case .wordLibrary:
             WordLibraryView()
         }

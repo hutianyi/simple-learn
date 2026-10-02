@@ -3,7 +3,7 @@ import Foundation
 struct BackupEnvelope: Codable {
     static let appMarker = "WordMemoryCards"
     static let currentBackupFormatVersion = 1
-    static let currentSchemaVersion = 3
+    static let currentSchemaVersion = 4
 
     let app: String
     let backupFormatVersion: Int
@@ -22,6 +22,7 @@ struct BackupData: Codable {
     let dictationStates: [BackupDictationState]?
     let dictationDays: [BackupDictationDay]?
     let dictationEvents: [BackupDictationEvent]?
+    let completionDays: [StudyCompletionDay]?
 
     init(
         words: [BackupWord], reviewStates: [BackupReviewState],
@@ -29,7 +30,8 @@ struct BackupData: Codable {
         settings: BackupSettings,
         dictationStates: [BackupDictationState]? = nil,
         dictationDays: [BackupDictationDay]? = nil,
-        dictationEvents: [BackupDictationEvent]? = nil
+        dictationEvents: [BackupDictationEvent]? = nil,
+        completionDays: [StudyCompletionDay]? = nil
     ) {
         self.words = words
         self.reviewStates = reviewStates
@@ -39,6 +41,7 @@ struct BackupData: Codable {
         self.dictationStates = dictationStates
         self.dictationDays = dictationDays
         self.dictationEvents = dictationEvents
+        self.completionDays = completionDays
     }
 }
 

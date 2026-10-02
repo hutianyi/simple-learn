@@ -14,6 +14,16 @@ final class DictationSession: NSObject, ObservableObject, AVSpeechSynthesizerDel
     @Published private(set) var secondsRemaining = DictationTimingConfiguration.defaultAdvanceAfterSeconds
     @Published private(set) var timing = DictationTimingConfiguration.default
 
+    @Published private(set) var writingSecondsTotal = DictationTimingConfiguration.defaultAdvanceAfterSeconds
+    @Published private(set) var hasExtendedTime = false
+    @Published private(set) var isReading = false
+    @Published private(set) var speechError: String?
+
+    private var replayOnForeground = false
+    private var automaticTiming = true
+    private var fixedTiming = DictationTimingConfiguration.default
+    private var pendingUtterances: Set<ObjectIdentifier> = []
+
     private struct SpeechItem {
         let text: String
         let language: DictationLanguage
@@ -53,16 +63,19 @@ final class DictationSession: NSObject, ObservableObject, AVSpeechSynthesizerDel
         return Double(currentIndex + 1) / Double(totalCount)
     }
 
-    func start(words newWords: [String], shuffled: Bool, rate: Double, timing newTiming: DictationTimingConfiguration) {
-        guard !newWords.isEmpty, newTiming.isValid else { return }
+    func start(words newWords: [String], shuffled: Bool, rate: Double, timing newTiming: DictationTimingConfiguration, automaticTiming: Bool = true) {
+        guard !newWords.isEmpty, newTiming.isValid, newTiming.advanceAfterSeconds <= DictationTimingConfiguration.maximumAdvanceAfterSeconds else { return }
         words = shuffled ? newWords.shuffled() : newWords
         totalCount = words.count
         currentIndex = 0
         speechRate = Float(rate)
+        self.automaticTiming = automaticTiming
+        fixedTiming = newTiming
         timing = newTiming
         phase = .dictating
         isSceneInactive = false
         didAnnounceBackground = false
+        replayOnForeground = false
         speechRecoveryAttempts = 0
         usesAccessibilityVoice = true
         setScreenAwake(true)
@@ -72,6 +85,14 @@ final class DictationSession: NSObject, ObservableObject, AVSpeechSynthesizerDel
     func repeatCurrent() {
         guard phase == .dictating, words.indices.contains(currentIndex) else { return }
         speakCurrent()
+    }
+
+    func extendTime() {
+        guard phase == .dictating, var countdown, countdown.extend() else { return }
+        self.countdown = countdown
+        hasExtendedTime = true
+        writingSecondsTotal += 30
+        updateCountdown()
     }
 
     func next() {
@@ -90,6 +111,7 @@ final class DictationSession: NSObject, ObservableObject, AVSpeechSynthesizerDel
         phase = .dictating
         isSceneInactive = false
         didAnnounceBackground = false
+        replayOnForeground = false
         speechRecoveryAttempts = 0
         usesAccessibilityVoice = true
         setScreenAwake(true)
@@ -103,9 +125,13 @@ final class DictationSession: NSObject, ObservableObject, AVSpeechSynthesizerDel
         cancelCountdown()
         cancelSpeechStartWatchdog()
         synthesizer.stopSpeaking(at: .immediate)
+        pendingUtterances = []
+        isReading = false
+        speechError = nil
         phase = .setup
         isSceneInactive = false
         didAnnounceBackground = false
+        replayOnForeground = false
         setScreenAwake(false)
         deactivateAudioSession()
     }
@@ -116,19 +142,29 @@ final class DictationSession: NSObject, ObservableObject, AVSpeechSynthesizerDel
         case .active:
             isSceneInactive = false
             didAnnounceBackground = false
+            if replayOnForeground {
+                replayOnForeground = false
+                speakCurrent()
+            } else if !isReading { countdown?.resume() }
             updateCountdown()
         case .inactive:
+            countdown?.pause()
             isSceneInactive = true
         case .background:
+            countdown?.pause()
             isSceneInactive = true
             guard !didAnnounceBackground else { return }
             didAnnounceBackground = true
+            replayOnForeground = isReading
             speak("默写尚未结束，请返回继续。", language: .chinese, rate: speechRate)
         @unknown default: break
         }
     }
 
     private func beginCurrentWord() {
+        timing = automaticTiming ? .automatic(for: words[currentIndex]) : fixedTiming
+        writingSecondsTotal = timing.advanceAfterSeconds
+        hasExtendedTime = false
         startCountdown()
         speakCurrent()
     }
@@ -141,7 +177,7 @@ final class DictationSession: NSObject, ObservableObject, AVSpeechSynthesizerDel
 
     private func startCountdown() {
         cancelCountdown(resetDisplay: false)
-        countdown = DictationCountdown(timing: timing)
+        countdown = DictationCountdown(timing: timing, paused: true)
         secondsRemaining = timing.advanceAfterSeconds
         let generation = countdownGeneration
         countdownTask = Task { [weak self] in
@@ -176,7 +212,7 @@ final class DictationSession: NSObject, ObservableObject, AVSpeechSynthesizerDel
         guard words.indices.contains(currentIndex) else { return }
         let word = words[currentIndex]
         speakSequence([
-            SpeechItem(text: "即将自动进入下一个词语", language: .chinese),
+            SpeechItem(text: "还剩 \(secondsRemaining) 秒，即将自动进入下一个词语", language: .chinese),
             SpeechItem(text: DictationCore.repeatedSpeechText(for: word), language: DictationCore.language(for: word))
         ], rate: speechRate)
     }
@@ -195,6 +231,10 @@ final class DictationSession: NSObject, ObservableObject, AVSpeechSynthesizerDel
 
     private func speakSequence(_ items: [SpeechItem], rate: Float) {
         guard !items.isEmpty, AudioPlaybackCoordinator.shared.owns("mo") else { return }
+        countdown?.pause()
+        isReading = phase == .dictating
+        speechError = nil
+        pendingUtterances = []
         lastSpeechItems = items
         speechGeneration += 1
         let generation = speechGeneration
@@ -216,11 +256,13 @@ final class DictationSession: NSObject, ObservableObject, AVSpeechSynthesizerDel
                     utterance.volume = 1
                     utterance.preUtteranceDelay = index == 0 ? 0.15 : 0.25
                     utterance.postUtteranceDelay = 0.08
+                    self.pendingUtterances.insert(ObjectIdentifier(utterance))
                     self.synthesizer.speak(utterance)
                 }
                 self.scheduleSpeechStartWatchdog(for: generation)
             } catch {
                 guard !Task.isCancelled, self.speechGeneration == generation else { return }
+                self.speechError = "朗读暂时无法播放，请点“重复读两遍”重试。"
                 print("[DictationAudio] 音频会话激活失败：\(error.localizedDescription)")
             }
         }
@@ -295,9 +337,14 @@ final class DictationSession: NSObject, ObservableObject, AVSpeechSynthesizerDel
         guard phase == .dictating, !isSceneInactive, !lastSpeechItems.isEmpty else { return }
         let items = lastSpeechItems
         let rate = speechRate
+        let generation = speechGeneration
+        countdown?.pause()
+        isReading = true
+        pendingUtterances = []
         synthesizer.stopSpeaking(at: .immediate)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
-            guard let self, self.phase == .dictating, !self.isSceneInactive else { return }
+            guard let self, self.phase == .dictating, !self.isSceneInactive,
+                  self.speechGeneration == generation else { return }
             print("[DictationAudio] 恢复后重新朗读当前内容")
             self.speakSequence(items, rate: rate)
         }
@@ -335,12 +382,31 @@ final class DictationSession: NSObject, ObservableObject, AVSpeechSynthesizerDel
 
     private func recreateSpeechSynthesizer() {
         cancelSpeechStartWatchdog()
+        pendingUtterances = []
         synthesizer.stopSpeaking(at: .immediate)
         synthesizer = AVSpeechSynthesizer()
         synthesizer.delegate = self
     }
 
-    private func handleSpeechDidStart() {
+    private func handleSpeechDidFinish(_ identifier: ObjectIdentifier) {
+        guard pendingUtterances.remove(identifier) != nil, pendingUtterances.isEmpty else { return }
+        isReading = false
+        if phase == .dictating, !isSceneInactive {
+            countdown?.resume()
+            updateCountdown()
+        }
+    }
+
+    private func handleSpeechDidCancel(_ identifier: ObjectIdentifier) {
+        guard pendingUtterances.contains(identifier), phase == .dictating else { return }
+        pendingUtterances = []
+        countdown?.pause()
+        speechError = "朗读已中断，倒计时暂停，请点“重复读两遍”继续。"
+        cancelSpeechStartWatchdog()
+    }
+
+    private func handleSpeechDidStart(_ identifier: ObjectIdentifier) {
+        guard pendingUtterances.contains(identifier) else { return }
         hasStartedCurrentSpeech = true
         speechRecoveryAttempts = 0
         cancelSpeechStartWatchdog()
@@ -348,15 +414,20 @@ final class DictationSession: NSObject, ObservableObject, AVSpeechSynthesizerDel
 
     nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didStart utterance: AVSpeechUtterance) {
         print("[DictationAudio] 开始朗读 text=\(utterance.speechString)")
-        Task { @MainActor [weak self] in self?.handleSpeechDidStart() }
+        let identifier = ObjectIdentifier(utterance)
+        Task { @MainActor [weak self] in self?.handleSpeechDidStart(identifier) }
     }
 
     nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
         print("[DictationAudio] 完成朗读 text=\(utterance.speechString)")
+        let identifier = ObjectIdentifier(utterance)
+        Task { @MainActor [weak self] in self?.handleSpeechDidFinish(identifier) }
     }
 
     nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
         print("[DictationAudio] 取消朗读 text=\(utterance.speechString)")
+        let identifier = ObjectIdentifier(utterance)
+        Task { @MainActor [weak self] in self?.handleSpeechDidCancel(identifier) }
     }
 
     private func setScreenAwake(_ awake: Bool) {
