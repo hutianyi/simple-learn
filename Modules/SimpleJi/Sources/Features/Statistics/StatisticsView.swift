@@ -6,6 +6,8 @@ struct StatisticsView: View {
     @EnvironmentObject private var router: AppRouter
     @EnvironmentObject private var persistence: PersistenceController
     @ObservedObject var settings: SettingsStore
+    @Environment(\.dismiss) private var dismiss
+    private let celebration: Bool
     @State private var completionError: String?
     @FetchRequest private var completionDays: FetchedResults<StudyCompletionDayEntity>
     @FetchRequest private var words: FetchedResults<WordEntity>
@@ -17,7 +19,8 @@ struct StatisticsView: View {
 
     private let calendar = Calendar.current
 
-    init(settings: SettingsStore) {
+    init(settings: SettingsStore, celebration: Bool = false) {
+        self.celebration = celebration
         self.settings = settings
         let completionRequest = StudyCompletionDayEntity.fetchRequest()
         completionRequest.sortDescriptors = [NSSortDescriptor(key: "dayKey", ascending: false)]
@@ -45,97 +48,104 @@ struct StatisticsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
+                if celebration { celebrationHeader }
                 completionHeatmap
 
-                LazyVGrid(
-                    columns: Array(repeating: GridItem(.flexible(), spacing: 14), count: 3),
-                    spacing: 14
-                ) {
-                    metric("总单词", value: words.count, symbol: "books.vertical")
-                    metric("今日待复习卡", value: dueCount, symbol: "calendar.badge.clock")
-                    metric("已熟练单词", value: masteredWordCount, symbol: "star.fill")
-                    metric("今日已正式复习", value: todayFormalEvents.count, symbol: "checkmark.circle")
-                    metric("今日首答正确率", value: todayAccuracyText, symbol: "percent")
-                    metric("今日默写首次正确率", value: todayDictationAccuracyText, symbol: "pencil")
-                    metric("旧词摸底首次正确", value: baselineAccuracyText, symbol: "list.clipboard")
-                    metric("累计正式复习次数", value: formalEvents.count, symbol: "arrow.triangle.2.circlepath")
-                    metric("累计不认识次数", value: formalUnknownCount, symbol: "xmark.circle")
-                }
+                if celebration {
+                    Button("太棒了，明天继续！") { dismiss() }
+                        .buttonStyle(LargePrimaryButtonStyle())
+                        .accessibilityIdentifier("dismissDailyCelebration")
+                } else {
+                    LazyVGrid(
+                        columns: Array(repeating: GridItem(.flexible(), spacing: 14), count: 3),
+                        spacing: 14
+                    ) {
+                        metric("总单词", value: words.count, symbol: "books.vertical")
+                        metric("今日待复习卡", value: dueCount, symbol: "calendar.badge.clock")
+                        metric("已熟练单词", value: masteredWordCount, symbol: "star.fill")
+                        metric("今日已正式复习", value: todayFormalEvents.count, symbol: "checkmark.circle")
+                        metric("今日首答正确率", value: todayAccuracyText, symbol: "percent")
+                        metric("今日默写首次正确率", value: todayDictationAccuracyText, symbol: "pencil")
+                        metric("旧词摸底首次正确", value: baselineAccuracyText, symbol: "list.clipboard")
+                        metric("累计正式复习次数", value: formalEvents.count, symbol: "arrow.triangle.2.circlepath")
+                        metric("累计不认识次数", value: formalUnknownCount, symbol: "xmark.circle")
+                    }
 
-                if trend.count >= 2 {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("最近正式复习正确率")
-                            .font(.title3.bold())
-                        Chart(trend) { point in
-                            BarMark(
-                                x: .value("复习", point.index),
-                                y: .value("正确率", point.accuracy)
-                            )
-                            .foregroundStyle(AppPalette.accent.gradient)
-                            .cornerRadius(5)
+                    if trend.count >= 2 {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("最近正式复习正确率")
+                                .font(.title3.bold())
+                            Chart(trend) { point in
+                                BarMark(
+                                    x: .value("复习", point.index),
+                                    y: .value("正确率", point.accuracy)
+                                )
+                                .foregroundStyle(AppPalette.accent.gradient)
+                                .cornerRadius(5)
+                            }
+                            .chartYScale(domain: 0...100)
+                            .chartYAxis {
+                                AxisMarks(values: [0, 50, 100]) { value in
+                                    AxisGridLine()
+                                    AxisValueLabel {
+                                        if let number = value.as(Int.self) {
+                                            Text("\(number)%")
+                                        }
+                                    }
+                                }
+                            }
+                            .frame(height: 210)
                         }
-                        .chartYScale(domain: 0...100)
-                        .chartYAxis {
-                            AxisMarks(values: [0, 50, 100]) { value in
-                                AxisGridLine()
-                                AxisValueLabel {
-                                    if let number = value.as(Int.self) {
-                                        Text("\(number)%")
+                        .padding(20)
+                        .background(AppPalette.surface)
+                        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                    }
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack {
+                            Text("容易忘记的卡片")
+                                .font(.title3.bold())
+                            Spacer()
+                            Button("额外加练") { router.push(.extraPractice) }
+                                .font(.headline)
+                        }
+
+                        if weakStates.isEmpty {
+                            Text("正式复习中还没有答错过的卡片。")
+                                .foregroundStyle(AppPalette.textSecondary)
+                        } else {
+                            ForEach(weakStates, id: \.objectID) { state in
+                                if let word = state.word {
+                                    NavigationLink {
+                                        WordDetailView(word: word)
+                                    } label: {
+                                        HStack(spacing: 14) {
+                                            VStack(alignment: .leading, spacing: 4) {
+                                                Text(word.english)
+                                                    .font(.headline)
+                                                    .foregroundStyle(AppPalette.textPrimary)
+                                                Text(directionTitle(state.direction))
+                                                    .font(.subheadline)
+                                                    .foregroundStyle(AppPalette.textSecondary)
+                                            }
+                                            Spacer()
+                                            Text(state.nextReviewDate.formatted(date: .abbreviated, time: .omitted))
+                                                .font(.subheadline.monospacedDigit())
+                                                .foregroundStyle(AppPalette.textSecondary)
+                                            Image(systemName: "chevron.right")
+                                                .font(.caption.bold())
+                                                .foregroundStyle(AppPalette.textSecondary)
+                                        }
+                                        .padding(.vertical, 8)
                                     }
                                 }
                             }
                         }
-                        .frame(height: 210)
                     }
                     .padding(20)
                     .background(AppPalette.surface)
                     .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
                 }
-
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack {
-                        Text("容易忘记的卡片")
-                            .font(.title3.bold())
-                        Spacer()
-                        Button("额外加练") { router.push(.extraPractice) }
-                            .font(.headline)
-                    }
-
-                    if weakStates.isEmpty {
-                        Text("正式复习中还没有答错过的卡片。")
-                            .foregroundStyle(AppPalette.textSecondary)
-                    } else {
-                        ForEach(weakStates, id: \.objectID) { state in
-                            if let word = state.word {
-                                NavigationLink {
-                                    WordDetailView(word: word)
-                                } label: {
-                                    HStack(spacing: 14) {
-                                        VStack(alignment: .leading, spacing: 4) {
-                                            Text(word.english)
-                                                .font(.headline)
-                                                .foregroundStyle(AppPalette.textPrimary)
-                                            Text(directionTitle(state.direction))
-                                                .font(.subheadline)
-                                                .foregroundStyle(AppPalette.textSecondary)
-                                        }
-                                        Spacer()
-                                        Text(state.nextReviewDate.formatted(date: .abbreviated, time: .omitted))
-                                            .font(.subheadline.monospacedDigit())
-                                            .foregroundStyle(AppPalette.textSecondary)
-                                        Image(systemName: "chevron.right")
-                                            .font(.caption.bold())
-                                            .foregroundStyle(AppPalette.textSecondary)
-                                    }
-                                    .padding(.vertical, 8)
-                                }
-                            }
-                        }
-                    }
-                }
-                .padding(20)
-                .background(AppPalette.surface)
-                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
             }
             .padding(22)
             .frame(maxWidth: 900)
@@ -151,8 +161,36 @@ struct StatisticsView: View {
             } catch { completionError = "无法核对当天完成情况：\(error.localizedDescription)" }
         }
         .background(AppPalette.background.ignoresSafeArea())
-        .navigationTitle("学习统计")
+        .overlay {
+            if celebration { StudyCelebrationConfetti().allowsHitTesting(false).accessibilityHidden(true) }
+        }
+        .navigationTitle(celebration ? "今日任务全部完成" : "学习统计")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if celebration {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("完成") { dismiss() }
+                }
+            }
+        }
+    }
+
+    private var celebrationHeader: some View {
+        VStack(spacing: 14) {
+            Image(systemName: "party.popper.fill")
+                .font(.system(size: 64))
+                .foregroundStyle(Color.purple.gradient)
+            Text("今天的你，太棒了！")
+                .font(.system(.largeTitle, design: .rounded, weight: .bold))
+                .multilineTextAlignment(.center)
+            Text("卡片复习、默写和错词订正都完成了。\n今天的格子已经点亮，看看你坚持的足迹！")
+                .font(.title3)
+                .foregroundStyle(AppPalette.textSecondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 20)
+        .accessibilityIdentifier("dailyCompletionCelebration")
     }
 
     private func metric(_ title: String, value: Int, symbol: String) -> some View {
@@ -446,6 +484,43 @@ private struct StudyHeatmapView: View {
         HStack(spacing: 4) {
             RoundedRectangle(cornerRadius: 3).fill(color).frame(width: 10, height: 10)
             Text(title).font(.caption)
+        }
+    }
+}
+
+private struct StudyCelebrationConfetti: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var start = Date()
+    @State private var running = true
+    private let colors: [Color] = [.purple, .pink, .orange, .blue, .green]
+
+    var body: some View {
+        Group {
+            if !reduceMotion && running {
+                TimelineView(.animation(minimumInterval: 1.0 / 30)) { timeline in
+                    Canvas { context, size in
+                        let elapsed = timeline.date.timeIntervalSince(start)
+                        for index in 0..<70 {
+                            let age = elapsed - Double(index % 7) * 0.04
+                            guard age >= 0 && age < 3 else { continue }
+                            let velocity = Double((index * 73) % 480) - 240
+                            let x = size.width / 2 + velocity * age
+                            let y = 80 - Double(140 + index % 100) * age + 210 * age * age
+                            let rect = CGRect(x: x, y: y, width: index % 2 == 0 ? 7 : 5, height: 11)
+                            var particle = context
+                            particle.opacity = min(1, (3 - age) / 0.7)
+                            particle.fill(Path(roundedRect: rect, cornerRadius: 2),
+                                with: .color(colors[index % colors.count]))
+                        }
+                    }
+                }
+            }
+        }
+        .task {
+            start = Date()
+            do { try await Task.sleep(for: .seconds(3.3)) }
+            catch { return }
+            running = false
         }
     }
 }

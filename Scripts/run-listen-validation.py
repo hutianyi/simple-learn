@@ -16,9 +16,12 @@ core = work/'Sources/SimpleTing'
 core.mkdir(parents=True)
 for source in (root/'Modules/SimpleTing/Sources/Core').glob('*.swift'):
     shutil.copy2(source, core/source.name)
+for name in ['LibraryStore.swift', 'ListenSettings.swift']:
+    shutil.copy2(root/'Modules/SimpleTing/Sources/Services'/name, core/name)
 shell = work/'Sources/StudyShell'
 shell.mkdir(parents=True)
 shutil.copy2(root/'Shared/AudioOwnership.swift', shell/'AudioOwnership.swift')
+shutil.copy2(root/'Shared/ModuleSession.swift', shell/'ModuleSession.swift')
 tests = work/'Tests/SimpleTingTests'
 tests.mkdir(parents=True)
 for source in (root/'Modules/SimpleTing/Tests').glob('*.swift'):
@@ -36,7 +39,7 @@ shutil.copy2(root/'Tests/Core/AudioOwnershipTests.swift',shell_tests/'AudioOwner
 (work/'Package.swift').write_text('''// swift-tools-version: 6.0
 import PackageDescription
 let package = Package(name: "SimpleTingValidation", platforms: [.macOS(.v15)], targets: [
-    .target(name: "SimpleTing"), .target(name: "StudyShell"),
+    .target(name: "SimpleTing", dependencies: ["StudyShell"]), .target(name: "StudyShell"),
     .testTarget(name: "SimpleTingTests", dependencies: ["SimpleTing"], resources: [.copy("Fixtures")]),
     .testTarget(name: "StudyShellTests", dependencies: ["StudyShell"])
 ], swiftLanguageModes: [.v5])

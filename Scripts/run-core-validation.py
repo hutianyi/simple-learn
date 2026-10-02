@@ -59,7 +59,7 @@ for source in (root / "Modules/SimpleMo/Tests").glob("*.swift"):
     copy(source, "Tests/DictationAppTests")
 
 for name in ["Models.swift", "QuestionGenerator.swift", "StatisticsCalculator.swift", "SuanBackup.swift",
-             "PersistenceService.swift", "AppDataStore.swift"]:
+             "PersistenceService.swift", "AppDataStore.swift", "PracticeViewModel.swift"]:
     copy(root / "Modules/SimpleSuan/Sources" / name, "Sources/SimpleSuan")
 for source in (root / "Modules/SimpleSuan/Tests").glob("*.swift"):
     copy(source, "Tests/SimpleSuanTests")

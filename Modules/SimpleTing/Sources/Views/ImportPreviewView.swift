@@ -15,7 +15,7 @@ struct ListenPasteImportView: View {
     var body: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 16) {
-                Text("每次粘贴一份完整 Markdown。自动提取文章标题和正文，跳过题目、答案和来源；先导入的更早，后导入的更新。")
+                Text("每次粘贴一份完整 Markdown。自动提取文章标题和正文，跳过题目、答案和来源。每篇文章单独列出，较晚导入的在前；同次导入按第 3、2、1 篇的顺序显示。")
                     .font(.subheadline).foregroundStyle(.secondary)
                 HStack {
                     Text("文章原文").font(.headline)
@@ -80,8 +80,9 @@ struct ListenPasteImportView: View {
                 guard !speech.playback.hasSession else { throw ListenError.message("请先停止播放，再导入文章。") }
                 try store.commit([draft])
                 speech.replaceLibrary(store.library)
-                if let material = store.library.days.first(where: { $0.sourceKey == draft.sourceKey }) {
-                    didImport(material.id)
+                if let material = store.library.days.first(where: { $0.sourceKey == draft.sourceKey }),
+                   let article = material.articles.max(by: { $0.articleNumber < $1.articleNumber }) {
+                    didImport(article.id)
                 }
                 speech.message = "已导入 \(draft.articles.count) 篇文章。"
                 dismiss()

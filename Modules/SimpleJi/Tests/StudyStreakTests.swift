@@ -20,6 +20,24 @@ final class StudyStreakTests: XCTestCase {
         return result
     }
 
+    func testCelebrationRequiresStrictCurrentDayCompletionAndOnlyRunsOnce() {
+        var day = completed(2)
+        XCTAssertTrue(StudyStreak.shouldCelebrate(day: day, todayKey: "2026-10-02", lastCelebratedKey: "2026-10-01"))
+        XCTAssertFalse(StudyStreak.shouldCelebrate(day: day, todayKey: "2026-10-02", lastCelebratedKey: "2026-10-02"))
+        XCTAssertFalse(StudyStreak.shouldCelebrate(day: day, todayKey: "2026-10-03", lastCelebratedKey: ""))
+        day.dictationComplete = false
+        XCTAssertFalse(StudyStreak.shouldCelebrate(day: day, todayKey: "2026-10-02", lastCelebratedKey: ""))
+        day.dictationComplete = true
+        day.requiredCardIDs = [UUID()]
+        XCTAssertFalse(StudyStreak.shouldCelebrate(day: day, todayKey: "2026-10-02", lastCelebratedKey: ""))
+        day.answeredCardIDs = day.requiredCardIDs
+        day.completedAt = nil
+        XCTAssertFalse(StudyStreak.shouldCelebrate(day: day, todayKey: "2026-10-02", lastCelebratedKey: ""))
+        day.completedAt = date(2)
+        day.hasActivity = false
+        XCTAssertFalse(StudyStreak.shouldCelebrate(day: day, todayKey: "2026-10-02", lastCelebratedKey: ""))
+    }
+
     func testHistoricalCompletionDoesNotOverrideStrictSnapshots() {
         var incomplete = completed(2)
         incomplete.dictationComplete = false

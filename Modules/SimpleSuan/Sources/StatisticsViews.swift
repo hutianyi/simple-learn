@@ -3,18 +3,61 @@ import Charts
 
 struct SessionResultView: View {
     let session: SessionRecord
+    let saved: Bool
     let done: () -> Void
+    @EnvironmentObject private var store: AppDataStore
     private var statistics: SessionStatistics { StatisticsCalculator.statistics(for: session.questions) }
     var body: some View {
+        let activity = PracticeActivity(sessions: store.sessions)
         NavigationStack {
             ScrollView { VStack(spacing: 20) {
-                Text("本次练习完成").font(.largeTitle.bold())
-                Text("\(statistics.total) 题").font(.title2).foregroundStyle(.secondary)
+                if saved {
+                    celebrationHeader(activity: activity)
+                    PracticeHeatmapView(activity: activity)
+                } else {
+                    Text("本次练习完成").font(.largeTitle.bold())
+                    Text("\(statistics.total) 题 · 等待保存").font(.title2).foregroundStyle(.secondary)
+                }
+                Text("本次练习成绩").font(.title2.bold())
                 MetricsGrid(statistics: statistics)
                 if session.practiceMode == .mixed { OperationBreakdown(session: session) }
-                Button("完成") { done() }.buttonStyle(.borderedProminent).controlSize(.large).padding(.top)
-            }.padding() }
+                Button(saved ? "太棒了，继续加油！" : "重试保存") { done() }
+                    .buttonStyle(.borderedProminent).controlSize(.large).padding(.top)
+                    .accessibilityIdentifier("dismissSuanCelebration")
+            }.padding(24).frame(maxWidth: 900).frame(maxWidth: .infinity) }
+            .toolbar {
+                if saved {
+                    ToolbarItem(placement: .topBarTrailing) { Button("完成") { done() } }
+                }
+            }
+            .overlay {
+                if saved {
+                    PracticeCelebrationConfetti()
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
+            }
         }
+    }
+
+    private func celebrationHeader(activity: PracticeActivity) -> some View {
+        VStack(spacing: 14) {
+            Image(systemName: "party.popper.fill")
+                .font(.system(size: 64)).foregroundStyle(Color.purple.gradient)
+            Text("又完成一批口算，太棒了！")
+                .font(.system(.largeTitle, design: .rounded, weight: .bold))
+            Text("本次完成 \(statistics.total) 题 · 今天累计 \(activity.todayCount) 题")
+                .font(.title2.weight(.semibold))
+            Label("连续练习 \(activity.streak) 天", systemImage: "flame.fill")
+                .font(.title3.bold()).foregroundStyle(.purple)
+            Text(activity.streak > 1
+                ? "每天坚持一点点，你的计算本领正在积累！"
+                : "每一道题都是一次进步，今天的努力已经点亮！")
+                .font(.title3).foregroundStyle(.secondary)
+        }
+        .multilineTextAlignment(.center)
+        .frame(maxWidth: .infinity).padding(.vertical, 20)
+        .accessibilityIdentifier("suanPracticeCelebration")
     }
 }
 
@@ -70,6 +113,9 @@ struct StatisticsView: View {
 
     var body: some View {
         List {
+            Section {
+                PracticeHeatmapView(activity: PracticeActivity(sessions: store.sessions))
+            }
             Section {
                 Picker("筛选题型", selection: $selected) {
                     ForEach(PracticeMode.allCases) { Text($0.title).tag($0) }
@@ -171,6 +217,147 @@ struct SessionDetailView: View {
                 }.padding(.vertical, 5)
             }
         }.navigationTitle("练习详情")
+    }
+}
+
+private struct PracticeHeatmapView: View {
+    let activity: PracticeActivity
+    @State private var selectedDate: Date?
+    private let purple = Color(red: 0.48, green: 0.25, blue: 0.82)
+    private var selection: Date { selectedDate ?? activity.today }
+
+    var body: some View {
+        let weeks = activity.weeks
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Label("每天进步一点点", systemImage: "sparkles").font(.title3.bold())
+                    Text("近一年练习 \(activity.annualPracticeDays) 天 · 今天累计 \(activity.todayCount) 题")
+                        .font(.subheadline).foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 4)
+                VStack(alignment: .trailing, spacing: 3) {
+                    Text("\(activity.streak) 天")
+                        .font(.system(.title, design: .rounded, weight: .bold))
+                        .monospacedDigit().foregroundStyle(purple)
+                    Label("连续练习", systemImage: "flame.fill")
+                        .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                }
+            }
+
+            GeometryReader { geometry in
+                let cell = min(14, max(7, (geometry.size.width - 48 - CGFloat(weeks.count - 1) * 3) / CGFloat(max(1, weeks.count))))
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(alignment: .top, spacing: 3) {
+                        VStack(spacing: 3) {
+                            Color.clear.frame(height: 20)
+                            ForEach(0..<7) { row in
+                                Text(row == 0 ? "一" : row == 2 ? "三" : row == 4 ? "五" : "")
+                                    .font(.system(size: 10)).foregroundStyle(.secondary)
+                                    .frame(width: 21, height: cell)
+                            }
+                        }
+                        ForEach(Array(weeks.enumerated()), id: \.offset) { _, week in
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(monthLabel(week))
+                                    .font(.system(size: 10)).foregroundStyle(.secondary)
+                                    .fixedSize().frame(width: cell, height: 20, alignment: .leading)
+                                ForEach(week, id: \.self) { date in
+                                    Button { selectedDate = date } label: {
+                                        RoundedRectangle(cornerRadius: 3, style: .continuous)
+                                            .fill(color(date: date))
+                                            .overlay {
+                                                if activity.calendar.isDate(date, inSameDayAs: selection) {
+                                                    RoundedRectangle(cornerRadius: 3)
+                                                        .stroke(Color.primary.opacity(0.65), lineWidth: 1.5)
+                                                }
+                                            }
+                                            .frame(width: cell, height: cell)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .disabled(date < activity.firstDay || date > activity.today)
+                                    .accessibilityLabel("\(date.formatted(date: .complete, time: .omitted))，完成 \(activity.count(on: date)) 题")
+                                }
+                            }
+                        }
+                    }.padding(.trailing, 24)
+                }.defaultScrollAnchor(.trailing)
+            }.frame(height: 140)
+
+            HStack {
+                Text("\(selection.formatted(.dateTime.month().day())) · 完成 \(activity.count(on: selection)) 题")
+                    .font(.subheadline.weight(.medium))
+                Spacer(minLength: 0)
+                HStack(spacing: 4) {
+                    Text("少")
+                    ForEach([0, 10, 20, 40, 80], id: \.self) { count in
+                        RoundedRectangle(cornerRadius: 3).fill(color(count: count))
+                            .frame(width: 12, height: 12)
+                    }
+                    Text("多")
+                }.font(.caption).accessibilityLabel("题数越多，紫色越深")
+            }.foregroundStyle(.secondary)
+            Text("按当天所有已完成批次的答题数累计，答错也计入；做得越多，紫色越深。点格子查看当天题数。")
+                .font(.footnote).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(20)
+        .background(.quaternary, in: RoundedRectangle(cornerRadius: 22))
+        .accessibilityIdentifier("suanPracticeHeatmap")
+    }
+
+    private func color(date: Date) -> Color {
+        guard date >= activity.firstDay && date <= activity.today else { return .clear }
+        return color(count: activity.count(on: date))
+    }
+
+    private func color(count: Int) -> Color {
+        count == 0 ? Color.secondary.opacity(0.10) : purple.opacity(PracticeActivity.intensity(for: count))
+    }
+
+    private func monthLabel(_ week: [Date]) -> String {
+        if week.contains(activity.firstDay) { return "\(activity.calendar.component(.month, from: activity.firstDay))月" }
+        guard let first = week.first(where: {
+            $0 >= activity.firstDay && $0 <= activity.today && activity.calendar.component(.day, from: $0) == 1
+        }) else { return "" }
+        return "\(activity.calendar.component(.month, from: first))月"
+    }
+}
+
+private struct PracticeCelebrationConfetti: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var start = Date()
+    @State private var running = true
+    private let colors: [Color] = [.purple, .pink, .orange, .blue, .green]
+
+    var body: some View {
+        Group {
+            if !reduceMotion && running {
+                TimelineView(.animation(minimumInterval: 1.0 / 30)) { timeline in
+                    Canvas { context, size in
+                        let elapsed = timeline.date.timeIntervalSince(start)
+                        for index in 0..<70 {
+                            let age = elapsed - Double(index % 7) * 0.04
+                            guard age >= 0 && age < 3 else { continue }
+                            let velocity = Double((index * 73) % 480) - 240
+                            let x = size.width / 2 + velocity * age
+                            let y = 80 - Double(140 + index % 100) * age + 210 * age * age
+                            let rect = CGRect(x: x, y: y, width: index % 2 == 0 ? 7 : 5, height: 11)
+                            var particle = context
+                            particle.opacity = min(1, (3 - age) / 0.7)
+                            particle.fill(Path(roundedRect: rect, cornerRadius: 2),
+                                with: .color(colors[index % colors.count]))
+                        }
+                    }
+                }
+            }
+        }
+        .task {
+            start = Date()
+            do { try await Task.sleep(for: .seconds(3.3)) }
+            catch { return }
+            running = false
+        }
     }
 }
 

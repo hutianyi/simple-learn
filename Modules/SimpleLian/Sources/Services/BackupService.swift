@@ -50,6 +50,11 @@ enum BackupService {
     static func validate(_ data: Data) throws -> SimpleLianBackup {
         let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .iso8601
         let backup = try decoder.decode(SimpleLianBackup.self, from: data)
+        try validateContents(backup)
+        return backup
+    }
+
+    private static func validateContents(_ backup: SimpleLianBackup) throws {
         guard backup.formatVersion == 1 else { throw BackupFailure.unsupportedVersion }
         let batchIDs = Set(backup.batches.map(\.id))
         let groupIDs = Set(backup.groups.map(\.id))
@@ -59,6 +64,9 @@ enum BackupService {
               groupIDs.count == backup.groups.count,
               questionIDs.count == backup.questions.count,
               sessionIDs.count == backup.sessions.count,
+              Set(backup.reviewStates.map(\.id)).count == backup.reviewStates.count,
+              Set(backup.attempts.map(\.id)).count == backup.attempts.count,
+              Set(backup.progress.map(\.id)).count == backup.progress.count,
               backup.groups.allSatisfy({ $0.batchID.map(batchIDs.contains) ?? false }),
               backup.questions.allSatisfy({ $0.groupID.map(groupIDs.contains) ?? false }),
               backup.reviewStates.allSatisfy({ $0.groupID.map(groupIDs.contains) ?? false }),
@@ -71,10 +79,61 @@ enum BackupService {
                   ($0.sessionID.map(sessionIDs.contains) ?? false) &&
                   ($0.groupID.map(groupIDs.contains) ?? false)
               }) else { throw BackupFailure.invalidRelationships }
-        return backup
+
+        let questions = Dictionary(uniqueKeysWithValues: backup.questions.map { ($0.id, $0) })
+        let attemptsBySession = Dictionary(grouping: backup.attempts, by: \.sessionID)
+        let progressBySession = Dictionary(grouping: backup.progress, by: \.sessionID)
+        guard Set(backup.reviewStates.compactMap(\.groupID)) == groupIDs,
+              backup.reviewStates.count == groupIDs.count,
+              backup.questions.allSatisfy({ QuestionKind(rawValue: $0.kindRaw) != nil }),
+              backup.reviewStates.allSatisfy({
+                  ReviewStatus(rawValue: $0.statusRaw) != nil && (0...3).contains($0.creditedCorrectCount)
+                      && ($0.nextReviewDay.map(validDay) ?? true) && ($0.lastCreditedDay.map(validDay) ?? true)
+              }),
+              backup.attempts.allSatisfy({
+                  AttemptContext(rawValue: $0.contextRaw) != nil && $0.orderIndex >= 0
+                      && ($0.draftResultRaw.map { AttemptResult(rawValue: $0) != nil } ?? true)
+                      && ($0.resultRaw.map { AttemptResult(rawValue: $0) != nil } ?? true)
+                      && $0.groupID == $0.questionID.flatMap { questions[$0]?.groupID }
+              }),
+              backup.progress.allSatisfy({
+                  CorrectionStage(rawValue: $0.stageRaw) != nil && (0...3).contains($0.correctionFailureCount)
+              }),
+              backup.sessions.filter({ $0.completedAt == nil }).count <= 1 else { throw BackupFailure.invalidProgress }
+
+        for session in backup.sessions {
+            guard let phase = SessionPhase(rawValue: session.phaseRaw),
+                  let mode = SessionMode(rawValue: session.modeRaw), validDay(session.dayKey),
+                  session.currentIndex >= 0,
+                  (phase == .completed) == (session.completedAt != nil),
+                  session.completedAt.map({ $0 >= session.createdAt }) ?? true else { throw BackupFailure.invalidProgress }
+            let attempts = attemptsBySession[session.id] ?? []
+            let progress = progressBySession[session.id] ?? []
+            let initial = attempts.filter { $0.contextRaw != AttemptContext.correction.rawValue }
+            guard Set(progress.compactMap(\.groupID)).count == progress.count else { throw BackupFailure.invalidProgress }
+            switch mode {
+            case .daily:
+                guard !initial.isEmpty, session.currentIndex < initial.count else { throw BackupFailure.invalidProgress }
+            case .targetedCorrection:
+                guard initial.isEmpty, !progress.isEmpty, session.currentIndex == 0,
+                      phase != .answering && phase != .marking else { throw BackupFailure.invalidProgress }
+            }
+            if phase == .correction && progress.isEmpty { throw BackupFailure.invalidProgress }
+            for value in progress where value.stageRaw == CorrectionStage.pendingFollowup.rawValue
+                || value.stageRaw == CorrectionStage.awaitingGrade.rawValue {
+                guard attempts.filter({ $0.contextRaw == AttemptContext.correction.rawValue
+                    && $0.groupID == value.groupID && $0.resultRaw == nil }).count == 1 else { throw BackupFailure.invalidProgress }
+            }
+        }
+    }
+
+    private static func validDay(_ key: String) -> Bool {
+        key.count == 10 && DayKey.adding(days: 0, to: key, calendar: .gregorianUTC) == key
     }
 
     static func restore(_ backup: SimpleLianBackup, context: ModelContext) throws {
+        // Validate again here so callers cannot bypass checks before replacement.
+        try validateContents(backup)
         try context.transaction {
             for value in try context.fetch(FetchDescriptor<PracticeSession>()) { context.delete(value) }
             for value in try context.fetch(FetchDescriptor<ImportBatch>()) { context.delete(value) }
@@ -129,11 +188,12 @@ enum BackupService {
 }
 
 enum BackupFailure: LocalizedError {
-    case unsupportedVersion, invalidRelationships
+    case unsupportedVersion, invalidRelationships, invalidProgress
     var errorDescription: String? {
         switch self {
         case .unsupportedVersion: "备份版本不受支持。"
         case .invalidRelationships: "备份中的题目关系不完整，不能恢复。"
+        case .invalidProgress: "备份中的练习进度或状态无效，不能恢复。现有数据未改变。"
         }
     }
 }

@@ -10,7 +10,7 @@ struct PracticeFlowView: View {
     var body: some View {
         Group {
             if let session = viewModel.completedSession {
-                SessionResultView(session: session) { if saved { dismiss() } else { save(session) } }
+                SessionResultView(session: session, saved: saved) { if saved { dismiss() } else { save(session) } }
                     .onAppear { if !saved { save(session) } }
             } else {
                 PracticeView(viewModel: viewModel, confirmEnd: $confirmEnd)
@@ -49,7 +49,7 @@ struct PracticeView: View {
                 .frame(maxWidth: 560)
         }.padding(28)
         .toolbar { ToolbarItem(placement: .topBarLeading) { Button("结束") { confirmEnd = true } } }
-        .onChange(of: scenePhase) { _, phase in viewModel.scenePhaseChanged(isActive: phase == .active) }
+        .onChange(of: scenePhase, initial: true) { _, phase in viewModel.scenePhaseChanged(isActive: phase == .active) }
     }
     @ViewBuilder private var feedbackView: some View {
         if let feedback = viewModel.feedback {

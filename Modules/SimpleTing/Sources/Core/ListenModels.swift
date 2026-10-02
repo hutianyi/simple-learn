@@ -6,12 +6,20 @@ enum PlaybackOrder: String, Codable, CaseIterable, Identifiable {
     var title: String { switch self { case .forward: "正序"; case .reverse: "倒序"; case .shuffle: "随机" } }
 }
 
-enum SpeechRatePreset: String, CaseIterable, Identifiable {
+enum SpeechRatePreset: String, Codable, CaseIterable, Identifiable {
     case slow, standard, faster, fast
     var id: String { rawValue }
     var title: String { switch self { case .slow: "慢速"; case .standard: "标准"; case .faster: "较快"; case .fast: "快速" } }
     // These are synthesis parameters, not promises of linear playback multipliers.
     var rate: Float { switch self { case .slow: 0.25; case .standard: 0.32; case .faster: 0.38; case .fast: 0.44 } }
+}
+
+struct ListenPreferences: Codable, Equatable {
+    var voiceIdentifier: String
+    var rate: SpeechRatePreset
+    var order: PlaybackOrder
+    var loopEnabled: Bool
+    var lastPlayedID: UUID?
 }
 
 struct ListenArticle: Codable, Identifiable, Equatable, Sendable {
@@ -57,6 +65,9 @@ struct ListenLibrary: Codable, Equatable, Sendable {
     var days: [ListenDay] = []
 
     var newestFirst: [ListenDay] { days.sorted { $0.importSequence > $1.importSequence } }
+    var articlesNewestFirst: [ListenArticle] {
+        newestFirst.flatMap { $0.articles.sorted { $0.articleNumber > $1.articleNumber } }
+    }
     func day(for articleID: UUID) -> ListenDay? { days.first { $0.articles.contains { $0.id == articleID } } }
     func article(_ id: UUID) -> ListenArticle? { day(for: id)?.articles.first { $0.id == id } }
 

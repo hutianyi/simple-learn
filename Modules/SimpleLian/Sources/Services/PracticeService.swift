@@ -71,7 +71,8 @@ enum PracticeService {
         try? context.save()
     }
 
-    static func commitMarking(session: PracticeSession, context: ModelContext) throws {
+    static func commitMarking(session: PracticeSession, context: ModelContext, now: Date = .now) throws {
+        let day = DayKey.make(from: now)
         let initial = session.attempts.filter { $0.context != .correction }.sorted { $0.orderIndex < $1.orderIndex }
         guard !initial.isEmpty, initial.allSatisfy({ $0.draftResult != nil }) else { throw PracticeFailure.incompleteMarking }
         var wrongGroups: [ProblemGroup] = []
@@ -79,12 +80,12 @@ enum PracticeService {
         for attempt in initial where attempt.result == nil {
             guard let draft = attempt.draftResult, let group = attempt.group, let state = group.reviewState else { continue }
             attempt.result = draft
-            attempt.committedAt = .now
+            attempt.committedAt = now
             switch draft {
             case .correct where attempt.eligibleForCredit:
-                state.apply(ReviewScheduler.apply(.formalCorrect(day: session.dayKey), to: state.snapshot))
+                state.apply(ReviewScheduler.apply(.formalCorrect(day: day), to: state.snapshot))
             case .wrong:
-                state.apply(ReviewScheduler.apply(.formalWrong(day: session.dayKey), to: state.snapshot))
+                state.apply(ReviewScheduler.apply(.formalWrong(day: day), to: state.snapshot))
                 wrongGroups.append(group)
             case .excluded:
                 attempt.question?.disabledAt = .now
@@ -129,14 +130,14 @@ enum PracticeService {
         return attempt
     }
 
-    static func gradeCorrection(_ result: AttemptResult, progress: SessionGroupProgress, context: ModelContext) throws {
+    static func gradeCorrection(_ result: AttemptResult, progress: SessionGroupProgress, context: ModelContext, now: Date = .now) throws {
         guard let session = progress.session, let group = progress.group, let state = group.reviewState,
               let attempt = session.attempts.filter({ $0.context == .correction && $0.group?.id == group.id && $0.result == nil }).max(by: { $0.orderIndex < $1.orderIndex }) else { return }
         attempt.result = result
-        attempt.committedAt = .now
+        attempt.committedAt = now
         switch result {
         case .correct:
-            state.apply(ReviewScheduler.apply(.correctionSucceeded(day: session.dayKey), to: state.snapshot))
+            state.apply(ReviewScheduler.apply(.correctionSucceeded(day: DayKey.make(from: now)), to: state.snapshot))
             progress.stage = .passed
         case .wrong:
             progress.correctionFailureCount += 1

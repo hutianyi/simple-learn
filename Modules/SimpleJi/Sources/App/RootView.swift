@@ -1,3 +1,4 @@
+import CoreData
 import SwiftUI
 
 struct RootView: View {
@@ -6,6 +7,7 @@ struct RootView: View {
     @EnvironmentObject private var router: AppRouter
     @EnvironmentObject private var persistence: PersistenceController
     @Environment(\.scenePhase) private var scenePhase
+    @State private var celebrationReady = true
     @State private var homeDate = Date()
     @State private var baselineErrorMessage: String?
 
@@ -18,6 +20,11 @@ struct RootView: View {
                         .navigationDestination(for: AppRoute.self) { route in
                             destination(for: route)
                         }
+                }
+                .onPreferenceChange(StudyCelebrationReadyKey.self) { celebrationReady = $0 }
+                .background {
+                    StudyCelebrationObserver(settings: settings, ready: celebrationReady)
+                        .id(DictationEligibility.dayKey(for: homeDate))
                 }
             } else {
                 ProgressView("正在准备学习记录…")
@@ -115,5 +122,62 @@ struct RootView: View {
             get: { baselineErrorMessage != nil },
             set: { if !$0 { baselineErrorMessage = nil } }
         )
+    }
+}
+
+// Do not interrupt the final answer, its spoken feedback, or keyboard verification.
+struct StudyCelebrationReadyKey: PreferenceKey {
+    static let defaultValue = true
+    static func reduce(value: inout Bool, nextValue: () -> Bool) { value = value && nextValue() }
+}
+
+private struct StudyCelebrationObserver: View {
+    @ObservedObject var settings: SettingsStore
+    let ready: Bool
+    @Environment(\.scenePhase) private var scenePhase
+    @AppStorage("simpleJi.lastCelebratedCompletionDay") private var lastCelebratedKey = ""
+    @State private var showingCelebration = false
+    @State private var presentedDayKey = ""
+    @State private var recordError: String?
+    @FetchRequest private var days: FetchedResults<StudyCompletionDayEntity>
+    private var todayKey: String { DictationEligibility.dayKey(for: Date()) }
+    private var todayData: Data? { days.first(where: { $0.dayKey == todayKey })?.snapshotData }
+
+    init(settings: SettingsStore, ready: Bool) {
+        self.settings = settings
+        self.ready = ready
+        let request = StudyCompletionDayEntity.fetchRequest()
+        request.sortDescriptors = [NSSortDescriptor(key: "dayKey", ascending: false)]
+        _days = FetchRequest(fetchRequest: request)
+    }
+
+    var body: some View {
+        Color.clear.frame(width: 0, height: 0)
+            .task(id: Trigger(data: todayData, ready: ready, active: scenePhase == .active)) {
+                guard ready, scenePhase == .active, let data = todayData else { return }
+                do {
+                    let day = try JSONDecoder().decode(StudyCompletionDay.self, from: data)
+                    guard StudyStreak.shouldCelebrate(day: day, todayKey: todayKey,
+                        lastCelebratedKey: lastCelebratedKey) else { return }
+                    presentedDayKey = day.dayKey
+                    showingCelebration = true
+                } catch { recordError = error.localizedDescription }
+            }
+            .fullScreenCover(isPresented: $showingCelebration) {
+                NavigationStack {
+                    StatisticsView(settings: settings, celebration: true)
+                }
+                .onAppear { lastCelebratedKey = presentedDayKey }
+            }
+            .alert("无法读取今日完成记录", isPresented: Binding(
+                get: { recordError != nil }, set: { if !$0 { recordError = nil } })) {
+                Button("好", role: .cancel) {}
+            } message: { Text(recordError ?? "发生未知错误。") }
+    }
+
+    private struct Trigger: Equatable {
+        let data: Data?
+        let ready: Bool
+        let active: Bool
     }
 }

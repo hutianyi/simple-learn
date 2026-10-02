@@ -37,6 +37,7 @@ struct ReviewSessionView: View {
             AppPalette.background.ignoresSafeArea()
             content
         }
+        .preference(key: StudyCelebrationReadyKey.self, value: celebrationReady)
         .navigationBarBackButtonHidden()
         .toolbar(.hidden, for: .navigationBar)
         .task { await viewModel.start() }
@@ -51,6 +52,13 @@ struct ReviewSessionView: View {
             Button("继续复习", role: .cancel) {}
         } message: {
             Text("已经完成的回答会保留。未完成的卡片下次会重新进入队列。")
+        }
+    }
+
+    private var celebrationReady: Bool {
+        switch viewModel.phase {
+        case .summary, .empty: return !showingExitConfirmation
+        default: return false
         }
     }
 

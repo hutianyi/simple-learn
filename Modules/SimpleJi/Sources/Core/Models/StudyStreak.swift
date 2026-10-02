@@ -72,6 +72,10 @@ enum StudyStreak {
         }
     }
 
+    static func shouldCelebrate(day: StudyCompletionDay, todayKey: String, lastCelebratedKey: String) -> Bool {
+        day.dayKey == todayKey && day.isComplete && day.completedAt != nil && lastCelebratedKey != todayKey
+    }
+
     static func heatmapWeeks(now: Date = Date(), calendar: Calendar = .current) -> [[Date]] {
         let today = calendar.startOfDay(for: now)
         guard let first = calendar.date(byAdding: .day, value: -364, to: today) else { return [] }

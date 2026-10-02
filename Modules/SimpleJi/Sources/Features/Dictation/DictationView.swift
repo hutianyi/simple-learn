@@ -37,6 +37,10 @@ struct DictationView: View {
             AppPalette.background.ignoresSafeArea()
             content
         }
+        .preference(key: StudyCelebrationReadyKey.self,
+            value: viewModel.day?.phase == .complete && viewModel.feedback == nil
+                && keyboardPrompt == nil && viewModel.recognitionNotice == nil
+                && !viewModel.isBusy && !isSubmitting)
         .navigationBarBackButtonHidden()
         .toolbar(.hidden, for: .navigationBar)
         .task(id: settings.dictationLimit) { speech.stop(); await viewModel.start(); presentPendingVerification() }

@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 
 @MainActor
 final class PracticeViewModel: ObservableObject, Identifiable {
@@ -19,11 +20,14 @@ final class PracticeViewModel: ObservableObject, Identifiable {
     private var currentPresentedAt = Date()
     private var timer: Timer?
     private var feedbackTask: Task<Void, Never>?
+    private var isSceneActive = true
+    private let uptime: () -> TimeInterval
 
-    init(mode: PracticeMode, questionCount: Int, selectedOperations: Set<OperationType> = Set(OperationType.allCases), generator: QuestionGenerator = QuestionGenerator()) {
+    init(mode: PracticeMode, questionCount: Int, selectedOperations: Set<OperationType> = Set(OperationType.allCases), generator: QuestionGenerator = QuestionGenerator(), uptime: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }) {
         self.mode = mode
         self.selectedOperations = mode.operation.map { [$0] } ?? OperationType.allCases.filter(selectedOperations.contains)
         self.questions = generator.generate(operations: self.selectedOperations, count: questionCount)
+        self.uptime = uptime
         beginQuestionTimer()
     }
 
@@ -57,6 +61,7 @@ final class PracticeViewModel: ObservableObject, Identifiable {
     func stop() { timer?.invalidate(); timer = nil; feedbackTask?.cancel(); feedbackTask = nil }
 
     func scenePhaseChanged(isActive: Bool) {
+        isSceneActive = isActive
         guard feedback == nil, completedSession == nil else { return }
         isActive ? resumeTimer() : pauseTimer()
     }
@@ -71,10 +76,13 @@ final class PracticeViewModel: ObservableObject, Identifiable {
             index += 1; answer = ""; elapsed = 0; elapsedBeforePause = 0; beginQuestionTimer()
         }
     }
-    private func beginQuestionTimer() { currentPresentedAt = Date(); activeStartedUptime = ProcessInfo.processInfo.systemUptime; startTimer() }
+    private func beginQuestionTimer() {
+        currentPresentedAt = Date(); activeStartedUptime = nil
+        if isSceneActive { resumeTimer() }
+    }
     private func pauseTimer() { elapsedBeforePause = currentElapsed(); activeStartedUptime = nil; stopTimer(); elapsed = elapsedBeforePause }
-    private func resumeTimer() { guard activeStartedUptime == nil else { return }; activeStartedUptime = ProcessInfo.processInfo.systemUptime; startTimer() }
-    private func currentElapsed() -> Double { elapsedBeforePause + (activeStartedUptime.map { ProcessInfo.processInfo.systemUptime - $0 } ?? 0) }
+    private func resumeTimer() { guard activeStartedUptime == nil else { return }; activeStartedUptime = uptime(); startTimer() }
+    private func currentElapsed() -> Double { elapsedBeforePause + (activeStartedUptime.map { uptime() - $0 } ?? 0) }
     private func startTimer() { timer?.invalidate(); timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in Task { @MainActor in self?.elapsed = self?.currentElapsed() ?? 0 } } }
     private func stopTimer() { timer?.invalidate(); timer = nil }
 }

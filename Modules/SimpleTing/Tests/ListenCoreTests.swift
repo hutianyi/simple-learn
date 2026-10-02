@@ -97,6 +97,64 @@ final class ListenCoreTests: XCTestCase {
         let value = try ListenLibrary().importing([draft(10)], at: Date(timeIntervalSince1970: 500)).importing([draft(2)], at: Date(timeIntervalSince1970: 100))
         XCTAssertEqual(value.newestFirst.map(\.dayNumber), [2, 10])
     }
+    func testArticleLibraryListsEachArticleNewestFirstWithoutChangingPlaybackOrder() throws {
+        let value = try ListenLibrary().importing([draft(7, count: 1)], at: Date(timeIntervalSince1970: 500))
+            .importing([draft(2, count: 2)], at: Date(timeIntervalSince1970: 300))
+            .importing([draft(1, count: 3)], at: Date(timeIntervalSince1970: 100))
+        let articles = value.articlesNewestFirst
+        XCTAssertEqual(articles.map(\.articleNumber), [3, 2, 1, 2, 1, 1])
+        XCTAssertEqual(articles.map { value.day(for: $0.id)!.importSequence }, [3, 3, 3, 2, 2, 1])
+        XCTAssertEqual(Set(articles.map(\.id)), Set(value.days.flatMap(\.articles).map(\.id)))
+        let forward = PlaybackQueue.build(value, order: .forward).map(\.articleID)
+        XCTAssertEqual(forward, value.days.flatMap(\.articles).map(\.id))
+        XCTAssertEqual(PlaybackQueue.build(value, order: .reverse).map(\.articleID), articles.map(\.id))
+        let restored = try ListenBackup.decode(ListenBackup(library: value).encoded()).library
+        XCTAssertEqual(restored, value)
+        XCTAssertEqual(restored.articlesNewestFirst, articles)
+    }
+
+    @MainActor
+    func testDeletingOneArticlePreservesSiblingsAndRemovesOnlyEmptyMaterial() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let file = LibraryFile(url: folder.appendingPathComponent("library.json"))
+        let original = try library()
+        try file.save(original)
+        let store = LibraryStore(file: file)
+        let removed = original.days[1].articles[1]
+        try store.delete(removed)
+        XCTAssertNil(store.library.article(removed.id))
+        XCTAssertEqual(store.library.days[0], original.days[0])
+        XCTAssertEqual(store.library.days[1].articles, [original.days[1].articles[0], original.days[1].articles[2]])
+        XCTAssertEqual(store.library.days[1].id, original.days[1].id)
+        XCTAssertEqual(store.library.days[1].sourceMarkdown, original.days[1].sourceMarkdown)
+        XCTAssertEqual(store.library.articlesNewestFirst.map(\.articleNumber), [3, 1, 2, 1])
+        XCTAssertEqual(try file.load(), store.library)
+        XCTAssertEqual(PlaybackQueue.build(store.library, order: .reverse).map(\.articleID), store.library.articlesNewestFirst.map(\.id))
+        for article in original.days[1].articles where article.id != removed.id { try store.delete(article) }
+        XCTAssertEqual(store.library.days, [original.days[0]])
+        XCTAssertEqual(store.library.nextImportSequence, original.nextImportSequence)
+        try store.commit([draft(4, count: 1)])
+        XCTAssertEqual(store.library.days.last?.importSequence, original.nextImportSequence)
+        let restored = try ListenBackup.decode(store.exportData(preferences: ListenPreferences(voiceIdentifier: "", rate: .standard, order: .forward, loopEnabled: true)))
+        XCTAssertEqual(restored.library, store.library)
+        XCTAssertNil(restored.library.article(removed.id))
+        XCTAssertEqual(try file.load(), store.library)
+    }
+
+    @MainActor
+    func testArticleDeletionWriteFailurePreservesLibraryAndOriginalFile() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let file = LibraryFile(url: folder.appendingPathComponent("library.json"))
+        let original = try library()
+        try file.save(original)
+        let originalData = try Data(contentsOf: file.url)
+        let store = LibraryStore(file: LibraryFile(url: file.url, writer: { _, _ in throw ListenError.message("disk failure") }))
+        XCTAssertThrowsError(try store.delete(original.days[1].articles[1]))
+        XCTAssertEqual(store.library, original)
+        XCTAssertEqual(try Data(contentsOf: file.url), originalData)
+    }
     func testShuffleContainsEveryArticleAndHonorsStartAndCycleBoundary() throws {
         let value = try library()
         let ids = Set(value.days.flatMap(\.articles).map(\.id))
@@ -311,5 +369,119 @@ final class ListenCoreTests: XCTestCase {
         #else
         throw XCTSkip("Private corpus is verified by Scripts/run-listen-validation.py.")
         #endif
+    }
+}
+
+
+extension ListenCoreTests {
+    func testFullBackupPreservesArticlesImportOrderAndPreferences() throws {
+        let value = try library()
+        let preferences = ListenPreferences(voiceIdentifier: "test-voice", rate: .fast, order: .reverse,
+                                           loopEnabled: false, lastPlayedID: value.days[1].articles[1].id)
+        let backup = ListenBackup(library: value, preferences: preferences)
+        let restored = try ListenBackup.decode(backup.encoded())
+        XCTAssertEqual(restored.library, value)
+        XCTAssertEqual(restored.preferences, preferences)
+        let legacy = try ListenBackup.decode(JSONEncoder().encode(value))
+        XCTAssertEqual(legacy.library, value)
+        XCTAssertNil(legacy.preferences)
+        var invalid = backup; invalid.formatVersion = 999
+        XCTAssertThrowsError(try invalid.encoded())
+        invalid = backup; invalid.module = "OtherModule"
+        XCTAssertThrowsError(try ListenBackup.decode(JSONEncoder().encode(invalid)))
+        invalid = backup; invalid.preferences?.lastPlayedID = UUID()
+        XCTAssertThrowsError(try invalid.encoded())
+        invalid = backup; invalid.library.days[1].articles[0].id = invalid.library.days[0].articles[0].id
+        XCTAssertThrowsError(try ListenBackup.decode(JSONEncoder().encode(invalid)))
+    }
+
+    func testSafetyCopyRetentionKeepsLatestTenAndLeavesOtherFilesAlone() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let file = LibraryFile(url: folder.appendingPathComponent("library.json"))
+        let safety = folder.appendingPathComponent("SafetyBackups")
+        try FileManager.default.createDirectory(at: safety, withIntermediateDirectories: true)
+        let external = safety.appendingPathComponent("ManualBackup.json")
+        try Data("keep".utf8).write(to: external)
+        let value = try library()
+        try file.save(value)
+        var saved = value
+        var expectedCopies = [Data]()
+        for index in 0..<14 {
+            expectedCopies.append(try Data(contentsOf: file.url))
+            saved = try value.importing([draft(index + 20)])
+            try file.save(saved)
+        }
+        let copies = try FileManager.default.contentsOfDirectory(at: safety, includingPropertiesForKeys: nil)
+            .filter { $0.lastPathComponent.hasPrefix("BeforeChange-") }
+        XCTAssertEqual(copies.count, LibraryFile.retainedBackupCount)
+        let contents = try copies.map { try Data(contentsOf: $0) }
+        XCTAssertTrue(contents.contains(try XCTUnwrap(expectedCopies.last)))
+        XCTAssertEqual(try Data(contentsOf: external), Data("keep".utf8))
+        XCTAssertEqual(try file.load(), saved)
+        let failed = LibraryFile(url: file.url, writer: { _, _ in throw ListenError.message("disk failure") })
+        let beforeFailure = try Data(contentsOf: file.url)
+        XCTAssertThrowsError(try failed.save(value))
+        XCTAssertEqual(try Data(contentsOf: file.url), beforeFailure)
+        for copy in copies { XCTAssertTrue(FileManager.default.fileExists(atPath: copy.path)) }
+    }
+
+    @MainActor
+    func testRestorePreservesOriginalAndOnlyAppliesSettingsAfterSuccessfulSave() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let file = LibraryFile(url: folder.appendingPathComponent("library.json"))
+        let original = try library()
+        try file.save(original)
+        let originalData = try Data(contentsOf: file.url)
+        let suite = "SimpleTingTests." + UUID().uuidString
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let settings = ListenSettings(defaults: defaults)
+        let priorSettings = settings.snapshot
+        let replacement = try ListenLibrary().importing([draft(15)])
+        let preferences = ListenPreferences(voiceIdentifier: "restore-voice", rate: .slow, order: .shuffle,
+                                           loopEnabled: false, lastPlayedID: replacement.days[0].articles[0].id)
+        let backup = ListenBackup(library: replacement, preferences: preferences)
+        let failed = LibraryStore(file: LibraryFile(url: file.url, writer: { _, _ in throw ListenError.message("disk failure") }))
+        XCTAssertThrowsError(try failed.restore(backup, settings: settings))
+        XCTAssertEqual(failed.library, original)
+        XCTAssertEqual(settings.snapshot, priorSettings)
+        XCTAssertEqual(try Data(contentsOf: file.url), originalData)
+        let store = LibraryStore(file: file)
+        try store.restore(try ListenBackup.decode(backup.encoded()), settings: settings)
+        XCTAssertEqual(store.library, replacement)
+        XCTAssertEqual(try file.load(), replacement)
+        XCTAssertEqual(settings.snapshot, preferences)
+        XCTAssertEqual(ListenSettings(defaults: defaults).snapshot, preferences)
+        let copies = try FileManager.default.contentsOfDirectory(at: folder.appendingPathComponent("SafetyBackups"), includingPropertiesForKeys: nil)
+        XCTAssertTrue(try copies.contains { try Data(contentsOf: $0) == originalData })
+        let exported = try ListenBackup.decode(store.exportData(preferences: settings.snapshot))
+        XCTAssertEqual(exported.library, replacement)
+        XCTAssertEqual(exported.preferences, preferences)
+    }
+
+    @MainActor
+    func testCorruptLibraryCanRecoverFromBackupWithoutExportingEmptyData() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let file = LibraryFile(url: folder.appendingPathComponent("library.json"))
+        let corrupt = Data("broken JSON".utf8)
+        try corrupt.write(to: file.url)
+        let store = LibraryStore(file: file)
+        XCTAssertNotNil(store.loadError)
+        let preferences = ListenPreferences(voiceIdentifier: "", rate: .standard, order: .forward, loopEnabled: true)
+        XCTAssertThrowsError(try store.exportData(preferences: preferences))
+        let value = try library()
+        var invalid = ListenBackup(library: value)
+        invalid.library.days[0].articles[0].speechText = ""
+        XCTAssertThrowsError(try store.restore(invalid))
+        XCTAssertEqual(try Data(contentsOf: file.url), corrupt)
+        try store.restore(ListenBackup(library: value))
+        XCTAssertNil(store.loadError)
+        XCTAssertEqual(store.library, value)
+        let copies = try FileManager.default.contentsOfDirectory(at: folder.appendingPathComponent("SafetyBackups"), includingPropertiesForKeys: nil)
+        XCTAssertTrue(try copies.contains { try Data(contentsOf: $0) == corrupt })
     }
 }
