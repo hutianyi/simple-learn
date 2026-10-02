@@ -37,7 +37,7 @@ struct ContentView: View {
         }
         .onAppear(perform: normalizeSettings)
         .onChange(of: session.phase, initial: true) { _, phase in
-            moduleSession.setBusy(phase == .dictating, reason: "mo.study")
+            moduleSession.setBusy(phase != .setup, reason: "mo.study")
         }
         .onDisappear { session.returnToSetup(); moduleSession.setBusy(false, reason: "mo.study") }
         .onChange(of: scenePhase) { session.handleScenePhase($0) }
@@ -240,44 +240,113 @@ struct ContentView: View {
     }
 
     private var finishedView: some View {
-        // 全屏背景铺满整个窗口，实际内容限制在中央 960pt 内。
-        ZStack {
-            Color(uiColor: .systemGroupedBackground)
-                .ignoresSafeArea()
-
-            VStack(spacing: 22) {
+        VStack(spacing: 16) {
+            Text("核对默写结果")
+                .font(.system(.largeTitle, design: .rounded).weight(.bold))
+            Text("可以先选全对，再把个别条目改成默错。")
+                .foregroundStyle(.secondary)
+            HStack {
+                Text("默对 \(session.results.correctCount) · 默错 \(session.results.incorrectWords.count)")
+                    .font(.subheadline.monospacedDigit())
                 Spacer()
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 90))
-                    .foregroundStyle(.green)
-                Text("默写结束")
-                    .font(.system(.largeTitle, design: .rounded).weight(.bold))
-                Text("今天完成了 \(session.totalCount) 个词语").foregroundStyle(.secondary)
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 14) {
-                        editWordsButton
-                        restartButton
-                    }
-                    VStack(spacing: 14) {
-                        editWordsButton
-                        restartButton
+                Button("全对") { session.markAllCorrect() }
+                    .buttonStyle(.bordered)
+                    .accessibilityIdentifier("markAllCorrectButton")
+            }
+            ScrollView {
+                LazyVStack(spacing: 12) {
+                    ForEach(session.results.words.indices, id: \.self) { index in
+                        resultRow(at: index)
                     }
                 }
-                .controlSize(.large)
-                Spacer()
             }
-            .padding()
-            .frame(maxWidth: Self.maxContentWidth, maxHeight: .infinity)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .accessibilityIdentifier("dictationResultsList")
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 14) {
+                    editWordsButton
+                    restartButton
+                    confirmResultsButton
+                }
+                VStack(spacing: 14) {
+                    editWordsButton
+                    restartButton
+                    confirmResultsButton
+                }
+            }
+            .controlSize(.large)
+        }
+        .padding()
+        .frame(maxWidth: Self.maxContentWidth)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(uiColor: .systemGroupedBackground).ignoresSafeArea())
+    }
+
+    private func resultRow(at index: Int) -> some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 16) {
+                resultText(at: index)
+                resultPicker(at: index)
+                    .fixedSize()
+            }
+            VStack(alignment: .leading, spacing: 12) {
+                resultText(at: index)
+                resultPicker(at: index)
+            }
+        }
+        .padding()
+        .background(Color(uiColor: .secondarySystemGroupedBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+
+    private func resultText(at index: Int) -> some View {
+        Text("\(index + 1). \(session.results.words[index])")
+            .font(.title3)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func resultPicker(at index: Int) -> some View {
+        HStack(spacing: 12) {
+            resultButton(.correct, at: index, symbol: "checkmark", color: .green)
+            resultButton(.incorrect, at: index, symbol: "xmark", color: .red)
         }
     }
 
+    private func resultButton(_ mark: DictationResults.Mark, at index: Int, symbol: String, color: Color) -> some View {
+        let selected = session.results.marks[index] == mark
+        return Button {
+            session.setResult(mark, at: index)
+        } label: {
+            Image(systemName: symbol)
+                .font(.system(size: 22, weight: .bold))
+                .foregroundStyle(selected ? .white : color)
+                .frame(width: 48, height: 48)
+                .background(selected ? color : color.opacity(0.08), in: Circle())
+                .overlay(Circle().strokeBorder(color, lineWidth: 2))
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("第 \(index + 1) 项，\(mark.rawValue)")
+        .accessibilityValue(selected ? "已选中" : "未选中")
+        .accessibilityAddTraits(selected ? [.isSelected] : [])
+        .accessibilityIdentifier("dictationResult-\(index)-\(mark == .correct ? "correct" : "incorrect")")
+    }
+
     private var editWordsButton: some View {
-        Button("修改词语") { session.returnToSetup() }.buttonStyle(.bordered)
+        Button("返回词单") { session.returnToSetup() }.buttonStyle(.bordered)
     }
 
     private var restartButton: some View {
-        Button("再默写一遍") { session.restart() }.buttonStyle(.borderedProminent)
+        Button("本批再默一遍") { session.restart() }.buttonStyle(.bordered)
+    }
+
+    private var confirmResultsButton: some View {
+        Button(session.results.incorrectWords.isEmpty ? "确认结果，结束本轮" : "确认结果，重默错项（\(session.results.incorrectWords.count)）") {
+            session.confirmResults()
+        }
+        .buttonStyle(.borderedProminent)
+        .disabled(!session.results.canConfirm)
+        .accessibilityIdentifier("confirmDictationResultsButton")
     }
 
     private var countdownColor: Color {

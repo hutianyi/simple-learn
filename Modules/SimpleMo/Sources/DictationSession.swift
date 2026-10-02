@@ -13,6 +13,7 @@ final class DictationSession: NSObject, ObservableObject, AVSpeechSynthesizerDel
     @Published private(set) var totalCount = 0
     @Published private(set) var secondsRemaining = DictationTimingConfiguration.defaultAdvanceAfterSeconds
     @Published private(set) var timing = DictationTimingConfiguration.default
+    @Published private(set) var results = DictationResults()
 
     @Published private(set) var writingSecondsTotal = DictationTimingConfiguration.defaultAdvanceAfterSeconds
     @Published private(set) var hasExtendedTime = false
@@ -66,6 +67,7 @@ final class DictationSession: NSObject, ObservableObject, AVSpeechSynthesizerDel
     func start(words newWords: [String], shuffled: Bool, rate: Double, timing newTiming: DictationTimingConfiguration, automaticTiming: Bool = true) {
         guard !newWords.isEmpty, newTiming.isValid, newTiming.advanceAfterSeconds <= DictationTimingConfiguration.maximumAdvanceAfterSeconds else { return }
         words = shuffled ? newWords.shuffled() : newWords
+        results = DictationResults(words: words)
         totalCount = words.count
         currentIndex = 0
         speechRate = Float(rate)
@@ -107,6 +109,7 @@ final class DictationSession: NSObject, ObservableObject, AVSpeechSynthesizerDel
 
     func restart() {
         guard !words.isEmpty else { return }
+        results = DictationResults(words: words)
         currentIndex = 0
         phase = .dictating
         isSceneInactive = false
@@ -116,6 +119,27 @@ final class DictationSession: NSObject, ObservableObject, AVSpeechSynthesizerDel
         usesAccessibilityVoice = true
         setScreenAwake(true)
         beginCurrentWord()
+    }
+
+    func setResult(_ mark: DictationResults.Mark, at index: Int) {
+        guard phase == .finished else { return }
+        results.setMark(mark, at: index)
+    }
+
+    func markAllCorrect() {
+        guard phase == .finished else { return }
+        results.markAllCorrect()
+    }
+
+    func confirmResults() {
+        guard phase == .finished, results.canConfirm else { return }
+        let incorrectWords = results.incorrectWords
+        if incorrectWords.isEmpty {
+            returnToSetup()
+        } else {
+            start(words: incorrectWords, shuffled: false, rate: Double(speechRate),
+                  timing: fixedTiming, automaticTiming: automaticTiming)
+        }
     }
 
     func returnToSetup() {

@@ -2,6 +2,43 @@ import XCTest
 @testable import DictationApp
 
 final class DictationCoreTests: XCTestCase {
+    func testResultsDefaultToCorrectAndAllowIndividualChanges() {
+        var results = DictationResults(words: ["苹果", "look after", "苹果"])
+        XCTAssertEqual(results.correctCount, 3)
+        XCTAssertTrue(results.canConfirm)
+        results.setMark(.correct, at: 0)
+        results.setMark(.incorrect, at: 1)
+        XCTAssertTrue(results.canConfirm)
+        results.setMark(.incorrect, at: 2)
+        XCTAssertTrue(results.canConfirm)
+        XCTAssertEqual(results.correctCount, 1)
+        XCTAssertEqual(results.incorrectWords, ["look after", "苹果"])
+    }
+
+    func testAllCorrectThenIndividualCorrectionsAndRepeatedRetry() {
+        let original = ["苹果", "look after", "苹果", "read a book"]
+        var results = DictationResults(words: original)
+        results.markAllCorrect()
+        XCTAssertTrue(results.canConfirm)
+        XCTAssertEqual(results.correctCount, 4)
+        XCTAssertTrue(results.incorrectWords.isEmpty)
+        results.setMark(.incorrect, at: 0)
+        results.setMark(.incorrect, at: 2)
+        XCTAssertEqual(results.incorrectWords, ["苹果", "苹果"])
+        XCTAssertEqual(results.words, original)
+
+        var retry = DictationResults(words: results.incorrectWords)
+        XCTAssertEqual(retry.correctCount, 2)
+        XCTAssertTrue(retry.canConfirm)
+        retry.markAllCorrect()
+        retry.setMark(.incorrect, at: 1)
+        XCTAssertEqual(retry.incorrectWords, ["苹果"])
+        retry.setMark(.correct, at: 1)
+        XCTAssertTrue(retry.incorrectWords.isEmpty)
+        XCTAssertTrue(retry.canConfirm)
+        XCTAssertFalse(DictationResults().canConfirm)
+    }
+
     func testParsingAndSpeechText() {
         let text = "苹果\n认真\t美丽\numbrella\twonderful\nbook"
         XCTAssertEqual(DictationCore.parseWords(from: text), ["苹果", "认真", "美丽", "umbrella", "wonderful", "book"])

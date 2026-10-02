@@ -1,5 +1,35 @@
 import Foundation
 
+struct DictationResults {
+    enum Mark: String, CaseIterable {
+        case correct = "默对"
+        case incorrect = "默错"
+    }
+
+    let words: [String]
+    private(set) var marks: [Mark]
+
+    init(words: [String] = []) {
+        self.words = words
+        marks = Array(repeating: .correct, count: words.count)
+    }
+
+    var correctCount: Int { marks.filter { $0 == .correct }.count }
+    var incorrectWords: [String] {
+        zip(words, marks).compactMap { word, mark in mark == .incorrect ? word : nil }
+    }
+    var canConfirm: Bool { !words.isEmpty }
+
+    mutating func setMark(_ mark: Mark, at index: Int) {
+        guard marks.indices.contains(index) else { return }
+        marks[index] = mark
+    }
+
+    mutating func markAllCorrect() {
+        marks = Array(repeating: .correct, count: words.count)
+    }
+}
+
 enum DictationLanguage: String, Equatable {
     case chinese = "zh-CN"
     case english = "en-US"

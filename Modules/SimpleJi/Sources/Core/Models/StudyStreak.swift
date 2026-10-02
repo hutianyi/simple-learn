@@ -20,8 +20,8 @@ struct StudyCompletionDay: Codable, Equatable {
 }
 
 enum StudyStreak {
-    static func count(completedDays: [StudyCompletionDay], now: Date = Date(), calendar: Calendar = .current) -> Int {
-        let keys = Set(completedDays.filter { $0.isComplete && $0.completedAt != nil }.map(\.dayKey))
+    static func count(completedDays: [StudyCompletionDay], now: Date = Date(), calendar: Calendar = .current, historicalKeys: Set<String> = []) -> Int {
+        let keys = completionKeys(completedDays: completedDays, historicalKeys: historicalKeys, now: now, calendar: calendar)
         var cursor = calendar.startOfDay(for: now)
         if !keys.contains(DictationEligibility.dayKey(for: cursor, calendar: calendar)) {
             guard let yesterday = calendar.date(byAdding: .day, value: -1, to: cursor) else { return 0 }
@@ -34,6 +34,57 @@ enum StudyStreak {
             cursor = previous
         }
         return count
+    }
+
+    // Historical sessions predate the complete daily task snapshots. Never let this
+    // compatibility rule replace an incomplete day recorded under the new rule.
+    static func completionKeys(completedDays: [StudyCompletionDay], historicalKeys: Set<String>,
+                               now: Date = Date(), calendar: Calendar = .current) -> Set<String> {
+        let cutoff = completedDays.map(\.dayKey).min()
+            ?? DictationEligibility.dayKey(for: now, calendar: calendar)
+        return Set(completedDays.filter { $0.isComplete && $0.completedAt != nil }.map(\.dayKey))
+            .union(historicalKeys.filter { $0 < cutoff })
+    }
+
+    struct HistoricalSession {
+        let startedAt: Date
+        let finishedAt: Date?
+        let completed: Bool
+        let required: Int
+        let answered: Int
+    }
+
+    static func historicalCardsFinished(sessions: [HistoricalSession], calendar: Calendar) -> Bool {
+        guard let last = sessions.max(by: { $0.startedAt < $1.startedAt }),
+              let finish = last.finishedAt else { return false }
+        return last.completed && last.required > 0 && last.answered >= last.required
+            && calendar.isDate(last.startedAt, inSameDayAs: finish)
+    }
+
+    static func historicalDictationFinished(dayKey: String, phase: String, items: [DictationItem],
+                                           successfulRetests: [UUID: [Date]], calendar: Calendar) -> Bool {
+        dictationFinished(phase: phase, items: items) && items.allSatisfy { item in
+            guard let submitted = item.formalSubmittedAt,
+                  DictationEligibility.dayKey(for: submitted, calendar: calendar) == dayKey else { return false }
+            return item.formalResult == true || (successfulRetests[item.wordID] ?? []).contains {
+                DictationEligibility.dayKey(for: $0, calendar: calendar) == dayKey
+            }
+        }
+    }
+
+    static func heatmapWeeks(now: Date = Date(), calendar: Calendar = .current) -> [[Date]] {
+        let today = calendar.startOfDay(for: now)
+        guard let first = calendar.date(byAdding: .day, value: -364, to: today) else { return [] }
+        // Monday is the first row, regardless of the device's locale.
+        let offset = (calendar.component(.weekday, from: first) + 5) % 7
+        guard var cursor = calendar.date(byAdding: .day, value: -offset, to: first) else { return [] }
+        var weeks: [[Date]] = []
+        while cursor <= today {
+            weeks.append((0..<7).compactMap { calendar.date(byAdding: .day, value: $0, to: cursor) })
+            guard let next = calendar.date(byAdding: .day, value: 7, to: cursor) else { break }
+            cursor = next
+        }
+        return weeks
     }
 
     static func dictationFinished(phase: String, items: [DictationItem]) -> Bool {

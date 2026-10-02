@@ -45,8 +45,10 @@ struct StatisticsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
+                completionHeatmap
+
                 LazyVGrid(
-                    columns: [GridItem(.adaptive(minimum: 190), spacing: 14)],
+                    columns: Array(repeating: GridItem(.flexible(), spacing: 14), count: 3),
                     spacing: 14
                 ) {
                     metric("总单词", value: words.count, symbol: "books.vertical")
@@ -56,14 +58,9 @@ struct StatisticsView: View {
                     metric("今日首答正确率", value: todayAccuracyText, symbol: "percent")
                     metric("今日默写首次正确率", value: todayDictationAccuracyText, symbol: "pencil")
                     metric("旧词摸底首次正确", value: baselineAccuracyText, symbol: "list.clipboard")
-                    metric("连续完成天数", value: studyStreakText, symbol: "flame.fill")
                     metric("累计正式复习次数", value: formalEvents.count, symbol: "arrow.triangle.2.circlepath")
                     metric("累计不认识次数", value: formalUnknownCount, symbol: "xmark.circle")
                 }
-
-                Text(completionError ?? "当天卡片全部复习一遍、默写及错词抄写与重默全部完成才计入；今天未完成时保留截至昨天的连续天数。")
-                    .font(.footnote)
-                    .foregroundStyle(AppPalette.textSecondary)
 
                 if trend.count >= 2 {
                     VStack(alignment: .leading, spacing: 12) {
@@ -236,13 +233,44 @@ struct StatisticsView: View {
         return "\(Int((Double(known) / Double(todayFormalEvents.count) * 100).rounded()))%"
     }
 
-    private var studyStreakText: String {
+    private var completionHeatmap: some View {
+        let history = completionHistory
+        let activityKeys = Set(events.map { DictationEligibility.dayKey(for: $0.reviewedAt, calendar: calendar) })
+            .union(dictationEvents.filter { $0.result == "correct" || $0.result == "incorrect" }
+                .map { DictationEligibility.dayKey(for: $0.submittedAt, calendar: calendar) })
+        return StudyHeatmapView(completedKeys: history.keys, activityKeys: activityKeys,
+            streak: history.streak, error: completionError ?? history.error, calendar: calendar)
+    }
+
+    private var completionHistory: (keys: Set<String>, streak: Int, error: String?) {
         do {
             let records = try completionDays.map {
                 try JSONDecoder().decode(StudyCompletionDay.self, from: $0.snapshotData)
             }
-            return "\(StudyStreak.count(completedDays: records, calendar: calendar)) 天"
-        } catch { return "记录异常" }
+            let cutoff = records.map(\.dayKey).min() ?? DictationEligibility.dayKey(for: Date(), calendar: calendar)
+            let scheduled = Dictionary(grouping: sessions.filter { $0.mode == PracticeMode.scheduled.rawValue }) {
+                DictationEligibility.dayKey(for: $0.startedAt, calendar: calendar)
+            }
+            var historicalKeys = Set<String>()
+            for day in dictationDays where day.dayKey < cutoff {
+                let dayCalendar = DictationEligibility.calendar(timeZone: TimeZone(identifier: day.timeZoneID) ?? calendar.timeZone)
+                let items = try JSONDecoder().decode([DictationItem].self, from: day.tasksData)
+                let retests = Dictionary(grouping: dictationEvents.filter {
+                    $0.dayID == day.id && $0.kind == "retest" && $0.result == "correct"
+                }, by: \.wordID).mapValues { $0.map(\.submittedAt) }
+                let cardSessions = (scheduled[day.dayKey] ?? []).map {
+                    StudyStreak.HistoricalSession(startedAt: $0.startedAt, finishedAt: $0.finishedAt,
+                        completed: $0.completed, required: Int($0.baseTaskCount), answered: Int($0.formalAnswered))
+                }
+                if StudyStreak.historicalCardsFinished(sessions: cardSessions, calendar: dayCalendar)
+                    && StudyStreak.historicalDictationFinished(dayKey: day.dayKey, phase: day.phase,
+                        items: items, successfulRetests: retests, calendar: dayCalendar) {
+                    historicalKeys.insert(day.dayKey)
+                }
+            }
+            return (StudyStreak.completionKeys(completedDays: records, historicalKeys: historicalKeys, calendar: calendar),
+                StudyStreak.count(completedDays: records, calendar: calendar, historicalKeys: historicalKeys), nil)
+        } catch { return ([], 0, "无法读取完成记录：\(error.localizedDescription)") }
     }
 
     private var weakStates: [ReviewStateEntity] {
@@ -286,4 +314,138 @@ private struct TrendPoint: Identifiable {
     let index: Int
     let accuracy: Double
     var id: Int { index }
+}
+
+private struct StudyHeatmapView: View {
+    let completedKeys: Set<String>
+    let activityKeys: Set<String>
+    let streak: Int
+    let error: String?
+    let calendar: Calendar
+    @State private var selectedDate = Date()
+
+    private let purple = Color(red: 0.48, green: 0.25, blue: 0.82)
+    private var today: Date { calendar.startOfDay(for: Date()) }
+    private var firstDay: Date { calendar.date(byAdding: .day, value: -364, to: today) ?? today }
+    private var weeks: [[Date]] { StudyStreak.heatmapWeeks(now: today, calendar: calendar) }
+    private var annualCompletions: Int {
+        let firstKey = key(firstDay)
+        let lastKey = key(today)
+        return completedKeys.filter { $0 >= firstKey && $0 <= lastKey }.count
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Label("每天进步一点点", systemImage: "sparkles")
+                        .font(.title3.bold())
+                    Text("近一年完成 \(annualCompletions) 天 · 每一个格子都是你的努力")
+                        .font(.subheadline)
+                        .foregroundStyle(AppPalette.textSecondary)
+                }
+                Spacer(minLength: 4)
+                VStack(alignment: .trailing, spacing: 3) {
+                    Text(error == nil ? "\(streak) 天" : "—")
+                        .font(.system(.title, design: .rounded, weight: .bold))
+                        .monospacedDigit()
+                        .foregroundStyle(purple)
+                    Label("连续完成", systemImage: "flame.fill")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(AppPalette.textSecondary)
+                }
+            }
+
+            GeometryReader { geometry in
+                let cell = max(7, (geometry.size.width - 48 - CGFloat(weeks.count - 1) * 3) / CGFloat(weeks.count))
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(alignment: .top, spacing: 3) {
+                        VStack(spacing: 3) {
+                            Color.clear.frame(height: 20)
+                            ForEach(0..<7) { row in
+                                Text(row == 0 ? "一" : row == 2 ? "三" : row == 4 ? "五" : "")
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(AppPalette.textSecondary)
+                                    .frame(width: 21, height: cell)
+                            }
+                        }
+                        ForEach(Array(weeks.enumerated()), id: \.offset) { _, week in
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(monthLabel(week))
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(AppPalette.textSecondary)
+                                    .fixedSize()
+                                    .frame(width: cell, height: 20, alignment: .leading)
+                                ForEach(week, id: \.self) { date in
+                                    Button { selectedDate = date } label: {
+                                        RoundedRectangle(cornerRadius: 3, style: .continuous)
+                                            .fill(color(date))
+                                            .overlay {
+                                                if calendar.isDate(date, inSameDayAs: selectedDate) {
+                                                    RoundedRectangle(cornerRadius: 3)
+                                                        .stroke(AppPalette.textPrimary.opacity(0.65), lineWidth: 1.5)
+                                                }
+                                            }
+                                            .frame(width: cell, height: cell)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .disabled(date < firstDay || date > today)
+                                    .accessibilityLabel("\(date.formatted(date: .complete, time: .omitted))，\(status(date))")
+                                }
+                            }
+                        }
+                    }
+                    .padding(.trailing, 24)
+                }
+                .defaultScrollAnchor(.trailing)
+            }
+            .frame(height: 150)
+
+            HStack(spacing: 14) {
+                Text("\(selectedDate.formatted(.dateTime.month().day())) · \(status(selectedDate))")
+                    .font(.subheadline.weight(.medium))
+                Spacer(minLength: 0)
+                legend("暂无记录", color: AppPalette.textSecondary.opacity(0.10))
+                legend("有学习", color: purple.opacity(0.25))
+                legend("全部完成", color: purple)
+            }
+            .foregroundStyle(AppPalette.textSecondary)
+
+            Text(error ?? "卡片复习、默写和错词抄写与重默全部完成，点亮深紫色。旧版按当天已完成的复习会话和默写订正记录认定。")
+                .font(.footnote)
+                .foregroundStyle(error == nil ? AppPalette.textSecondary : .red)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(22)
+        .background(AppPalette.surface)
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+    }
+
+    private func key(_ date: Date) -> String {
+        DictationEligibility.dayKey(for: date, calendar: calendar)
+    }
+
+    private func status(_ date: Date) -> String {
+        if completedKeys.contains(key(date)) { return "全部完成" }
+        return activityKeys.contains(key(date)) ? "有学习记录" : "暂无学习记录"
+    }
+
+    private func color(_ date: Date) -> Color {
+        guard date >= firstDay && date <= today else { return .clear }
+        if completedKeys.contains(key(date)) { return purple }
+        return activityKeys.contains(key(date)) ? purple.opacity(0.25) : AppPalette.textSecondary.opacity(0.10)
+    }
+
+    private func monthLabel(_ week: [Date]) -> String {
+        if week.contains(firstDay) { return "\(calendar.component(.month, from: firstDay))月" }
+        guard let first = week.first(where: { $0 >= firstDay && $0 <= today && calendar.component(.day, from: $0) == 1 }) else { return "" }
+        return "\(calendar.component(.month, from: first))月"
+    }
+
+    private func legend(_ title: String, color: Color) -> some View {
+        HStack(spacing: 4) {
+            RoundedRectangle(cornerRadius: 3).fill(color).frame(width: 10, height: 10)
+            Text(title).font(.caption)
+        }
+    }
 }

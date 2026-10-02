@@ -20,6 +20,55 @@ final class StudyStreakTests: XCTestCase {
         return result
     }
 
+    func testHistoricalCompletionDoesNotOverrideStrictSnapshots() {
+        var incomplete = completed(2)
+        incomplete.dictationComplete = false
+        incomplete.completedAt = nil
+        let historical: Set<String> = ["2026-10-01", "2026-10-02", "2026-10-03"]
+        let keys = StudyStreak.completionKeys(completedDays: [incomplete, completed(3)],
+            historicalKeys: historical, now: date(3), calendar: calendar)
+        XCTAssertEqual(keys, ["2026-10-01", "2026-10-03"])
+        XCTAssertEqual(StudyStreak.count(completedDays: [completed(3)], now: date(3),
+            calendar: calendar, historicalKeys: ["2026-10-01", "2026-10-02"]), 3)
+    }
+
+    func testHistoricalCardsRequireLastSessionFinishedOnSameDay() {
+        let good = StudyStreak.HistoricalSession(startedAt: date(1), finishedAt: date(1, hour: 13),
+            completed: true, required: 8, answered: 8)
+        XCTAssertTrue(StudyStreak.historicalCardsFinished(sessions: [good], calendar: calendar))
+        let partial = StudyStreak.HistoricalSession(startedAt: date(1, hour: 14), finishedAt: nil,
+            completed: false, required: 2, answered: 1)
+        XCTAssertFalse(StudyStreak.historicalCardsFinished(sessions: [good, partial], calendar: calendar))
+        let late = StudyStreak.HistoricalSession(startedAt: date(1), finishedAt: date(2),
+            completed: true, required: 8, answered: 8)
+        XCTAssertFalse(StudyStreak.historicalCardsFinished(sessions: [late], calendar: calendar))
+    }
+
+    func testHistoricalDictationCannotCountNextDayCorrections() {
+        var item = DictationItem(wordID: UUID(), english: "apple", chinese: "苹果")
+        item.formalResult = false
+        item.formalSubmittedAt = date(1)
+        item.remediationCopyCount = 3
+        item.retestAttempted = true
+        item.remediationPassed = true
+        XCTAssertFalse(StudyStreak.historicalDictationFinished(dayKey: "2026-10-01", phase: "complete",
+            items: [item], successfulRetests: [item.wordID: [date(2)]], calendar: calendar))
+        XCTAssertTrue(StudyStreak.historicalDictationFinished(dayKey: "2026-10-01", phase: "complete",
+            items: [item], successfulRetests: [item.wordID: [date(1, hour: 13)]], calendar: calendar))
+        XCTAssertTrue(StudyStreak.historicalDictationFinished(dayKey: "2026-10-01", phase: "complete",
+            items: [], successfulRetests: [:], calendar: calendar))
+    }
+
+    func testHeatmapCovers365DaysWithMondayRowsAndFuturePadding() {
+        let weeks = StudyStreak.heatmapWeeks(now: date(2), calendar: calendar)
+        XCTAssertTrue(weeks.allSatisfy { $0.count == 7 && calendar.component(.weekday, from: $0[0]) == 2 })
+        let first = calendar.date(byAdding: .day, value: -364, to: calendar.startOfDay(for: date(2)))!
+        let visible = weeks.flatMap { $0 }.filter { $0 >= first && $0 <= calendar.startOfDay(for: date(2)) }
+        XCTAssertEqual(visible.count, 365)
+        XCTAssertEqual(Set(visible).count, 365)
+        XCTAssertEqual(visible.last, calendar.startOfDay(for: date(2)))
+    }
+
     func testIncompleteTodayKeepsYesterdayAndOnlyFullCompletionAddsToday() {
         let history = (1...5).map(completed)
         var today = completed(6)
