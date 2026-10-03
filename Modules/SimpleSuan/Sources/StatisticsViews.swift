@@ -1,5 +1,6 @@
 import SwiftUI
 import Charts
+import StudyShell
 
 struct SessionResultView: View {
     let session: SessionRecord
@@ -38,6 +39,7 @@ struct SessionResultView: View {
                 }
             }
         }
+        .celebrationSound(enabled: saved, owner: "suan")
     }
 
     private func celebrationHeader(activity: PracticeActivity) -> some View {

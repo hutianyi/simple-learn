@@ -1,6 +1,7 @@
 import Charts
 import CoreData
 import SwiftUI
+import StudyShell
 
 struct StatisticsView: View {
     @EnvironmentObject private var router: AppRouter
@@ -165,6 +166,7 @@ struct StatisticsView: View {
             if celebration { StudyCelebrationConfetti().allowsHitTesting(false).accessibilityHidden(true) }
         }
         .navigationTitle(celebration ? "今日任务全部完成" : "学习统计")
+        .celebrationSound(enabled: celebration, owner: "ji")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if celebration {

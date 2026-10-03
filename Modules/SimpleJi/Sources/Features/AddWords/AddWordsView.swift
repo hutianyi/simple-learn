@@ -63,7 +63,7 @@ struct AddWordsView: View {
                 .accessibilityIdentifier("addWords.english")
 
             fieldLabel("中文")
-            TextField("例如：苹果", text: $viewModel.singleChinese)
+            TextField("例如：n.苹果", text: $viewModel.singleChinese)
                 .textFieldStyle(.roundedBorder)
                 .font(.title3)
                 .accessibilityIdentifier("addWords.chinese")
@@ -107,7 +107,7 @@ struct AddWordsView: View {
                 )
                 .onChange(of: viewModel.batchText) { _ in viewModel.inputChanged() }
 
-            Text("支持标题、项目符号、Tab、空格、短横线，以及 ice cream 冰淇淋这类词组。分析前不会写入数据库。")
+            Text("支持标题、项目符号、Tab、空格、短横线，以及 ice cream 冰淇淋这类词组。可录入 conversation n.对话，词性随释义显示，不参与英文默写。分析前不会写入数据库。")
                 .font(.footnote)
                 .foregroundStyle(AppPalette.textSecondary)
 

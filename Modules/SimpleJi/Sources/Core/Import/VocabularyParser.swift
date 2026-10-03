@@ -17,7 +17,10 @@ enum VocabularyParser {
             }
 
             let content = removingBullet(from: trimmed)
-            guard let pair = split(content), isValid(english: pair.english, chinese: pair.chinese) else {
+            let pair = split(content).map {
+                separatingPartOfSpeech(english: $0.english, chinese: $0.chinese)
+            }
+            guard let pair, isValid(english: pair.english, chinese: pair.chinese) else {
                 unrecognized.append(
                     UnrecognizedVocabularyLine(
                         lineNumber: lineNumber,
@@ -48,6 +51,20 @@ enum VocabularyParser {
 
     static func isValid(english: String, chinese: String) -> Bool {
         isValidEnglish(english) && containsCJK(chinese)
+    }
+
+    static func separatingPartOfSpeech(english: String, chinese: String) -> (english: String, chinese: String) {
+        let term = english.trimmingCharacters(in: .whitespacesAndNewlines)
+        let meaning = chinese.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Only move known, dotted labels at a word boundary; preserve phrases and abbreviations.
+        let label = #"(?:n|v|vt|vi|adj|adv|pron|prep|conj|interj|int|num|art|det|aux|modal|abbr|phr)\."#
+        let pattern = #"(?i)(?<!\S)"# + label + #"(?:\s*(?:[/&、,，]\s*)?"# + label + #")*\s*$"#
+        guard let range = term.range(of: pattern, options: .regularExpression) else {
+            return (term, meaning)
+        }
+        let word = String(term[..<range.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+        let partOfSpeech = String(term[range]).trimmingCharacters(in: .whitespacesAndNewlines)
+        return (word, partOfSpeech + meaning)
     }
 
     private static func shouldIgnore(_ line: String) -> Bool {

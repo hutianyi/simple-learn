@@ -131,8 +131,9 @@ struct WordDetailView: View {
     }
 
     private func save() {
-        let trimmedEnglish = english.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedChinese = chinese.trimmingCharacters(in: .whitespacesAndNewlines)
+        let pair = VocabularyParser.separatingPartOfSpeech(english: english, chinese: chinese)
+        let trimmedEnglish = pair.english
+        let trimmedChinese = pair.chinese
         let normalized = EnglishNormalizer.normalize(trimmedEnglish)
 
         guard !normalized.isEmpty,

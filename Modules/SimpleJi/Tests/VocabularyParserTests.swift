@@ -41,4 +41,37 @@ final class VocabularyParserTests: XCTestCase {
         XCTAssertTrue(result.entries.isEmpty)
         XCTAssertEqual(result.unrecognized.count, 2)
     }
+
+    func testPartOfSpeechBelongsToMeaningAcrossImportFormats() {
+        for input in ["conversation n.对话", "conversation n. 对话", "conversation n.\t对话",
+                      "conversation n. - 对话", "conversation — n.对话", "conversation\tn.对话"] {
+            let result = VocabularyParser.parse(input)
+            XCTAssertTrue(result.unrecognized.isEmpty, input)
+            XCTAssertEqual(result.entries.first?.english, "conversation", input)
+            XCTAssertEqual(result.entries.first?.normalizedEnglish, "conversation", input)
+            XCTAssertEqual(result.entries.first?.chinese, "n.对话", input)
+            if let entry = result.entries.first {
+                XCTAssertTrue(DictationAnswerMatcher.matches("conversation", answer: entry.english), input)
+                XCTAssertFalse(DictationAnswerMatcher.matches("conversation n.", answer: entry.english), input)
+            }
+        }
+    }
+
+    func testCommonAndCombinedPartOfSpeechLabels() {
+        for label in ["n.", "v.", "vt.", "vi.", "adj.", "adv.", "pron.", "prep.", "conj.",
+                      "interj.", "num.", "art.", "n./v.", "vt. & vi."] {
+            let result = VocabularyParser.parse("test \(label) 测试")
+            XCTAssertEqual(result.entries.first?.english, "test", label)
+            XCTAssertEqual(result.entries.first?.chinese, label + "测试", label)
+        }
+    }
+
+    func testPartOfSpeechDoesNotStripPhrasesOrOtherAbbreviations() {
+        for term in ["ice cream", "look after", "vitamin B", "U.S.", "plan.", "a", "chapter no."] {
+            let result = VocabularyParser.parse("\(term) 释义")
+            XCTAssertEqual(result.entries.first?.english, term)
+            XCTAssertEqual(result.entries.first?.chinese, "释义")
+        }
+        XCTAssertEqual(VocabularyParser.parse("n. 名词").unrecognized.count, 1)
+    }
 }
