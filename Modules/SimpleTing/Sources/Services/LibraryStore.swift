@@ -41,3 +41,19 @@ final class LibraryStore {
         library = candidate
     }
 }
+
+@MainActor
+public enum SimpleTingBackupTransfer {
+    public static func exportData() throws -> Data {
+        try LibraryStore().exportData(preferences: ListenSettings().snapshot)
+    }
+    public static func validate(_ data: Data) throws -> String {
+        let backup = try ListenBackup.decode(data)
+        guard backup.preferences != nil else { throw WholeBackupError.message("整体备份缺少简单听播放设置。") }
+        return "文章 \(backup.library.days.reduce(0) { $0 + $1.articles.count }) 篇及播放设置"
+    }
+    public static func restore(_ data: Data) throws {
+        _ = try validate(data)
+        try LibraryStore().restore(ListenBackup.decode(data), settings: ListenSettings())
+    }
+}

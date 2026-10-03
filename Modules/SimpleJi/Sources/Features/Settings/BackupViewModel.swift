@@ -183,7 +183,7 @@ final class BackupViewModel: ObservableObject {
         )
     }
 
-    private var settingsSnapshot: BackupSettings {
+    var settingsSnapshot: BackupSettings {
         BackupSettings(
             sessionLimit: settings.sessionLimit.rawValue,
             englishVoiceIdentifier: settings.englishVoiceIdentifier,
@@ -200,7 +200,7 @@ final class BackupViewModel: ObservableObject {
         )
     }
 
-    private func apply(_ snapshot: BackupSettings) {
+    func apply(_ snapshot: BackupSettings) {
         settings.sessionLimit = SessionLimitOption(rawValue: snapshot.sessionLimit) ?? .thirty
         settings.englishVoiceIdentifier = snapshot.englishVoiceIdentifier
         settings.chineseVoiceIdentifier = snapshot.chineseVoiceIdentifier

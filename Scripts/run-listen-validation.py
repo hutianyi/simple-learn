@@ -22,6 +22,7 @@ shell = work/'Sources/StudyShell'
 shell.mkdir(parents=True)
 shutil.copy2(root/'Shared/AudioOwnership.swift', shell/'AudioOwnership.swift')
 shutil.copy2(root/'Shared/ModuleSession.swift', shell/'ModuleSession.swift')
+shutil.copy2(root/'Shared/WholeBackup.swift', shell/'WholeBackup.swift')
 tests = work/'Tests/SimpleTingTests'
 tests.mkdir(parents=True)
 for source in (root/'Modules/SimpleTing/Tests').glob('*.swift'):
@@ -36,6 +37,7 @@ if args.materials:
 shell_tests = work/'Tests/StudyShellTests'
 shell_tests.mkdir(parents=True)
 shutil.copy2(root/'Tests/Core/AudioOwnershipTests.swift',shell_tests/'AudioOwnershipTests.swift')
+shutil.copy2(root/'Tests/Core/WholeBackupTests.swift',shell_tests/'WholeBackupTests.swift')
 (work/'Package.swift').write_text('''// swift-tools-version: 6.0
 import PackageDescription
 let package = Package(name: "SimpleTingValidation", platforms: [.macOS(.v15)], targets: [

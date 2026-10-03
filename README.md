@@ -2,9 +2,9 @@
 
 一个使用 SwiftUI 编写的本地 iPad 学习 App，将单词记忆、错题复习、语音默写、心算练习、英文听读和课文背诵整合到同一入口。
 
-当前正式版本：**1.1（构建 10）**。仅支持 **iPadOS 27 及以上**。
+当前正式版本：**1.2（构建 12）**。仅支持 **iPadOS 27 及以上**。
 
-[1.1 正式版](https://github.com/hutianyi/simple-learn/releases/tag/v1.1)包含六个模块；此前的五模块公开版本归类为 [0.9 预览版](https://github.com/hutianyi/simple-learn/releases/tag/v0.9)。版本变化见 [CHANGELOG.md](CHANGELOG.md)。
+[1.2 正式版](https://github.com/hutianyi/simple-learn/releases/tag/v1.2)包含六个模块及整体备份与恢复；此前的五模块公开版本归类为 [0.9 预览版](https://github.com/hutianyi/simple-learn/releases/tag/v0.9)。版本变化见 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 功能
 
@@ -57,6 +57,10 @@ xcodegen generate
 生成工程后需重新选择本机开发团队。个人签名信息不应提交到仓库。
 
 ## 数据与迁移
+
+首页右上角的“备份与恢复”可一次导出六个模块的完整备份。文件包含已保存的学习内容、记录、进度和设置，不含简单背录音、临时缓存和系统语音资源；空模块也纳入备份。完成系统“存储到文件”后才记录成功导出时间。
+
+整体恢复先校验全部模块，再确认替换六个模块的数据和设置（包括简单背课文库）。恢复前在 `SimpleXue/WholeBackup` 保留整体安全副本；失败时自动回退。若恢复中断，下一次启动会先完成回退，再开放学习入口。回退未完成时可重试，安全副本应保留。App 本地安全副本不能替代外部导出的备份。各模块原有备份入口继续保留。
 
 词库、题库、文章、学习进度和设置保存在设备本地。项目不提供账号系统、广告、分析服务、云同步或付费 AI API；系统语音下载及首次依赖下载可能需要网络。
 

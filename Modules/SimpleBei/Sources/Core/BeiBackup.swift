@@ -1,4 +1,5 @@
 import Foundation
+import StudyShell
 
 struct BeiBackup: Codable {
     var app = "SimpleXue"
@@ -65,4 +66,17 @@ struct BeiLibraryFile {
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try data.write(to: url, options: .atomic)
     }
+}
+
+@MainActor
+public enum SimpleBeiBackupTransfer {
+    private static func file(directory: URL?) throws -> BeiLibraryFile {
+        BeiLibraryFile(url: try (directory ?? ModuleStorage.directory("SimpleBei")).appendingPathComponent("Library.json"))
+    }
+    public static func exportData(directory: URL? = nil) throws -> Data { try BeiBackup(library: file(directory: directory).load()).encoded() }
+    public static func validate(_ data: Data) throws -> String {
+        let backup = try BeiBackup.decode(data)
+        return "课文 \(backup.library.passages.count) 篇（含归档）及设置，不含录音"
+    }
+    public static func restore(_ data: Data, directory: URL? = nil) throws { try file(directory: directory).save(BeiBackup.decode(data).library) }
 }

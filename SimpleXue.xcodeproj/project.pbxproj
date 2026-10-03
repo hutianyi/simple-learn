@@ -93,6 +93,7 @@
 		6D3EC8394C1A05FA03A243B1 /* DictationViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 240DD656B75E49E184BFBEEE /* DictationViewModel.swift */; };
 		6E3AD2291C693BCB80DD0BB5 /* ImportAnalyzerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19E789E4B063BBA7EE072645 /* ImportAnalyzerTests.swift */; };
 		6E4DBDCD9D34ABBD75743D3A /* ModuleSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B1FC362F82FFDFAC494BD79 /* ModuleSession.swift */; };
+		6AE9ED7B8FE94376ACF705DA /* WholeBackup.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43013DF579964BF3A5B06742 /* WholeBackup.swift */; };
 		71848BA09A096977E65CC0AE /* ModuleNavigationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5EC83D9B7BF1707D9BF88D9 /* ModuleNavigationTests.swift */; };
 		71AEE17BE3CE9068471998C7 /* ImportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 488BE2CB484A4843A5A647FF /* ImportView.swift */; };
 		741E11F293CF51C97B5D799F /* StudyShell.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9CC160CCA2A80AD03DB51AF0 /* StudyShell.framework */; };
@@ -158,6 +159,7 @@
 		BB8C62CC042857F65AD8ECB5 /* SimpleTing.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 29C5046E36819DD5717E1ED1 /* SimpleTing.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		BBA4615E37F781934864D1E6 /* StudyShell.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9CC160CCA2A80AD03DB51AF0 /* StudyShell.framework */; };
 		BD4212F488B6C27E76DA40C3 /* SimpleXueApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EFE7AAB33B960E7F0126A2D /* SimpleXueApp.swift */; };
+		C1A38832C076416AAAC3505C /* WholeBackupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9466445C62D4E1DA0DD254A /* WholeBackupView.swift */; };
 		C0BAE56EE41CAFC09956ADEA /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28996B97DDEC07DF386F2A00 /* RootView.swift */; };
 		C10DC69CF867BE2EF9195E34 /* WordLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F39B9664A5F61E867F6CF6B /* WordLibraryView.swift */; };
 		C437E622DF4241B095DCDF10 /* ReviewTask.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6EE23EACEBF2FE042CE74AF1 /* ReviewTask.swift */; };
@@ -482,6 +484,7 @@
 		476719086BE0C01116CFCDE6 /* ReviewScheduler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewScheduler.swift; sourceTree = "<group>"; };
 		488BE2CB484A4843A5A647FF /* ImportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportView.swift; sourceTree = "<group>"; };
 		4B1FC362F82FFDFAC494BD79 /* ModuleSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModuleSession.swift; sourceTree = "<group>"; };
+		43013DF579964BF3A5B06742 /* WholeBackup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WholeBackup.swift; sourceTree = "<group>"; };
 		4C1D4F9BA7D4984046E34D53 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		4C2113CE3834CF0EBFE06B81 /* WordMemoryCardsV3.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = WordMemoryCardsV3.xcdatamodel; sourceTree = "<group>"; };
 		8BA626A1AFEB47DB9CC46BFB /* WordMemoryCardsV4.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = WordMemoryCardsV4.xcdatamodel; sourceTree = "<group>"; };
@@ -501,6 +504,7 @@
 		5D06C9B8017A131A7E22C3C0 /* SimpleBei.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = SimpleBei.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		5EAE938006B6CDCA7FACA675 /* SimpleTingTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = SimpleTingTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		5EFE7AAB33B960E7F0126A2D /* SimpleXueApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SimpleXueApp.swift; sourceTree = "<group>"; };
+		C9466445C62D4E1DA0DD254A /* WholeBackupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WholeBackupView.swift; sourceTree = "<group>"; };
 		60258E962EA8D4049938763E /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		6090CBD4699C479889E253A7 /* LibraryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryStore.swift; sourceTree = "<group>"; };
 		60D281DCF0633A99ABF32EA5 /* PayloadValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PayloadValidator.swift; sourceTree = "<group>"; };
@@ -1104,6 +1108,7 @@
 				A38B4783D4A0CFDA63549C9F /* AudioOwnership.swift */,
 				3783095ED91D663D7E9CF504 /* AudioPlaybackCoordinator.swift */,
 				4B1FC362F82FFDFAC494BD79 /* ModuleSession.swift */,
+				43013DF579964BF3A5B06742 /* WholeBackup.swift */,
 				18E1D885E471BE4655AE3A14 /* TransferView.swift */,
 			);
 			path = Shared;
@@ -1272,6 +1277,7 @@
 				5696AA0F89403A7B53DEAC57 /* Assets.xcassets */,
 				97DD47AD0FD260FA2D9C80B3 /* Info.plist */,
 				5EFE7AAB33B960E7F0126A2D /* SimpleXueApp.swift */,
+				C9466445C62D4E1DA0DD254A /* WholeBackupView.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -1929,6 +1935,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				BD4212F488B6C27E76DA40C3 /* SimpleXueApp.swift in Sources */,
+				C1A38832C076416AAAC3505C /* WholeBackupView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1939,6 +1946,7 @@
 				EC0E5317E555C7C509E9550F /* AudioOwnership.swift in Sources */,
 				2168631D170947239EE305AB /* AudioPlaybackCoordinator.swift in Sources */,
 				6E4DBDCD9D34ABBD75743D3A /* ModuleSession.swift in Sources */,
+				6AE9ED7B8FE94376ACF705DA /* WholeBackup.swift in Sources */,
 				886EAC47534C18918F9908FC /* TransferView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -2221,7 +2229,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 11;
+				CURRENT_PROJECT_VERSION = 12;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
@@ -2241,7 +2249,7 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
-				MARKETING_VERSION = 1.1.1;
+				MARKETING_VERSION = 1.2;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -2483,7 +2491,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CURRENT_PROJECT_VERSION = 11;
+				CURRENT_PROJECT_VERSION = 12;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = App/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "简单学";
@@ -2603,7 +2611,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 11;
+				CURRENT_PROJECT_VERSION = 12;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -2617,7 +2625,7 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
-				MARKETING_VERSION = 1.1.1;
+				MARKETING_VERSION = 1.2;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -2778,7 +2786,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CURRENT_PROJECT_VERSION = 11;
+				CURRENT_PROJECT_VERSION = 12;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = App/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "简单学";

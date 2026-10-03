@@ -16,6 +16,7 @@ def copy(source, target, name=None):
 
 
 copy(root / "Shared/ModuleSession.swift", "Sources/StudyShell")
+copy(root / "Shared/WholeBackup.swift", "Sources/StudyShell")
 copy(root / "Shared/AudioOwnership.swift", "Sources/StudyShell")
 ji = root / "Modules/SimpleJi"
 for part in ["Import", "SRS", "Models", "Dictation", "Backup", "Settings", "Persistence"]:

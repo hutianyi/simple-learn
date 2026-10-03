@@ -51,3 +51,14 @@ struct MoBackup: Codable {
         return try encoder.encode(value)
     }
 }
+
+@MainActor
+public enum SimpleMoBackupTransfer {
+    public static func exportData() throws -> Data { try MoBackup.encode(MoBackup.snapshot()) }
+    public static func validate(_ data: Data) throws -> String {
+        let backup = try MoBackup.decode(data)
+        let count = backup.settings.inputText.split(whereSeparator: \.isNewline).count
+        return "默写文本 \(count) 行及播放设置"
+    }
+    public static func restore(_ data: Data) throws { try MoBackup.decode(data).apply() }
+}

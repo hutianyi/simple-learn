@@ -42,10 +42,28 @@ enum LearningModule: String, CaseIterable, Identifiable {
 struct LearningHomeView: View {
     @State private var selected: LearningModule?
     @StateObject private var session = ModuleSession()
+    @State private var backupReady = false
+    @State private var recoveryError: String?
+    @State private var recoveryNotice: String?
+    @State private var presentation: HomePresentation?
+
+    private enum HomePresentation: String, Identifiable {
+        case backup
+        var id: String { rawValue }
+    }
 
     var body: some View {
         Group {
-            if let selected {
+            if !backupReady {
+                VStack(spacing: 20) {
+                    if let recoveryError {
+                        Text("整体恢复尚未完成").font(.title2.bold())
+                        Text(recoveryError).foregroundStyle(.secondary)
+                        Button("重试回退到恢复前数据") { Task { await prepareBackupRecovery() } }
+                            .buttonStyle(.borderedProminent)
+                    } else { ProgressView("正在检查数据恢复状态…") }
+                }.padding(32)
+            } else if let selected {
                 VStack(spacing: 0) {
                     ZStack {
                         Text(selected.title).font(.headline)
@@ -68,7 +86,12 @@ struct LearningHomeView: View {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 28) {
                             VStack(alignment: .leading, spacing: 10) {
-                                Text("简单学").font(.system(size: 48, weight: .bold, design: .rounded))
+                                HStack {
+                                    Text("简单学").font(.system(size: 48, weight: .bold, design: .rounded))
+                                    Spacer()
+                                    Button("备份与恢复", systemImage: "externaldrive") { presentation = .backup }
+                                        .buttonStyle(.bordered).accessibilityIdentifier("home.backup")
+                                }
                                 Text("选一个，开始今天的学习。") .font(.title3).foregroundStyle(.secondary)
                             }
                             LazyVGrid(columns: [GridItem(.adaptive(minimum: 280), spacing: 20)], spacing: 20) {
@@ -92,6 +115,26 @@ struct LearningHomeView: View {
             }
         }
         .environmentObject(session)
+        .task { await prepareBackupRecovery() }
+        .sheet(item: $presentation) { _ in
+            WholeBackupView { pending in
+                backupReady = !pending
+                if pending { recoveryError = "上次整体恢复的回退尚未完成，请先重试回退。" }
+                else { recoveryError = nil }
+            }
+        }
+        .alert("数据恢复", isPresented: Binding(get: { recoveryNotice != nil }, set: { if !$0 { recoveryNotice = nil } })) {
+            Button("好", role: .cancel) {}
+        } message: { Text(recoveryNotice ?? "") }
+    }
+
+    @MainActor private func prepareBackupRecovery() async {
+        recoveryError = nil
+        do {
+            let recovered = try await WholeBackupService.coordinator().recoverIfNeeded()
+            backupReady = true
+            if recovered { recoveryNotice = "上次整体恢复未完成，已自动回退到恢复前数据。" }
+        } catch { backupReady = false; recoveryError = error.localizedDescription }
     }
 
     @ViewBuilder private func moduleView(_ module: LearningModule) -> some View {

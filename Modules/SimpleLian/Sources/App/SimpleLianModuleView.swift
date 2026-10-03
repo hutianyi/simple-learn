@@ -32,3 +32,27 @@ public struct SimpleLianModuleView: View {
         }
     }
 }
+
+@MainActor
+public enum SimpleLianBackupTransfer {
+    private static func open() throws -> ModelContainer {
+        let storage = LianStorage()
+        guard let container = storage.container else {
+            throw WholeBackupError.message(storage.error ?? "简单练数据库无法打开。")
+        }
+        return container
+    }
+    public static func exportData() throws -> Data {
+        let container = try open()
+        return try BackupService.exportData(context: container.mainContext)
+    }
+    public static func validate(_ data: Data) throws -> String {
+        let backup = try BackupService.validate(data)
+        return "题目 \(backup.questions.count) 道 · 练习会话 \(backup.sessions.count) 次"
+    }
+    public static func restore(_ data: Data) throws {
+        let backup = try BackupService.validate(data)
+        let container = try open()
+        try BackupService.restore(backup, context: container.mainContext)
+    }
+}

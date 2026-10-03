@@ -6,6 +6,22 @@ struct BeiBackupTests {
     private func passage(_ title: String = "课文") throws -> Passage {
         try PassageText.make(title: title, body: "春天来了。小树发芽。", language: .chinese, layout: .prose)
     }
+    @MainActor @Test func wholeRestoreReplacesInsteadOfAppendingAndPreservesSettings() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let old = BeiLibrary(passages: [try passage("旧课文")])
+        let file = BeiLibraryFile(url: folder.appendingPathComponent("Library.json"))
+        try file.save(old)
+        var incoming = BeiLibrary(passages: [try passage("备份课文")])
+        incoming.preferences.chineseVoiceID = "test-voice"
+        let data = try BeiBackup(library: incoming).encoded()
+        try SimpleBeiBackupTransfer.restore(data, directory: folder)
+        #expect(try file.load() == incoming)
+        #expect(try BeiBackup.decode(SimpleBeiBackupTransfer.exportData(directory: folder)).library == incoming)
+        try SimpleBeiBackupTransfer.restore(BeiBackup(library: BeiLibrary()).encoded(), directory: folder)
+        #expect(try file.load().passages.isEmpty)
+    }
+
     @Test func backupRoundTripAndPersistentFieldsOnly() throws {
         let library = BeiLibrary(passages: [try passage()])
         let data = try BeiBackup(library: library).encoded()

@@ -11,6 +11,7 @@ struct BackupEnvelope: Codable {
     let appVersion: String
     let exportedAt: Date
     let data: BackupData
+    var lastCelebratedCompletionDay: String? = nil
 }
 
 struct BackupData: Codable {

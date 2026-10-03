@@ -9,6 +9,7 @@ xcuserdata/
 # Device containers, personal backups and local records
 *.xcappdata/
 PrivateBackups/
+/备份/
 Reports/
 /简单学项目设计与开发进度.md
 /简单听-开发方案与进度.md
