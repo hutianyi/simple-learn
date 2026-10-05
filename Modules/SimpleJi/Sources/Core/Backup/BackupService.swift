@@ -1,5 +1,6 @@
 import CoreData
 import Foundation
+import StudyShell
 
 enum BackupService {
     enum BackupError: LocalizedError {
@@ -208,6 +209,31 @@ enum BackupService {
                     throw BackupError.invalidData("每日完成记录与完成日期不符")
                 }
             }
+            if let repair = day.repair {
+                let calendar = DictationEligibility.calendar(timeZone: zone)
+                let parts = day.dayKey.split(separator: "-").compactMap { Int($0) }
+                guard parts.count == 3,
+                      let date = calendar.date(from: DateComponents(year: parts[0], month: parts[1], day: parts[2])),
+                      OneDayStreakRepair.isYesterday(repair.yesterdayKey, on: date, calendar: calendar),
+                      repair.previousStreak > 0,
+                      Set(repair.extraCardIDs).count == repair.extraCardIDs.count else {
+                    throw BackupError.invalidData("补学日期或卡片任务无效")
+                }
+                if repair.status == .completed {
+                    guard repair.cardsComplete, repair.dictationComplete,
+                          let restoredAt = repair.restoredAt ?? day.completedAt,
+                          DictationEligibility.dayKey(for: restoredAt, calendar: calendar) == day.dayKey else {
+                        throw BackupError.invalidData("补学尚未完成却恢复了连续记录")
+                    }
+                }
+                if let id = repair.dictationDayID {
+                    guard let queue = data.dictationDays?.first(where: { $0.id == id }),
+                          queue.dayKey == day.dayKey + "#repair",
+                          repair.status != .completed || queue.phase == DictationPhase.complete.rawValue else {
+                        throw BackupError.invalidData("补学默写任务与完成记录不符")
+                    }
+                }
+            }
         }
         let wordIDs = Set(data.words.map(\.id))
         guard wordIDs.count == data.words.count else {
@@ -327,7 +353,7 @@ enum BackupService {
             guard dictationEventIDs.insert(event.id).inserted,
                   wordIDs.contains(event.wordID),
                   event.dayID.map(dictationDayIDs.contains) ?? true,
-                  ["initialCopy", "formal", "baselineFormal", "remediationCopy", "retest",
+                  ["initialCopy", "formal", "baselineFormal", "repairFormal", "remediationCopy", "retest",
                    "recognitionRetry", "interruption", "initialCopyKeyboard",
                    "remediationCopyKeyboard", "deferred", "recognitionMismatch", "keyboardVerification"].contains(event.kind),
                   ["correct", "incorrect", "none"].contains(event.result),

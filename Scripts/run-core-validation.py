@@ -18,6 +18,7 @@ def copy(source, target, name=None):
 copy(root / "Shared/ModuleSession.swift", "Sources/StudyShell")
 copy(root / "Shared/WholeBackup.swift", "Sources/StudyShell")
 copy(root / "Shared/AudioOwnership.swift", "Sources/StudyShell")
+copy(root / "Shared/StreakReward.swift", "Sources/StudyShell")
 ji = root / "Modules/SimpleJi"
 for part in ["Import", "SRS", "Models", "Dictation", "Backup", "Settings", "Persistence"]:
     for source in (ji / "Sources/Core" / part).glob("*.swift"):
@@ -78,7 +79,7 @@ let package = Package(name: "SimpleXueCoreValidation", platforms: [.macOS(.v15)]
             resources: [.copy("Resources/WordMemoryCards.momd")]),
         .target(name: "SimpleLian", dependencies: ["StudyShell"]),
         .target(name: "DictationApp", dependencies: ["StudyShell"]),
-        .target(name: "SimpleSuan"),
+        .target(name: "SimpleSuan", dependencies: ["StudyShell"]),
         .testTarget(name: "WordMemoryCardsTests", dependencies: ["WordMemoryCards", .product(name: "FSRS", package: "swift-fsrs")]),
         .testTarget(name: "SimpleLianTests", dependencies: ["SimpleLian"]),
         .testTarget(name: "DictationAppTests", dependencies: ["DictationApp"]),

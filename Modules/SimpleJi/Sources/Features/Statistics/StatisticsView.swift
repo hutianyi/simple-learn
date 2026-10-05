@@ -49,7 +49,12 @@ struct StatisticsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                if celebration { celebrationHeader }
+                if celebration {
+                    if completionError == nil && completionHistory.error == nil {
+                        StreakRewardCard(moduleName: "简单记", streak: completionHistory.streak)
+                    }
+                    celebrationHeader
+                }
                 completionHeatmap
 
                 if celebration {
@@ -279,7 +284,10 @@ struct StatisticsView: View {
             .union(dictationEvents.filter { $0.result == "correct" || $0.result == "incorrect" }
                 .map { DictationEligibility.dayKey(for: $0.submittedAt, calendar: calendar) })
         return StudyHeatmapView(completedKeys: history.keys, activityKeys: activityKeys,
-            streak: history.streak, error: completionError ?? history.error, calendar: calendar)
+            repairedKeys: Set(completionDays.compactMap { entity -> String? in
+                guard let day = try? JSONDecoder().decode(StudyCompletionDay.self, from: entity.snapshotData) else { return nil }
+                return StudyStreak.repairedKeys(completedDays: [day]).first
+            }), streak: history.streak, error: completionError ?? history.error, calendar: calendar)
     }
 
     private var completionHistory: (keys: Set<String>, streak: Int, error: String?) {
@@ -359,6 +367,7 @@ private struct TrendPoint: Identifiable {
 private struct StudyHeatmapView: View {
     let completedKeys: Set<String>
     let activityKeys: Set<String>
+    let repairedKeys: Set<String>
     let streak: Int
     let error: String?
     let calendar: Calendar
@@ -466,6 +475,7 @@ private struct StudyHeatmapView: View {
     }
 
     private func status(_ date: Date) -> String {
+        if repairedKeys.contains(key(date)) { return "补学完成（作答记在补学当天）" }
         if completedKeys.contains(key(date)) { return "全部完成" }
         return activityKeys.contains(key(date)) ? "有学习记录" : "暂无学习记录"
     }

@@ -13,6 +13,7 @@ struct SessionResultView: View {
         NavigationStack {
             ScrollView { VStack(spacing: 20) {
                 if saved {
+                    StreakRewardCard(moduleName: "简单算", streak: activity.streak)
                     celebrationHeader(activity: activity)
                     PracticeHeatmapView(activity: activity)
                 } else {
@@ -46,7 +47,7 @@ struct SessionResultView: View {
         VStack(spacing: 14) {
             Image(systemName: "party.popper.fill")
                 .font(.system(size: 64)).foregroundStyle(Color.purple.gradient)
-            Text("又完成一批口算，太棒了！")
+            Text(session.validRepairKey() == nil ? "又完成一批口算，太棒了！" : "昨天补上了，连续记录接回来了！")
                 .font(.system(.largeTitle, design: .rounded, weight: .bold))
             Text("本次完成 \(statistics.total) 题 · 今天累计 \(activity.todayCount) 题")
                 .font(.title2.weight(.semibold))
@@ -201,7 +202,7 @@ struct TrendCharts: View {
 
 struct SessionRow: View {
     let session: SessionRecord; let operation: OperationType?
-    var body: some View { if let stats = StatisticsCalculator.statistics(for: session, operation: operation) { HStack { VStack(alignment: .leading, spacing: 4) { Text(session.completedAt.formatted(date: .abbreviated, time: .shortened)); Text("\(session.practiceTitle) · \(stats.total)题").font(.headline); Text(String(format: "正确率 %.0f%% · 平均 %@", stats.accuracy * 100, seconds(stats.averageDuration))).foregroundStyle(.secondary) }; Spacer(); Image(systemName: "chevron.right").foregroundStyle(.tertiary) }.padding().background(.quaternary, in: RoundedRectangle(cornerRadius: 12)) } }
+    var body: some View { if let stats = StatisticsCalculator.statistics(for: session, operation: operation) { HStack { VStack(alignment: .leading, spacing: 4) { Text(session.completedAt.formatted(date: .abbreviated, time: .shortened)); Text("\(session.practiceTitle) · \(stats.total)题").font(.headline); if session.isPartial == true { Text("未完成补学 · 已保存回答").font(.caption).foregroundStyle(.secondary) }; Text(String(format: "正确率 %.0f%% · 平均 %@", stats.accuracy * 100, seconds(stats.averageDuration))).foregroundStyle(.secondary) }; Spacer(); Image(systemName: "chevron.right").foregroundStyle(.tertiary) }.padding().background(.quaternary, in: RoundedRectangle(cornerRadius: 12)) } }
 }
 
 struct SessionDetailView: View {
@@ -278,7 +279,7 @@ private struct PracticeHeatmapView: View {
                                     }
                                     .buttonStyle(.plain)
                                     .disabled(date < activity.firstDay || date > activity.today)
-                                    .accessibilityLabel("\(date.formatted(date: .complete, time: .omitted))，完成 \(activity.count(on: date)) 题")
+                                    .accessibilityLabel("\(date.formatted(date: .complete, time: .omitted))，\(activity.isRepaired(date) ? "补学完成" : "完成 \(activity.count(on: date)) 题")")
                                 }
                             }
                         }
@@ -287,7 +288,7 @@ private struct PracticeHeatmapView: View {
             }.frame(height: 140)
 
             HStack {
-                Text("\(selection.formatted(.dateTime.month().day())) · 完成 \(activity.count(on: selection)) 题")
+                Text("\(selection.formatted(.dateTime.month().day())) · \(activity.isRepaired(selection) ? "补学完成（实际作答记在补学当天）" : "完成 \(activity.count(on: selection)) 题")")
                     .font(.subheadline.weight(.medium))
                 Spacer(minLength: 0)
                 HStack(spacing: 4) {
@@ -310,7 +311,7 @@ private struct PracticeHeatmapView: View {
 
     private func color(date: Date) -> Color {
         guard date >= activity.firstDay && date <= activity.today else { return .clear }
-        return color(count: activity.count(on: date))
+        return activity.isRepaired(date) ? purple : color(count: activity.count(on: date))
     }
 
     private func color(count: Int) -> Color {

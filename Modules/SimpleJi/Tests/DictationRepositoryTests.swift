@@ -261,7 +261,7 @@ final class DictationRepositoryTests: XCTestCase {
         XCTAssertEqual(campaign.selectedWordIDs, oldIDs)
         XCTAssertFalse(campaign.selectedWordIDs.contains(newWord))
         let firstDay = try await repository.loadOrCreateDay(
-            limit: 20, campaign: campaign, now: now
+            limit: 0, campaign: campaign, now: now
         )
         XCTAssertEqual(firstDay.id, initiallyEmpty.id)
         XCTAssertEqual(firstDay.limit, 50)
@@ -277,12 +277,12 @@ final class DictationRepositoryTests: XCTestCase {
         let progress = try await repository.baselineProgress(for: campaign)
         XCTAssertEqual(progress, BaselineProgress(total: 51, completed: 50))
         let sameDay = try await repository.loadOrCreateDay(
-            limit: 20, campaign: campaign, now: now
+            limit: 0, campaign: campaign, now: now
         )
         XCTAssertEqual(sameDay.items.count, 50)
         let tomorrow = now.addingTimeInterval(86_400)
         let secondDay = try await repository.loadOrCreateDay(
-            limit: 20, campaign: campaign, now: tomorrow
+            limit: 0, campaign: campaign, now: tomorrow
         )
         XCTAssertEqual(secondDay.limit, 50)
         XCTAssertEqual(secondDay.items.map(\.wordID), [oldIDs[50]])
@@ -905,7 +905,7 @@ final class DictationRepositoryTests: XCTestCase {
         XCTAssertEqual(expanded.phase, .firstPass)
     }
 
-    func testLimitChangeDoesNotTrimPreviousDayRemediationOrBaselineDay() async throws {
+    func testLimitChangePreservesPreviousDayRemediationAndAppliesToBaselineDay() async throws {
         let (_, repository, ids) = try regularLimitFixture(count: 15)
         let day = try await repository.loadOrCreateDay(limit: 1, now: now)
         _ = try await repository.submitFormal(dayID: day.id, wordID: ids[0], recognized: "wrong", now: now)
@@ -918,7 +918,7 @@ final class DictationRepositoryTests: XCTestCase {
         let (controller, baselineRepository, baseline, _, campaign) = try await verificationFixture(wordCount: 2)
         let changed = try await baselineRepository.loadOrCreateDay(limit: 10, campaign: campaign, now: now)
         XCTAssertEqual(changed.items, baseline.items)
-        XCTAssertEqual(changed.limit, 50)
+        XCTAssertEqual(changed.limit, 10)
         XCTAssertEqual(try controller.container.viewContext.count(for: DictationEventEntity.fetchRequest()), 0)
     }
 

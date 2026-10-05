@@ -22,12 +22,14 @@ final class PracticeViewModel: ObservableObject, Identifiable {
     private var feedbackTask: Task<Void, Never>?
     private var isSceneActive = true
     private let uptime: () -> TimeInterval
+    let repairDayKey: String?
 
-    init(mode: PracticeMode, questionCount: Int, selectedOperations: Set<OperationType> = Set(OperationType.allCases), generator: QuestionGenerator = QuestionGenerator(), uptime: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }) {
+    init(mode: PracticeMode, questionCount: Int, selectedOperations: Set<OperationType> = Set(OperationType.allCases), generator: QuestionGenerator = QuestionGenerator(), repairDayKey: String? = nil, uptime: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }) {
         self.mode = mode
         self.selectedOperations = mode.operation.map { [$0] } ?? OperationType.allCases.filter(selectedOperations.contains)
         self.questions = generator.generate(operations: self.selectedOperations, count: questionCount)
         self.uptime = uptime
+        self.repairDayKey = repairDayKey
         beginQuestionTimer()
     }
 
@@ -60,6 +62,15 @@ final class PracticeViewModel: ObservableObject, Identifiable {
     }
     func stop() { timer?.invalidate(); timer = nil; feedbackTask?.cancel(); feedbackTask = nil }
 
+    func partialSession(now: Date = Date()) -> SessionRecord? {
+        guard !records.isEmpty, completedSession == nil else { return nil }
+        var session = SessionRecord(id: id, startedAt: sessionStartedAt, completedAt: now,
+            practiceMode: mode, selectedOperations: mode == .mixed ? selectedOperations : nil,
+            targetQuestionCount: questions.count, questions: records)
+        session.isPartial = true
+        return session
+    }
+
     func scenePhaseChanged(isActive: Bool) {
         isSceneActive = isActive
         guard feedback == nil, completedSession == nil else { return }
@@ -72,6 +83,9 @@ final class PracticeViewModel: ObservableObject, Identifiable {
             completedSession = SessionRecord(id: UUID(), startedAt: sessionStartedAt, completedAt: Date(), practiceMode: mode,
                                              selectedOperations: mode == .mixed ? selectedOperations : nil,
                                              targetQuestionCount: questions.count, questions: records)
+            completedSession?.repairedDayKey = repairDayKey
+            if repairDayKey != nil { completedSession?.repairTimeZoneID = Calendar.current.timeZone.identifier }
+            if completedSession?.validRepairKey() == nil { completedSession?.repairedDayKey = nil }
         } else {
             index += 1; answer = ""; elapsed = 0; elapsedBeforePause = 0; beginQuestionTimer()
         }

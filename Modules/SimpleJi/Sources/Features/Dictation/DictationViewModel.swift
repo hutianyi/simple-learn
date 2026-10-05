@@ -33,16 +33,21 @@ final class DictationViewModel: ObservableObject {
 
     private let repository: DictationRepository
     private let settings: SettingsStore
+    private let repairDayID: UUID?
+    private let isRepairFlow: Bool
     private var feedbackTask: Task<Void, Never>?
     private var feedbackDelayElapsed = false
     private var feedbackNarrationFinished = false
     private let recognitionOverride: ((PKDrawing) async throws -> String?)?
 
     init(container: NSPersistentContainer, settings: SettingsStore,
+         repairDayID: UUID? = nil, isRepairFlow: Bool = false,
          recognition: ((PKDrawing) async throws -> String?)? = nil) {
         recognitionOverride = recognition
         repository = DictationRepository(container: container)
         self.settings = settings
+        self.repairDayID = repairDayID
+        self.isRepairFlow = isRepairFlow
     }
 
     var activeItem: DictationItem? {
@@ -83,7 +88,7 @@ final class DictationViewModel: ObservableObject {
     }
 
     var canDefer: Bool {
-        activeCopy != nil || (activeItem != nil && (day?.phase == .remediationCopy || day?.phase == .retest))
+        !isRepairFlow && (activeCopy != nil || (activeItem != nil && (day?.phase == .remediationCopy || day?.phase == .retest)))
     }
 
     var hasDeferredWork: Bool {
@@ -103,6 +108,14 @@ final class DictationViewModel: ObservableObject {
     }
 
     func start() async {
+        if let repairDayID {
+            guard day == nil, !isBusy else { return }
+            isLoading = true
+            do { day = try await repository.repairDay(id: repairDayID) }
+            catch { errorMessage = error.localizedDescription }
+            isLoading = false
+            return
+        }
         guard day == nil || day?.limit != settings.dictationLimit.rawValue else { return }
         guard !isBusy else { return }
         isLoading = true

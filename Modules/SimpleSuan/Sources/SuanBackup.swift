@@ -1,4 +1,5 @@
 import Foundation
+import StudyShell
 
 enum SuanBackup {
     static func decode(_ data: Data) throws -> AppData {
@@ -8,7 +9,9 @@ enum SuanBackup {
             throw CocoaError(.fileReadCorruptFile)
         }
         for session in value.sessions {
-            guard session.targetQuestionCount > 0, session.targetQuestionCount == session.questions.count,
+            guard session.targetQuestionCount > 0,
+                  (session.isPartial == true ? session.questions.count > 0 && session.questions.count <= session.targetQuestionCount
+                    : session.targetQuestionCount == session.questions.count),
                   session.completedAt >= session.startedAt,
                   Set(session.questions.map(\.id)).count == session.questions.count else { throw CocoaError(.fileReadCorruptFile) }
             for (index, question) in session.questions.enumerated() {
@@ -17,6 +20,17 @@ enum SuanBackup {
                     throw CocoaError(.fileReadCorruptFile)
                 }
             }
+            if session.repairedDayKey != nil {
+                guard session.validRepairKey() != nil else { throw CocoaError(.fileReadCorruptFile) }
+            }
+        }
+        if let handled = value.handledRepairDays {
+            guard handled.allSatisfy({ key in
+                let parts = key.split(separator: "-").compactMap { Int($0) }
+                guard parts.count == 3,
+                      let date = Calendar.current.date(from: DateComponents(year: parts[0], month: parts[1], day: parts[2])) else { return false }
+                return OneDayStreakRepair.dayKey(date) == key
+            }) else { throw CocoaError(.fileReadCorruptFile) }
         }
         return value
     }

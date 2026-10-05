@@ -207,6 +207,7 @@ final class DictationRepository {
             if context.hasChanges { try context.save() }
             let today = DictationEligibility.dayKey(for: now, calendar: calendar)
             let allDays = try context.fetch(DictationDayEntity.fetchRequest())
+                .filter { !$0.dayKey.hasSuffix("#repair") }
                 .sorted { $0.createdAt < $1.createdAt }
             for entity in allDays where entity.phase != DictationPhase.complete.rawValue {
                 var day = try Self.snapshot(entity)
@@ -269,7 +270,8 @@ final class DictationRepository {
                     return (word.dictationState?.totalFormal ?? 0) == 0
                         && !masteredTerms.contains(EnglishNormalizer.normalize(word.english))
                 }
-            let dayLimit = baselinePending.isEmpty ? limit : baselineDailyLimit
+            let baselineLimit = limit == 0 ? baselineDailyLimit : min(limit, baselineDailyLimit)
+            let dayLimit = baselinePending.isEmpty ? limit : baselineLimit
 
             let tomorrow = DictationEligibility.nextDay(after: now, calendar: calendar)
             let candidates = words.compactMap { word -> (word: WordEntity, due: Date, priority: Int)? in
@@ -292,31 +294,41 @@ final class DictationRepository {
             }
             if let existing = allDays.first(where: { $0.dayKey == today }) {
                 var day = try Self.snapshot(existing)
+                let hasProgress: (DictationItem) -> Bool = {
+                    $0.formalResult != nil || $0.awaitsVerification || $0.isWriting
+                        || $0.remainingSeconds < 30 || $0.recognitionFailures > 0
+                        || $0.interruptionCount > 0
+                }
                 if !baselinePending.isEmpty || day.items.contains(where: \.belongsToBaseline) {
-                    guard day.phase == .complete, !baselinePending.isEmpty else { return day }
-                    day.limit = max(day.items.count, day.limit == 0 ? dayLimit : max(day.limit, dayLimit))
-                    let slots = day.limit == 0 ? Int.max : max(0, day.limit - day.items.count)
+                    guard day.limit != baselineLimit || (day.phase == .complete && !baselinePending.isEmpty) else { return day }
+                    day.limit = baselineLimit
+                    var slots = max(0, baselineLimit - day.items.filter(hasProgress).count)
+                    day.items = day.items.filter { item in
+                        if hasProgress(item) { return true }
+                        guard slots > 0 else { return false }
+                        slots -= 1
+                        return true
+                    }
                     let additions = Self.baselineItems(
                         campaign: campaign, wordsByID: wordsByID,
                         completed: completedBaseline,
                         excluding: Set(day.items.map(\.wordID)),
                         masteredTerms: masteredTerms, limit: slots
                     )
-                    if !additions.isEmpty {
-                        day.items.append(contentsOf: additions)
+                    day.items.append(contentsOf: additions)
+                    if day.items.contains(where: { $0.formalResult == nil }) {
                         day.phase = .firstPass
-                        try Self.save(day, to: existing, now: now, in: context, calendar: self.calendar)
+                    } else if day.unresolved == 0 {
+                        day.phase = .complete
+                    } else if day.phase == .firstPass || day.phase == .complete {
+                        day.phase = .firstPassSummary
                     }
+                    try Self.save(day, to: existing, now: now, in: context, calendar: self.calendar)
                     return day
                 }
                 guard day.limit != limit else { return day }
                 day.limit = limit
                 // Keep results and any question already attempted; only postpone untouched words.
-                let hasProgress: (DictationItem) -> Bool = {
-                    $0.formalResult != nil || $0.awaitsVerification || $0.isWriting
-                        || $0.remainingSeconds < 30 || $0.recognitionFailures > 0
-                        || $0.interruptionCount > 0
-                }
                 var slots = limit == 0 ? Int.max : max(0, limit - day.items.filter(hasProgress).count)
                 day.items = day.items.filter { item in
                     if hasProgress(item) { return true }
@@ -377,6 +389,17 @@ final class DictationRepository {
             day.phase = .remediationCopy
             Self.advanceRemediation(&day)
             try Self.save(day, to: entity, now: now, in: context, calendar: self.calendar)
+            return day
+        }
+    }
+
+    func repairDay(id: UUID, now: Date = Date()) async throws -> DictationDay {
+        let context = makeContext()
+        return try await context.perform {
+            let day = try Self.snapshot(Self.fetchDay(id, in: context))
+            guard day.dayKey == DictationEligibility.dayKey(for: now, calendar: self.calendar) + "#repair" else {
+                throw StudyRepairRepository.RepairError.expired
+            }
             return day
         }
     }
@@ -477,7 +500,7 @@ final class DictationRepository {
                     == DictationAnswerMatcher.normalize(item.english) else {
                 throw DictationError.answerChanged
             }
-            guard word.dictationState?.lastFormalDay != day.dayKey else {
+            guard day.isStreakRepair || word.dictationState?.lastFormalDay != day.dayKey else {
                 throw DictationError.alreadyAnswered
             }
 
@@ -510,18 +533,20 @@ final class DictationRepository {
                 throw DictationError.answerChanged
             }
             let cardBefore = state.fsrsCardData
-            let decision = try SRSScheduler.decision(
+            let decision = day.isStreakRepair ? nil : try SRSScheduler.decision(
                 cardData: state.fsrsCardData,
                 answer: correct ? .known : .unknown,
                 date: now
             )
-            state.fsrsCardData = decision.cardData
-            state.nextReviewDate = decision.nextReviewDate
-            state.lastFormalDay = day.dayKey
-            state.lastResult = correct ? "correct" : "incorrect"
-            state.totalFormal += 1
-            if !correct {
-                state.formalNotBefore = DictationEligibility.nextDay(after: now, calendar: calendar)
+            if let decision {
+                state.fsrsCardData = decision.cardData
+                state.nextReviewDate = decision.nextReviewDate
+                state.lastFormalDay = day.dayKey
+                state.lastResult = correct ? "correct" : "incorrect"
+                state.totalFormal += 1
+                if !correct {
+                    state.formalNotBefore = DictationEligibility.nextDay(after: now, calendar: calendar)
+                }
             }
             item.formalResult = correct
             if viaKeyboard {
@@ -536,11 +561,11 @@ final class DictationRepository {
             day.items[index] = item
             Self.recordEvent(
                 in: context, wordID: wordID, dayID: day.id, dayKey: day.dayKey,
-                kind: item.belongsToBaseline ? "baselineFormal" : "formal",
+                kind: day.isStreakRepair ? "repairFormal" : (item.belongsToBaseline ? "baselineFormal" : "formal"),
                 correct: correct, reason: reason, recognized: input.text,
                 english: item.english, chinese: item.chinese, now: now,
                 remaining: item.remainingSeconds,
-                fsrsBefore: cardBefore, fsrsAfter: decision.cardData
+                fsrsBefore: day.isStreakRepair ? nil : cardBefore, fsrsAfter: decision?.cardData
             )
             if day.items.allSatisfy({ $0.formalResult != nil }) {
                 day.phase = day.unresolved > 0 ? .firstPassSummary : .complete
@@ -640,7 +665,7 @@ final class DictationRepository {
             item.recognitionFailures = 0
             if correct {
                 item.remediationPassed = true
-                if let state = word.dictationState {
+                if !day.isStreakRepair, let state = word.dictationState {
                     state.formalNotBefore = DictationEligibility.nextDay(after: now, calendar: calendar)
                 }
             } else {
@@ -912,6 +937,11 @@ final class DictationRepository {
         _ day: DictationDay, to entity: DictationDayEntity, now: Date,
         in context: NSManagedObjectContext, calendar: Calendar
     ) throws {
+        if day.isStreakRepair {
+            guard day.dayKey == DictationEligibility.dayKey(for: now, calendar: calendar) + "#repair" else {
+                throw DictationError.invalidPhase
+            }
+        }
         entity.limit = Int32(day.limit)
         entity.phase = day.phase.rawValue
         entity.tasksData = try JSONEncoder().encode(day.items)

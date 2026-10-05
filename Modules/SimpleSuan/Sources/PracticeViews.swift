@@ -1,4 +1,5 @@
 import SwiftUI
+import StudyShell
 
 struct PracticeFlowView: View {
     @ObservedObject var viewModel: PracticeViewModel
@@ -7,6 +8,8 @@ struct PracticeFlowView: View {
     @State private var confirmEnd = false
     @State private var saved = false
     @State private var saveError: String?
+    @State private var expired = false
+    @State private var hasExpired = false
     var body: some View {
         Group {
             if let session = viewModel.completedSession {
@@ -16,18 +19,45 @@ struct PracticeFlowView: View {
                 PracticeView(viewModel: viewModel, confirmEnd: $confirmEnd)
             }
         }
+        .allowsHitTesting(!hasExpired)
         .alert("结束本次练习？", isPresented: $confirmEnd) {
             Button("继续练习", role: .cancel) {}
-            Button("结束练习", role: .destructive) { viewModel.stop(); dismiss() }
-        } message: { Text("未完成的练习不会计入历史统计。") }
+            Button("结束练习", role: .destructive) { endPractice() }
+        } message: {
+            Text(viewModel.repairDayKey == nil ? "未完成的练习不会计入历史统计。"
+                : "结束后，本次补打卡机会将失效。已经完成的回答会保留，但不会恢复昨天的打卡。")
+        }
         .alert("无法保存练习", isPresented: Binding(get: { saveError != nil }, set: { if !$0 { saveError = nil } })) {
-            Button("重试保存") { if let session = viewModel.completedSession { save(session) } }
+            Button("重试保存") {
+                if let session = viewModel.completedSession { save(session) }
+                else { endPractice() }
+            }
         } message: { Text(saveError ?? "请保留当前页面。") }
         .onDisappear { viewModel.stop() }
+        .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { _ in
+            guard let key = viewModel.repairDayKey, !saved, !hasExpired, viewModel.completedSession == nil,
+                  !OneDayStreakRepair.isYesterday(key, on: Date()) else { return }
+            expired = true
+            hasExpired = true
+            viewModel.stop()
+        }
+        .alert("今天的补学机会已结束", isPresented: $expired) {
+            Button("回到练习首页") { endPractice() }
+        } message: { Text("已经跨天，昨天的连续记录不再恢复。做过的回答会保留，接下来正常开始今天。") }
     }
     private func save(_ session: SessionRecord) {
         do { try store.add(session); saved = true; saveError = nil }
         catch { saveError = error.localizedDescription }
+    }
+    private func endPractice() {
+        viewModel.stop()
+        do {
+            if viewModel.repairDayKey != nil {
+                if let completed = viewModel.completedSession { try store.add(completed) }
+                else if let partial = viewModel.partialSession() { try store.add(partial) }
+            }
+            dismiss()
+        } catch { saveError = error.localizedDescription }
     }
 }
 
@@ -38,6 +68,10 @@ struct PracticeView: View {
     var body: some View {
         VStack(spacing: 18) {
             Text("第 \(viewModel.questionNumber) / \(viewModel.questions.count) 题").font(.title2.weight(.semibold))
+            if viewModel.repairDayKey != nil {
+                Text("补上昨天＋完成今天 · 全部完成后接回连续记录")
+                    .font(.subheadline).foregroundStyle(.secondary)
+            }
             Text(String(format: "%.1f 秒", viewModel.elapsed)).font(.title3.monospacedDigit()).foregroundStyle(.secondary)
             Spacer()
             Text(viewModel.currentQuestion.expression).font(.system(size: 70, weight: .medium, design: .rounded)).minimumScaleFactor(0.5)

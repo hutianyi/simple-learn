@@ -36,6 +36,7 @@ final class ReviewSessionViewModel: ObservableObject {
     private let mode: PracticeMode
     private let sessionLimit: Int?
     private let extraPracticeScope: ExtraPracticeScope
+    private let fixedCardIDs: [UUID]?
     private var queue: [ReviewTask] = []
     private var sessionID: UUID?
     private var knownCount = 0
@@ -46,12 +47,14 @@ final class ReviewSessionViewModel: ObservableObject {
         container: NSPersistentContainer,
         mode: PracticeMode,
         sessionLimit: Int?,
-        extraPracticeScope: ExtraPracticeScope = .weakest20
+        extraPracticeScope: ExtraPracticeScope = .weakest20,
+        fixedCardIDs: [UUID]? = nil
     ) {
         repository = ReviewRepository(container: container)
         self.mode = mode
         self.sessionLimit = sessionLimit
         self.extraPracticeScope = extraPracticeScope
+        self.fixedCardIDs = fixedCardIDs
     }
 
     var answeredCount: Int {
@@ -80,6 +83,13 @@ final class ReviewSessionViewModel: ObservableObject {
                     today: Date()
                 )
             case .extraPractice:
+                if let fixedCardIDs {
+                    let available = try await repository.allStates()
+                    let byID = Dictionary(uniqueKeysWithValues: available.map { ($0.id, $0) })
+                    queue = fixedCardIDs.compactMap { byID[$0].map { ReviewTask(state: $0) } }
+                    guard queue.count == fixedCardIDs.count else { throw StudyRepairRepository.RepairError.unavailable }
+                    break
+                }
                 let includesEverything = extraPracticeScope == .everything
                 states = includesEverything
                     ? try await repository.allStates()

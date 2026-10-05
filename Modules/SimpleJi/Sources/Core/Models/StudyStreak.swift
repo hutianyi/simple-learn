@@ -1,4 +1,17 @@
 import Foundation
+import StudyShell
+
+struct StudyRepairPlan: Codable, Equatable {
+    enum Status: String, Codable { case accepted, declined, abandoned, completed }
+    let yesterdayKey: String
+    let previousStreak: Int
+    let extraCardIDs: [UUID]
+    var dictationDayID: UUID?
+    var cardsComplete: Bool
+    var dictationComplete: Bool
+    var status: Status
+    var restoredAt: Date? = nil
+}
 
 struct StudyCompletionScope: Codable, Equatable {
     var baselineWordIDs: Set<UUID>?
@@ -14,9 +27,11 @@ struct StudyCompletionDay: Codable, Equatable {
     var hasActivity = false
     var completedAt: Date?
     var scope = StudyCompletionScope()
+    var repair: StudyRepairPlan? = nil
 
     var cardsComplete: Bool { requiredCardIDs.isSubset(of: answeredCardIDs) }
-    var isComplete: Bool { hasActivity && cardsComplete && dictationComplete }
+    var normalTasksComplete: Bool { hasActivity && cardsComplete && dictationComplete }
+    var isComplete: Bool { normalTasksComplete && repair?.status != .accepted }
 }
 
 enum StudyStreak {
@@ -42,8 +57,22 @@ enum StudyStreak {
                                now: Date = Date(), calendar: Calendar = .current) -> Set<String> {
         let cutoff = completedDays.map(\.dayKey).min()
             ?? DictationEligibility.dayKey(for: now, calendar: calendar)
-        return Set(completedDays.filter { $0.isComplete && $0.completedAt != nil }.map(\.dayKey))
+        return Set(completedDays.filter { $0.isComplete && ($0.completedAt.map { $0 <= now } ?? false) }.map(\.dayKey))
             .union(historicalKeys.filter { $0 < cutoff })
+            .union(repairedKeys(completedDays: completedDays, now: now))
+    }
+
+    static func repairedKeys(completedDays: [StudyCompletionDay], now: Date = Date()) -> Set<String> {
+        Set(completedDays.compactMap { day in
+            guard let plan = day.repair, plan.status == .completed,
+                  plan.cardsComplete, plan.dictationComplete,
+                  let completedAt = plan.restoredAt ?? day.completedAt, completedAt <= now,
+                  let zone = TimeZone(identifier: day.timeZoneID),
+                  OneDayStreakRepair.dayKey(completedAt, calendar: DictationEligibility.calendar(timeZone: zone)) == day.dayKey,
+                  OneDayStreakRepair.isYesterday(plan.yesterdayKey, on: completedAt,
+                    calendar: DictationEligibility.calendar(timeZone: zone)) else { return nil }
+            return plan.yesterdayKey
+        })
     }
 
     struct HistoricalSession {

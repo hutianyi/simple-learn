@@ -130,6 +130,52 @@ final class SimpleSuanTests: XCTestCase {
         XCTAssertEqual(activity.annualPracticeDays, 2)
     }
 
+
+    func testRepairRestoresOnlyYesterdayWithoutMovingActualAnswers() throws {
+        let now = activityDate(2026, 10, 5, hour: 12)
+        let old = activitySession(count: 40, at: activityDate(2026, 10, 3, hour: 12))
+        var repair = activitySession(count: 80, at: now)
+        repair.repairedDayKey = "2026-10-04"
+        let data = try SuanBackup.decode(SuanBackup.encode(AppData(sessions: [old, repair], handledRepairDays: ["2026-10-04"])))
+        let activity = PracticeActivity(sessions: data.sessions, now: now, calendar: activityCalendar)
+        XCTAssertEqual(activity.streak, 3)
+        XCTAssertEqual(activity.todayCount, 80)
+        XCTAssertEqual(activity.count(on: activityDate(2026, 10, 4)), 0)
+        XCTAssertTrue(activity.isRepaired(activityDate(2026, 10, 4)))
+        XCTAssertEqual(activity.annualPracticeDays, 3)
+        let deleted = data.removingSession(withID: repair.id)
+        XCTAssertEqual(PracticeActivity(sessions: deleted.sessions, now: now, calendar: activityCalendar).streak, 0)
+        var invalid = repair
+        invalid.repairedDayKey = "2026-10-03"
+        XCTAssertThrowsError(try SuanBackup.decode(SuanBackup.encode(AppData(sessions: [invalid]))))
+    }
+
+    func testPartialRepairPreservesAnswersButDoesNotRestoreStreak() throws {
+        let now = activityDate(2026, 10, 5, hour: 12)
+        var partial = activitySession(count: 20, at: now)
+        partial = SessionRecord(id: partial.id, startedAt: now, completedAt: now, practiceMode: .mixed,
+            targetQuestionCount: 80, questions: partial.questions)
+        partial.isPartial = true
+        let data = try SuanBackup.decode(SuanBackup.encode(AppData(sessions: [partial])))
+        XCTAssertEqual(data.sessions[0].questions.count, 20)
+        XCTAssertEqual(PracticeActivity(sessions: data.sessions, now: now, calendar: activityCalendar).streak, 0)
+        partial.repairedDayKey = "2026-10-04"
+        XCTAssertThrowsError(try SuanBackup.decode(SuanBackup.encode(AppData(sessions: [partial]))))
+    }
+
+    @MainActor func testHandledRepairSurvivesRelaunch() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let persistence = PersistenceService(directoryURL: folder)
+        let now = Date()
+        let prior = Calendar.current.date(byAdding: .day, value: -2, to: now)!
+        let store = AppDataStore(persistence: persistence)
+        try store.add(activitySession(count: 40, at: prior))
+        let offer = try XCTUnwrap(store.repairOffer(now: now))
+        try store.handleRepair(offer, now: now)
+        let relaunched = AppDataStore(persistence: persistence)
+        XCTAssertNil(relaunched.repairOffer(now: now))
+        XCTAssertThrowsError(try relaunched.handleRepair(offer, now: now))
+    }
     private var activityCalendar: Calendar {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!

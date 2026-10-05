@@ -84,6 +84,7 @@ struct DictationDay: Codable, Equatable {
     var firstPassCorrect: Int { items.filter { $0.formalResult == true }.count }
     var firstPassWrong: Int { items.filter { $0.formalResult == false }.count }
     var unresolved: Int { items.filter(\.needsRemediation).count }
+    var isStreakRepair: Bool { dayKey.hasSuffix("#repair") }
     var firstPassAccuracy: Double? {
         guard firstPassAnswered > 0 else { return nil }
         return Double(firstPassCorrect) / Double(firstPassAnswered)

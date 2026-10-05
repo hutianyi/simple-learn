@@ -147,7 +147,8 @@ struct HomeView: View {
             if todayDay.phase != DictationPhase.complete.rawValue { return true }
             let count = (try? JSONDecoder().decode([DictationItem].self,
                                                     from: todayDay.tasksData))?.count ?? 0
-            return hasPendingBaseline && count < max(50, Int(todayDay.limit))
+            let baselineLimit = settings.dictationLimit.rawValue == 0 ? 50 : min(50, settings.dictationLimit.rawValue)
+            return hasPendingBaseline && count < baselineLimit
         }
         if hasPendingBaseline { return true }
         return dictationStates.contains {

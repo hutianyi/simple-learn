@@ -1,4 +1,5 @@
 import Foundation
+import StudyShell
 
 struct SessionStatistics {
     let total: Int
@@ -21,28 +22,36 @@ struct PracticeActivity {
     let calendar: Calendar
     let today: Date
     let questionCounts: [Date: Int]
+    let repairedKeys: Set<String>
 
     init(sessions: [SessionRecord], now: Date = Date(), calendar: Calendar = .current) {
         self.calendar = calendar
         today = calendar.startOfDay(for: now)
         // Only saved, completed batches contribute; midnight follows each answer's date.
-        questionCounts = sessions.flatMap(\.questions).reduce(into: [:]) { counts, question in
+        questionCounts = sessions.filter { $0.isPartial != true }.flatMap(\.questions).reduce(into: [:]) { counts, question in
             guard question.answeredAt <= now else { return }
             counts[calendar.startOfDay(for: question.answeredAt), default: 0] += 1
         }
+        repairedKeys = Set(sessions.filter { $0.completedAt <= now }.compactMap { $0.validRepairKey(calendar: calendar) })
     }
 
     var firstDay: Date { calendar.date(byAdding: .day, value: -364, to: today) ?? today }
     var todayCount: Int { count(on: today) }
-    var annualPracticeDays: Int { questionCounts.keys.filter { $0 >= firstDay && $0 <= today }.count }
+    var completedKeys: Set<String> {
+        Set(questionCounts.keys.map { OneDayStreakRepair.dayKey($0, calendar: calendar) }).union(repairedKeys)
+    }
+    var annualPracticeDays: Int {
+        completedKeys.filter { $0 >= OneDayStreakRepair.dayKey(firstDay, calendar: calendar)
+            && $0 <= OneDayStreakRepair.dayKey(today, calendar: calendar) }.count
+    }
     var streak: Int {
         var cursor = today
-        if count(on: cursor) == 0 {
+        if !completedKeys.contains(OneDayStreakRepair.dayKey(cursor, calendar: calendar)) {
             guard let yesterday = calendar.date(byAdding: .day, value: -1, to: cursor) else { return 0 }
             cursor = yesterday
         }
         var days = 0
-        while count(on: cursor) > 0 {
+        while completedKeys.contains(OneDayStreakRepair.dayKey(cursor, calendar: calendar)) {
             days += 1
             guard let previous = calendar.date(byAdding: .day, value: -1, to: cursor) else { break }
             cursor = previous
@@ -51,6 +60,7 @@ struct PracticeActivity {
     }
 
     func count(on date: Date) -> Int { questionCounts[calendar.startOfDay(for: date)] ?? 0 }
+    func isRepaired(_ date: Date) -> Bool { repairedKeys.contains(OneDayStreakRepair.dayKey(date, calendar: calendar)) }
 
     static func intensity(for count: Int) -> Double {
         guard count > 0 else { return 0 }

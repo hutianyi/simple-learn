@@ -1,4 +1,5 @@
 import SwiftUI
+import StudyShell
 
 struct ContentView: View {
     var body: some View {
@@ -13,10 +14,15 @@ struct ContentView: View {
 }
 
 struct StartPracticeView: View {
+    @EnvironmentObject private var store: AppDataStore
+    @Environment(\.scenePhase) private var scenePhase
     @State private var mode: PracticeMode = .mixed
     @State private var mixedOperations = Set(OperationType.allCases)
     @State private var questionCount = 40
     @State private var practice: PracticeViewModel?
+    @State private var repairOffer: OneDayStreakRepair.Offer?
+    @State private var repairError: String?
+    @State private var checkedDayKey = ""
     var body: some View {
         VStack(spacing: 28) {
             Spacer()
@@ -54,7 +60,36 @@ struct StartPracticeView: View {
             Spacer()
         }.padding()
         .navigationBarTitleDisplayMode(.inline)
-        .fullScreenCover(item: $practice) { PracticeFlowView(viewModel: $0) }
+        .fullScreenCover(item: $practice) { PracticeFlowView(viewModel: $0).interactiveDismissDisabled() }
+        .onAppear(perform: checkRepair)
+        .onChange(of: scenePhase) { _, phase in if phase == .active { checkRepair() } }
+        .alert("补上昨天，接回连续记录？", isPresented: Binding(
+            get: { repairOffer != nil }, set: { if !$0 { repairOffer = nil } }), presenting: repairOffer) { offer in
+            Button("补上昨天") { decideRepair(offer, accepted: true) }
+            Button("放弃连续记录", role: .cancel) { decideRepair(offer, accepted: false) }
+        } message: { offer in
+            Text("你之前已经连续完成了 \(offer.previousStreak) 天！\n昨天还没完成。补昨天 \(questionCount) 题，加今天 \(questionCount) 题，共 \(questionCount * 2) 题，接着一次做完就能恢复连续记录。\n主动结束或过了今天，这次机会就结束。")
+        }
+        .alert("无法准备补学", isPresented: Binding(get: { repairError != nil }, set: { if !$0 { repairError = nil } })) {
+            Button("好", role: .cancel) {}
+        } message: { Text(repairError ?? "发生未知错误。") }
+    }
+
+    private func checkRepair() {
+        let key = OneDayStreakRepair.dayKey(Date())
+        guard practice == nil, key != checkedDayKey else { return }
+        checkedDayKey = key
+        repairOffer = store.repairOffer()
+    }
+
+    private func decideRepair(_ offer: OneDayStreakRepair.Offer, accepted: Bool) {
+        do {
+            try store.handleRepair(offer)
+            if accepted {
+                practice = PracticeViewModel(mode: mode, questionCount: questionCount * 2,
+                    selectedOperations: mixedOperations, repairDayKey: offer.yesterdayKey)
+            }
+        } catch { repairError = error.localizedDescription }
     }
 
     private func toggle(_ operation: OperationType) {

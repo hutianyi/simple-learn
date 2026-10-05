@@ -48,7 +48,8 @@ final class StudyCompletionRepository {
         day.requiredCardIDs.formUnion(day.answeredCardIDs)
         day.requiredCardIDs.formIntersection(Set(cards.map(\.id)))
 
-        let dictationDays = try context.fetch(DictationDayEntity.fetchRequest()).filter { $0.dayKey <= key }
+        let allDictationDays = try context.fetch(DictationDayEntity.fetchRequest())
+        let dictationDays = allDictationDays.filter { $0.dayKey <= key && !$0.dayKey.hasSuffix("#repair") }
         let unfinished = try dictationDays.contains { entity in
             let items = try JSONDecoder().decode([DictationItem].self, from: entity.tasksData)
             return !StudyStreak.dictationFinished(phase: entity.phase, items: items)
@@ -80,6 +81,17 @@ final class StudyCompletionRepository {
         day.hasActivity = !events.isEmpty || dictationEvents.contains {
             $0.submittedAt >= start && $0.submittedAt <= now
                 && ($0.result == "correct" || $0.result == "incorrect")
+        }
+        if var repair = day.repair, repair.status == .accepted {
+            if let id = repair.dictationDayID, let entity = allDictationDays.first(where: { $0.id == id }) {
+                let items = try JSONDecoder().decode([DictationItem].self, from: entity.tasksData)
+                repair.dictationComplete = StudyStreak.dictationFinished(phase: entity.phase, items: items)
+            }
+            if day.normalTasksComplete && repair.cardsComplete && repair.dictationComplete {
+                repair.status = .completed
+                repair.restoredAt = now
+            }
+            day.repair = repair
         }
         day.completedAt = day.isComplete ? (day.completedAt ?? now) : nil
         guard day != previous else { return }

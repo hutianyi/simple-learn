@@ -1,4 +1,5 @@
 import Foundation
+import StudyShell
 
 enum OperationType: String, Codable, CaseIterable, Identifiable {
     case addition, subtraction, multiplication, division
@@ -59,6 +60,9 @@ struct SessionRecord: Identifiable, Codable, Equatable {
     let selectedOperations: [OperationType]?
     let targetQuestionCount: Int
     let questions: [QuestionRecord]
+    var repairedDayKey: String? = nil
+    var isPartial: Bool? = nil
+    var repairTimeZoneID: String? = nil
 
     init(id: UUID, startedAt: Date, completedAt: Date, practiceMode: PracticeMode,
          selectedOperations: [OperationType]? = nil, targetQuestionCount: Int, questions: [QuestionRecord]) {
@@ -71,6 +75,21 @@ struct SessionRecord: Identifiable, Codable, Equatable {
         self.questions = questions
     }
 
+    func validRepairKey(calendar: Calendar = .current) -> String? {
+        var calendar = calendar
+        if let zoneID = repairTimeZoneID {
+            guard let zone = TimeZone(identifier: zoneID) else { return nil }
+            calendar.timeZone = zone
+        }
+        guard isPartial != true, let key = repairedDayKey,
+              targetQuestionCount >= 2, targetQuestionCount.isMultiple(of: 2),
+              questions.count == targetQuestionCount,
+              OneDayStreakRepair.isYesterday(key, on: completedAt, calendar: calendar),
+              calendar.isDate(startedAt, inSameDayAs: completedAt),
+              questions.allSatisfy({ calendar.isDate($0.answeredAt, inSameDayAs: completedAt) }) else { return nil }
+        return key
+    }
+
     var practiceTitle: String {
         guard practiceMode == .mixed, let selectedOperations else { return practiceMode.title }
         let titles = OperationType.allCases.filter(selectedOperations.contains).map(\.title).joined(separator: "、")
@@ -81,6 +100,7 @@ struct SessionRecord: Identifiable, Codable, Equatable {
 struct AppData: Codable, Equatable {
     var schemaVersion: Int = 1
     var sessions: [SessionRecord] = []
+    var handledRepairDays: Set<String>? = nil
 
     func removingSession(withID id: UUID) -> AppData {
         var copy = self

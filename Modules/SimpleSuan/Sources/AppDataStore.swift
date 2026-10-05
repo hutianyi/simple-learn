@@ -1,8 +1,13 @@
 import Foundation
 import Combine
+import StudyShell
 
 @MainActor
 final class AppDataStore: ObservableObject {
+    enum RepairError: LocalizedError {
+        case unavailable
+        var errorDescription: String? { "补学机会已经结束，请正常开始今天的学习。" }
+    }
     @Published private(set) var appData: AppData
     @Published private(set) var loadError: String?
     private let persistence: PersistenceService
@@ -14,6 +19,18 @@ final class AppDataStore: ObservableObject {
     }
 
     var sessions: [SessionRecord] { appData.sessions.sorted { $0.completedAt > $1.completedAt } }
+    func repairOffer(now: Date = Date(), calendar: Calendar = .current) -> OneDayStreakRepair.Offer? {
+        guard loadError == nil else { return nil }
+        return OneDayStreakRepair.offer(completedKeys: PracticeActivity(sessions: sessions, now: now, calendar: calendar).completedKeys,
+            handledKeys: appData.handledRepairDays ?? [], now: now, calendar: calendar)
+    }
+    func handleRepair(_ offer: OneDayStreakRepair.Offer, now: Date = Date()) throws {
+        guard repairOffer(now: now) == offer else { throw RepairError.unavailable }
+        var updated = appData
+        updated.handledRepairDays = (updated.handledRepairDays ?? []).union([offer.yesterdayKey])
+        try persistence.save(updated)
+        appData = updated
+    }
     func exportData() throws -> Data {
         guard loadError == nil else { throw CocoaError(.fileReadCorruptFile) }
         return try SuanBackup.encode(appData)

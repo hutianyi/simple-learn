@@ -18,6 +18,9 @@ struct DictationView: View {
     @State private var timerPersistenceTask: Task<Void, Never>?
     @State private var keyboardPrompt: KeyboardPrompt?
     @State private var verificationAlertPresented = false
+    @State private var showingRepairExit = false
+    private let onComplete: (() -> Void)?
+    private let onExit: (() -> Void)?
 
     private struct KeyboardPrompt: Identifiable {
         let id: String
@@ -25,10 +28,14 @@ struct DictationView: View {
         let answer: String?
     }
 
-    init(container: NSPersistentContainer, settings: SettingsStore) {
+    init(container: NSPersistentContainer, settings: SettingsStore, repairDayID: UUID? = nil,
+         onComplete: (() -> Void)? = nil, onExit: (() -> Void)? = nil) {
         self.settings = settings
+        self.onComplete = onComplete
+        self.onExit = onExit
         _viewModel = StateObject(
-            wrappedValue: DictationViewModel(container: container, settings: settings)
+            wrappedValue: DictationViewModel(container: container, settings: settings,
+                repairDayID: repairDayID, isRepairFlow: onComplete != nil)
         )
     }
 
@@ -47,6 +54,11 @@ struct DictationView: View {
         .onChange(of: copyNarrationKey, initial: true) { _, _ in narrateCurrentCopy() }
         .task(id: feedbackNarrationKey) { narrateFeedback() }
         .onDisappear { speech.stop() }
+        .onChange(of: completionReady) { _, ready in if ready { onComplete?() } }
+        .confirmationDialog("结束本次补学？", isPresented: $showingRepairExit, titleVisibility: .visible) {
+            Button("结束补学", role: .destructive) { finishReturnHome() }
+            Button("继续学习", role: .cancel) {}
+        } message: { Text("结束后，本次补打卡机会将失效。已经完成的回答会保留。") }
         .onChange(of: viewModel.verificationKey) { _, _ in presentPendingVerification() }
         .onReceive(Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()) { _ in
             tick()
@@ -117,6 +129,11 @@ struct DictationView: View {
         }
     }
 
+    private var completionReady: Bool {
+        viewModel.day?.phase == .complete && viewModel.feedback == nil
+            && !viewModel.isLoading && !viewModel.isBusy && !isSubmitting && keyboardPrompt == nil
+    }
+
     @ViewBuilder
     private var content: some View {
         if viewModel.isLoading {
@@ -138,7 +155,8 @@ struct DictationView: View {
             case .firstPassSummary:
                 firstPassSummary(day)
             case .complete:
-                completeView(day)
+                if onComplete != nil { ProgressView("正在进入下一项学习…") }
+                else { completeView(day) }
             }
         } else {
             statusView("暂时无法载入默写任务", symbol: "exclamationmark.triangle")
@@ -554,12 +572,17 @@ struct DictationView: View {
     }
 
     private func returnHome() {
+        if onExit != nil { showingRepairExit = true }
+        else { finishReturnHome() }
+    }
+
+    private func finishReturnHome() {
         speech.stop()
         pauseClock()
         Task {
             persistTimerState(isWriting: false)
             await timerPersistenceTask?.value
-            router.reset()
+            if let onExit { onExit() } else { router.reset() }
         }
     }
 

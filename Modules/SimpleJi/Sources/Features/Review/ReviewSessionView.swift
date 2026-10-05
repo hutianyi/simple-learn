@@ -10,6 +10,8 @@ struct ReviewSessionView: View {
     @State private var showingExitConfirmation = false
 
     private let mode: PracticeMode
+    private let onComplete: (() -> Void)?
+    private let onExit: (() -> Void)?
 
     init(
         container: NSPersistentContainer,
@@ -17,17 +19,23 @@ struct ReviewSessionView: View {
         speech: SpeechService,
         mode: PracticeMode = .scheduled,
         sessionLimit: Int? = nil,
-        extraPracticeScope: ExtraPracticeScope = .weakest20
+        extraPracticeScope: ExtraPracticeScope = .weakest20,
+        fixedCardIDs: [UUID]? = nil,
+        onComplete: (() -> Void)? = nil,
+        onExit: (() -> Void)? = nil
     ) {
         self.settings = settings
         self.speech = speech
         self.mode = mode
+        self.onComplete = onComplete
+        self.onExit = onExit
         _viewModel = StateObject(
             wrappedValue: ReviewSessionViewModel(
                 container: container,
                 mode: mode,
                 sessionLimit: sessionLimit,
-                extraPracticeScope: extraPracticeScope
+                extraPracticeScope: extraPracticeScope,
+                fixedCardIDs: fixedCardIDs
             )
         )
     }
@@ -41,6 +49,7 @@ struct ReviewSessionView: View {
         .navigationBarBackButtonHidden()
         .toolbar(.hidden, for: .navigationBar)
         .task { await viewModel.start() }
+        .onChange(of: sessionFinished) { _, finished in if finished { onComplete?() } }
         .confirmationDialog(
             "退出本轮复习？",
             isPresented: $showingExitConfirmation,
@@ -51,8 +60,13 @@ struct ReviewSessionView: View {
             }
             Button("继续复习", role: .cancel) {}
         } message: {
-            Text("已经完成的回答会保留。未完成的卡片下次会重新进入队列。")
+            Text(onExit == nil ? "已经完成的回答会保留。未完成的卡片下次会重新进入队列。"
+                : "结束后，本次补打卡机会将失效。已经完成的回答会保留。")
         }
+    }
+
+    private var sessionFinished: Bool {
+        switch viewModel.phase { case .summary, .empty: return true; default: return false }
     }
 
     private var celebrationReady: Bool {
@@ -69,15 +83,17 @@ struct ReviewSessionView: View {
             ProgressView("正在准备卡片…")
                 .font(.title3)
         case .empty:
-            emptyView
+            if onComplete != nil { ProgressView("正在进入下一项学习…") }
+            else { emptyView }
         case .active:
             activeView
         case .summary(let summary):
-            SessionSummaryView(
+            if onComplete != nil { ProgressView("正在进入下一项学习…") }
+            else { SessionSummaryView(
                 summary: summary,
                 onAgain: { Task { await viewModel.restart() } },
                 onHome: returnHome
-            )
+            ) }
         case .failed(let message):
             failureView(message)
         }
@@ -285,7 +301,7 @@ struct ReviewSessionView: View {
 
     private func requestExit() {
         speech.stop()
-        if viewModel.shouldConfirmExit {
+        if onExit != nil || viewModel.shouldConfirmExit {
             showingExitConfirmation = true
         } else {
             Task { await exitAndReturnHome() }
@@ -300,7 +316,7 @@ struct ReviewSessionView: View {
 
     private func returnHome() {
         speech.stop()
-        router.reset()
+        if let onExit { onExit() } else { router.reset() }
     }
 
     private func speak(_ text: String, language: SpeechLanguage) {

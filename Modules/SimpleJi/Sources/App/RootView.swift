@@ -10,6 +10,8 @@ struct RootView: View {
     @State private var celebrationReady = true
     @State private var homeDate = Date()
     @State private var baselineErrorMessage: String?
+    @State private var repairOffer: StudyRepairOffer?
+    @State private var repairFlow: StudyRepairOffer?
 
     var body: some View {
         Group {
@@ -23,7 +25,7 @@ struct RootView: View {
                 }
                 .onPreferenceChange(StudyCelebrationReadyKey.self) { celebrationReady = $0 }
                 .background {
-                    StudyCelebrationObserver(settings: settings, ready: celebrationReady)
+                    StudyCelebrationObserver(settings: settings, ready: celebrationReady && repairFlow == nil && repairOffer == nil)
                         .id(DictationEligibility.dayKey(for: homeDate))
                 }
             } else {
@@ -42,6 +44,15 @@ struct RootView: View {
         } message: {
             Text(baselineErrorMessage ?? "发生未知错误。")
         }
+        .alert("补上昨天，接回连续记录？", isPresented: Binding(
+            get: { repairOffer != nil }, set: { if !$0 { repairOffer = nil } }), presenting: repairOffer) { offer in
+            Button("补上昨天") { decideRepair(offer, accepted: true) }
+            Button("放弃连续记录", role: .cancel) { decideRepair(offer, accepted: false) }
+        } message: { offer in Text(offer.message) }
+        .fullScreenCover(item: $repairFlow) { offer in
+            StudyRepairFlowView(dayKey: offer.todayKey, container: persistence.container, settings: settings, speech: speech)
+                .interactiveDismissDisabled()
+        }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { homeDate = Date() }
         }
@@ -56,9 +67,19 @@ struct RootView: View {
                     scope: StudyCompletionScope(
                         baselineWordIDs: settings.baselineCampaign.map { Set($0.selectedWordIDs) },
                         masteredTerms: settings.masteredDictationTerms))
+                repairOffer = try await StudyRepairRepository(container: persistence.container).prepare()
             } catch {
                 baselineErrorMessage = error.localizedDescription
             }
+        }
+    }
+
+    private func decideRepair(_ offer: StudyRepairOffer, accepted: Bool) {
+        Task {
+            do {
+                try await StudyRepairRepository(container: persistence.container).decide(offer, accepted: accepted)
+                if accepted { repairFlow = offer }
+            } catch { baselineErrorMessage = error.localizedDescription }
         }
     }
 
