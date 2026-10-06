@@ -284,7 +284,7 @@ final class DictationRepository {
                       due < tomorrow,
                       (state.formalNotBefore ?? .distantPast) <= now,
                       state.lastFormalDay != today else { return nil }
-                let priority = state.totalFormal == 0 ? 2 : (due < calendar.startOfDay(for: now) ? 0 : 1)
+                let priority = due < calendar.startOfDay(for: now) ? 0 : (state.totalFormal == 0 ? 2 : 1)
                 return (word, due, priority)
             }.sorted {
                 if $0.priority != $1.priority { return $0.priority < $1.priority }

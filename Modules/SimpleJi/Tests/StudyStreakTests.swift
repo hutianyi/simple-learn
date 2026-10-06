@@ -392,6 +392,8 @@ final class StudyStreakTests: XCTestCase {
             XCTAssertEqual(Set(cardsBefore.map(\.id)), Set(cardsAfter.map(\.id)))
             XCTAssertEqual(queueBefore, queueAfter)
             XCTAssertEqual(queueAfter.items.count, 10)
+            let exhaustedBefore = try await repository.dictationAllowanceExhausted(now: date(3))
+            XCTAssertFalse(exhaustedBefore)
             XCTAssertNil(try snapshot(controller, day: 3).repair?.dictationDayID)
             XCTAssertFalse(try context.fetch(DictationDayEntity.fetchRequest()).contains { $0.dayKey.hasSuffix("#repair") })
             let untouched = Set(try context.fetch(DictationStateEntity.fetchRequest()).map(\.wordID))
@@ -407,9 +409,11 @@ final class StudyStreakTests: XCTestCase {
                     recognized: item.english, now: date(3))
             }
             let finished = try await repository.today(now: date(3))
-            XCTAssertTrue(finished.isComplete)
-            XCTAssertEqual(finished.repair?.status, accepted ? .completed : .declined)
-            XCTAssertEqual(StudyStreak.count(completedDays: [completed(1), finished], now: date(3), calendar: calendar), accepted ? 3 : 1)
+            XCTAssertFalse(finished.isComplete, "Two previous days' words remain outside today's allowance")
+            XCTAssertEqual(finished.repair?.status, accepted ? .accepted : .declined)
+            XCTAssertEqual(StudyStreak.count(completedDays: [completed(1), finished], now: date(3), calendar: calendar), 0)
+            let exhaustedAfter = try await repository.dictationAllowanceExhausted(now: date(3))
+            XCTAssertTrue(exhaustedAfter, "The repair flow must stop rather than reopen the completed queue")
             let next = try await dictation.loadOrCreateDay(limit: 10, campaign: campaign, now: date(4))
             XCTAssertLessThanOrEqual(next.items.count, 10)
             XCTAssertEqual(Set(next.items.prefix(2).map(\.wordID)), untouched)
@@ -449,6 +453,94 @@ final class StudyStreakTests: XCTestCase {
         let unlimited = try await repo.loadOrCreateDay(limit: 0, campaign: campaign, now: date(4))
         XCTAssertEqual(unlimited.limit, 50)
         XCTAssertEqual(unlimited.items.count, 2)
+    }
+
+    func testOverdueDictationUsesDailyAllowanceBeforeTodaysWords() async throws {
+        let (controller, repository, ids, campaign) = try limitedOverdueFixture(overdue: 30, dueToday: 30)
+        let day = try await repository.loadOrCreateDay(limit: 50, campaign: campaign, now: date(3))
+        XCTAssertEqual(day.items.count, 50)
+        XCTAssertEqual(Set(day.items.prefix(30).map(\.wordID)), Set(ids.prefix(30)))
+        XCTAssertEqual(Set(day.items.dropFirst(30).map(\.wordID)), Set(ids[30..<50]))
+        for item in day.items {
+            _ = try await repository.submitFormal(dayID: day.id, wordID: item.wordID, recognized: item.english, now: date(3))
+        }
+        let finished = try snapshot(controller, day: 3)
+        XCTAssertTrue(finished.isComplete, "Today's words beyond the allowance are deferred, not previous debt")
+        XCTAssertTrue(StudyStreak.shouldCelebrate(day: finished, todayKey: finished.dayKey, lastCelebratedKey: ""))
+        let reopened = try await repository.loadOrCreateDay(limit: 50, campaign: campaign, now: date(3))
+        XCTAssertEqual(reopened.items.count, 50)
+        XCTAssertEqual(reopened.phase, .complete)
+        let next = try await repository.loadOrCreateDay(limit: 50, campaign: campaign, now: date(4))
+        XCTAssertEqual(Set(next.items.prefix(10).map(\.wordID)), Set(ids[50...]), "Yesterday's ten deferred words have priority today")
+        XCTAssertLessThanOrEqual(next.items.count, 50)
+        controller.container.viewContext.refreshAllObjects()
+        XCTAssertEqual(try controller.container.viewContext.fetch(DictationEventEntity.fetchRequest()).filter { $0.kind == "formal" }.count, 50)
+    }
+
+    func testOverdueWordsOutsideCompletedDailyAllowanceBlockCelebration() async throws {
+        let (controller, repository, ids, campaign) = try limitedOverdueFixture(overdue: 6, dueToday: 1)
+        let day = try await repository.loadOrCreateDay(limit: 5, campaign: campaign, now: date(3))
+        XCTAssertEqual(day.items.count, 5)
+        XCTAssertTrue(Set(day.items.map(\.wordID)).isSubset(of: Set(ids.prefix(6))))
+        for item in day.items {
+            _ = try await repository.submitFormal(dayID: day.id, wordID: item.wordID, recognized: item.english, now: date(3))
+        }
+        let unfinished = try snapshot(controller, day: 3)
+        XCTAssertFalse(unfinished.dictationComplete)
+        XCTAssertFalse(unfinished.isComplete)
+        XCTAssertNil(unfinished.completedAt)
+        XCTAssertFalse(StudyStreak.shouldCelebrate(day: unfinished, todayKey: unfinished.dayKey, lastCelebratedKey: ""))
+        let reopened = try await repository.loadOrCreateDay(limit: 5, campaign: campaign, now: date(3))
+        XCTAssertEqual(reopened.items.count, 5, "Do not bypass the daily allowance to clear debt")
+        XCTAssertEqual(reopened.phase, .complete)
+        let next = try await repository.loadOrCreateDay(limit: 5, campaign: campaign, now: date(4))
+        XCTAssertEqual(Set(next.items.prefix(2).map(\.wordID)), Set(ids[5...]))
+        XCTAssertLessThanOrEqual(next.items.count, 5)
+        for item in next.items {
+            _ = try await repository.submitFormal(dayID: next.id, wordID: item.wordID, recognized: item.english, now: date(4))
+        }
+        XCTAssertTrue(try snapshot(controller, day: 4).isComplete)
+        XCTAssertFalse(try snapshot(controller, day: 3).isComplete, "Clearing debt later must not rewrite yesterday")
+    }
+
+    func testOverdueFirstFormalWordAlsoPrecedesTodaysRegularReview() async throws {
+        let (controller, repository, ids, campaign) = try limitedOverdueFixture(overdue: 1, dueToday: 1)
+        let context = controller.container.viewContext
+        let state = try XCTUnwrap(try context.fetch(DictationStateEntity.fetchRequest()).first { $0.wordID == ids[0] })
+        state.totalFormal = 0
+        try context.save()
+        let day = try await repository.loadOrCreateDay(limit: 1, campaign: campaign, now: date(3))
+        XCTAssertEqual(day.items.map(\.wordID), [ids[0]])
+        _ = try await repository.submitFormal(dayID: day.id, wordID: ids[0], recognized: "wrong", now: date(3))
+        _ = try await repository.beginRemediation(dayID: day.id, now: date(3))
+        for _ in 0..<3 { _ = try await repository.recordRemediationCopy(dayID: day.id, wordID: ids[0], recognized: "word0", now: date(3)) }
+        XCTAssertFalse(try snapshot(controller, day: 3).isComplete)
+        _ = try await repository.submitRetest(dayID: day.id, wordID: ids[0], recognized: "wrong", now: date(3))
+        XCTAssertFalse(try snapshot(controller, day: 3).isComplete)
+        for _ in 0..<3 { _ = try await repository.recordRemediationCopy(dayID: day.id, wordID: ids[0], recognized: "word0", now: date(3)) }
+        _ = try await repository.submitRetest(dayID: day.id, wordID: ids[0], recognized: "word0", now: date(3))
+        XCTAssertTrue(try snapshot(controller, day: 3).isComplete)
+    }
+
+    private func limitedOverdueFixture(overdue: Int, dueToday: Int) throws
+        -> (PersistenceController, DictationRepository, [UUID], BaselineCampaignSnapshot) {
+        let controller = PersistenceController(inMemory: true)
+        let context = controller.container.viewContext
+        var ids: [UUID] = []
+        for index in 0..<(overdue + dueToday) {
+            let (word, _) = try seedWord(in: context, due: date(10), now: date(1), english: "word\(index)")
+            let state = DictationStateEntity(context: context)
+            state.id = UUID(); state.wordID = word.id; state.word = word
+            state.englishVersion = word.english; state.totalFormal = 1
+            state.initialCopyStartedAt = date(1); state.initialCopyCompletedAt = date(1)
+            state.initialCopyCount = 3
+            state.nextReviewDate = date(index < overdue ? 2 : 3).addingTimeInterval(Double(index))
+            state.fsrsCardData = try SRSScheduler.encodeCard(SRSScheduler.emptyCard(due: state.nextReviewDate!))
+            ids.append(word.id)
+        }
+        try context.save()
+        let campaign = BaselineCampaignSnapshot(selectedWordIDs: [], activatedAt: date(1))
+        return (controller, DictationRepository(container: controller.container, calendar: calendar), ids, campaign)
     }
 
     private func repairFixture(overdue: Bool = false) async throws -> (PersistenceController, StudyRepairRepository, StudyRepairOffer) {

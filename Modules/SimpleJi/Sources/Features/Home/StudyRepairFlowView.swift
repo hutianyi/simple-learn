@@ -17,11 +17,12 @@ struct StudyRepairFlowView: View {
     @State private var errorMessage: String?
 
     private enum Stage {
-        case loading, cards, dictation, complete, expired
+        case loading, cards, dictation, dailyLimit, complete, expired
         var title: String {
             switch self {
             case .cards: return "先完成今天的卡片"
             case .dictation: return "接着完成默写和订正"
+            case .dailyLimit: return "今天的默写额度已完成"
             default: return "补上昨天＋完成今天"
             }
         }
@@ -32,7 +33,7 @@ struct StudyRepairFlowView: View {
         VStack(spacing: 0) {
             if case .complete = stage {} else {
                 Text(stage.title).font(.headline).padding(12)
-                Text("跟着这一轮做完，就能接回连续记录。")
+                Text(stage == .dailyLimit ? "今天完成的学习都已保存。" : "清完积欠并做完今天的任务，就能接回连续记录。")
                     .font(.subheadline).foregroundStyle(.secondary).padding(.bottom, 8)
             }
             content.id(stageID)
@@ -67,6 +68,13 @@ struct StudyRepairFlowView: View {
         case .complete:
             NavigationStack { StatisticsView(settings: settings, celebration: true) }
                 .onAppear { lastCelebratedKey = dayKey }
+        case .dailyLimit:
+            VStack(spacing: 20) {
+                Text("剩余积欠明天继续").font(.title.bold())
+                Text("以前欠下的默写还没全部做完，这次暂时不能补上打卡。每日上限保持不变，剩余的词明天优先安排。")
+                    .multilineTextAlignment(.center)
+                Button("返回首页", action: end).buttonStyle(LargePrimaryButtonStyle())
+            }.padding(30).frame(maxWidth: .infinity, maxHeight: .infinity)
         case .expired:
             VStack(spacing: 20) {
                 Text("今天的补学机会已结束").font(.title.bold())
@@ -93,7 +101,8 @@ struct StudyRepairFlowView: View {
             } else if !day.cardsComplete {
                 stage = .cards
             } else if !day.dictationComplete {
-                stage = .dictation
+                // Do not reopen the same finished queue when debt exceeds today's allowance.
+                stage = try await repository.dictationAllowanceExhausted() ? .dailyLimit : .dictation
             } else {
                 throw StudyRepairRepository.RepairError.unavailable
             }

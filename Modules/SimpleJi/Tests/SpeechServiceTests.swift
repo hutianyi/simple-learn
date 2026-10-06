@@ -4,6 +4,30 @@ import XCTest
 
 @MainActor
 final class SpeechServiceTests: XCTestCase {
+    func testChineseUtteranceSkipsPartOfSpeech() async {
+        let played = expectation(description: "Chinese meaning played without labels")
+        let meaning = "n.计划；v.打算"
+        let service = SpeechService(activation: { true }) { utterance in
+            XCTAssertEqual(utterance.speechString, "计划；打算")
+            played.fulfill()
+        }
+        service.speak(meaning, language: .chinese, preferredIdentifier: nil, rate: 0.46)
+        await fulfillment(of: [played], timeout: 1)
+        XCTAssertEqual(service.speakingText, "计划；打算")
+        service.stop()
+    }
+
+    func testEnglishUtteranceKeepsPartOfSpeechWords() async {
+        let played = expectation(description: "English text played unchanged")
+        let service = SpeechService(activation: { true }) { utterance in
+            XCTAssertEqual(utterance.speechString, "adjective")
+            played.fulfill()
+        }
+        service.speak("adjective", language: .english, preferredIdentifier: nil, rate: 0.46)
+        await fulfillment(of: [played], timeout: 1)
+        service.stop()
+    }
+
     func testWaitsForActivationBeforeSpeaking() async {
         let started = expectation(description: "Activation started")
         let played = expectation(description: "Word played after activation")

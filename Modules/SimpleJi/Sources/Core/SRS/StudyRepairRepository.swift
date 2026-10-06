@@ -9,7 +9,7 @@ struct StudyRepairOffer: Identifiable {
     var id: String { todayKey }
 
     var message: String {
-        return "你之前已经连续完成了 \(plan.previousStreak) 天！\n昨天还没完成，要把连续记录接回来吗？\n今天待复习卡片 \(normalCardCount) 张，默写按设置的每日上限安排，错词照常订正。选择补上不会额外增加学习量。\n跟着这一轮完成今天的任务，就能补上昨天的打卡。主动结束或过了今天，这次机会就结束。"
+        return "你之前已经连续完成了 \(plan.previousStreak) 天！\n昨天还没完成，要把连续记录接回来吗？\n今天待复习卡片 \(normalCardCount) 张，默写按设置的每日上限安排，积欠优先，错词照常订正。选择补上不会额外增加学习量。\n完成今天的任务并清完以前积欠的默写，才能补上昨天的打卡。主动结束或过了今天，这次机会就结束。"
     }
 }
 
@@ -86,6 +86,19 @@ final class StudyRepairRepository {
             let entity = try context.fetch(StudyCompletionDayEntity.fetchRequest()).first { $0.dayKey == key }
             guard let entity else { throw RepairError.unavailable }
             return try JSONDecoder().decode(StudyCompletionDay.self, from: entity.snapshotData)
+        }
+    }
+
+    func dictationAllowanceExhausted(now: Date = Date()) async throws -> Bool {
+        let context = container.newBackgroundContext()
+        return try await context.perform {
+            let request = DictationDayEntity.fetchRequest()
+            request.predicate = NSPredicate(format: "dayKey == %@",
+                DictationEligibility.dayKey(for: now, calendar: self.calendar))
+            guard let day = try context.fetch(request).first, day.limit > 0 else { return false }
+            let items = try JSONDecoder().decode([DictationItem].self, from: day.tasksData)
+            return items.count >= Int(day.limit)
+                && StudyStreak.dictationFinished(phase: day.phase, items: items)
         }
     }
 

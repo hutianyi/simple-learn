@@ -54,28 +54,33 @@ final class StudyCompletionRepository {
             let items = try JSONDecoder().decode([DictationItem].self, from: entity.tasksData)
             return !StudyStreak.dictationFinished(phase: entity.phase, items: items)
         }
-        if unfinished {
+        let words = try context.fetch(WordEntity.fetchRequest()).filter {
+            !day.scope.masteredTerms.contains(EnglishNormalizer.normalize($0.english))
+        }
+        // A finished daily queue may still leave overdue words outside its limit.
+        // Today's excess is deferred; previous days' eligible debt blocks completion.
+        let pendingRegularWords = words.filter { word in
+            guard let state = word.dictationState else { return false }
+            return state.englishVersion == DictationAnswerMatcher.normalize(word.english)
+                && (state.initialCopyCompletedAt != nil || state.totalFormal > 0)
+                && (state.nextReviewDate.map { $0 < tomorrow } ?? false)
+                && (state.formalNotBefore ?? .distantPast) <= now && state.lastFormalDay != key
+        }
+        let overduePending = pendingRegularWords.contains {
+            ($0.dictationState?.nextReviewDate ?? .distantFuture) < start
+        }
+        if unfinished || overduePending {
             day.dictationComplete = false
         } else if dictationDays.contains(where: { $0.dayKey == key }) {
             day.dictationComplete = true
         } else {
-            let words = try context.fetch(WordEntity.fetchRequest()).filter {
-                !day.scope.masteredTerms.contains(EnglishNormalizer.normalize($0.english))
-            }
             let dictationEvents = try context.fetch(DictationEventEntity.fetchRequest())
             let tested = Set(dictationEvents.filter { $0.kind == "baselineFormal" }.map(\.wordID))
             let baselinePending = words.contains { word in
                 let selected = day.scope.baselineWordIDs?.contains(word.id) ?? (word.createdAt < start)
                 return selected && !tested.contains(word.id) && (word.dictationState?.totalFormal ?? 0) == 0
             }
-            let regularPending = words.contains { word in
-                guard let state = word.dictationState else { return false }
-                return state.englishVersion == DictationAnswerMatcher.normalize(word.english)
-                    && (state.initialCopyCompletedAt != nil || state.totalFormal > 0)
-                    && (state.nextReviewDate.map { $0 < tomorrow } ?? false)
-                    && (state.formalNotBefore ?? .distantPast) <= now && state.lastFormalDay != key
-            }
-            day.dictationComplete = !baselinePending && !regularPending
+            day.dictationComplete = !baselinePending && pendingRegularWords.isEmpty
         }
         let dictationEvents = try context.fetch(DictationEventEntity.fetchRequest())
         day.hasActivity = !events.isEmpty || dictationEvents.contains {

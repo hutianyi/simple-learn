@@ -74,4 +74,37 @@ final class VocabularyParserTests: XCTestCase {
         }
         XCTAssertEqual(VocabularyParser.parse("n. 名词").unrecognized.count, 1)
     }
+
+    func testChineseSpeechSkipsCommonPartOfSpeechLabels() {
+        for label in ["n.", "N.", "v.", "vt.", "vi.", "adj.", "ADJ", "adv.", "pron.",
+                      "prep.", "conj.", "interj.", "int.", "num.", "art.", "det.", "aux.",
+                      "modal.", "abbr.", "phr.", "n./v.", "vt. & vi.", "n.、v.", "n．",
+                      "noun", "adjective", "verb", "ADVERB:"] {
+            XCTAssertEqual(VocabularyParser.chineseMeaningForSpeech(label + "化学"), "化学", label)
+            XCTAssertEqual(VocabularyParser.chineseMeaningForSpeech("  " + label + " 化学  "), "化学", label)
+        }
+    }
+
+    func testChineseSpeechSkipsLabelsAcrossMultipleMeanings() {
+        let examples = [
+            ("n.计划；v.打算", "计划；打算"),
+            ("adj.漂亮的，adv.漂亮地", "漂亮的，漂亮地"),
+            ("noun:计划; verb:打算", "计划;打算"),
+            ("n.计划\nv.打算", "计划\n打算"),
+            ("（adj.漂亮的）", "（漂亮的）"),
+            ("n. vitamin B，维生素B", "vitamin B，维生素B")
+        ]
+        for (meaning, spoken) in examples {
+            XCTAssertEqual(VocabularyParser.chineseMeaningForSpeech(meaning), spoken, meaning)
+        }
+    }
+
+    func testChineseSpeechPreservesOrdinaryEnglishAndUnknownLabels() {
+        for meaning in ["化学", "维生素B", "DNA分子", "N95口罩", "Vitamin B：维生素B",
+                        "U.S.美国", "No.编号", "形容词 adjective 表示性质", "nav.导航",
+                        "nounphrase 名词短语", "noun phrase：名词短语", "verb describes an action：动词",
+                        "https://example.com 示例网站"] {
+            XCTAssertEqual(VocabularyParser.chineseMeaningForSpeech(meaning), meaning)
+        }
+    }
 }

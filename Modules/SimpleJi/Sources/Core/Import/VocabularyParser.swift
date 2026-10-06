@@ -67,6 +67,19 @@ enum VocabularyParser {
         return (word, partOfSpeech + meaning)
     }
 
+    static func chineseMeaningForSpeech(_ meaning: String) -> String {
+        let abbreviations = #"(?:n|v|vt|vi|adj|adv|pron|prep|conj|interj|int|num|art|det|aux|modal|abbr|phr)"#
+        let fullNames = #"(?:noun|verb|adjective|adverb|pronoun|preposition|conjunction|interjection|numeral|article|determiner|auxiliary|abbreviation|phrase)"#
+        let chineseFollows = #"(?=\s*[:：]?\s*[\p{Han}（(])"#
+        let label = #"(?:"# + abbreviations + #"[.．](?![A-Za-z0-9])|"#
+            + #"(?:"# + abbreviations + "|" + fullNames + #")[.．]?"# + chineseFollows + ")"
+        // Recognize labels only at the start of a meaning or after a clause separator.
+        let pattern = #"(?i)(?:^|(?<=[;；,，、\n\r（(]))\s*"# + label
+            + #"(?:\s*[/&、,，]\s*"# + label + #")*\s*[:：]?\s*(?=\S)"#
+        return meaning.replacingOccurrences(of: pattern, with: "", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     private static func shouldIgnore(_ line: String) -> Bool {
         guard !line.isEmpty else { return true }
         if line.hasPrefix("#") { return true }

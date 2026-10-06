@@ -61,7 +61,9 @@ final class SpeechService: NSObject, ObservableObject {
         repetitions: Int = 1,
         onCompletion: (() -> Void)? = nil
     ) {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = language == .chinese
+            ? VocabularyParser.chineseMeaningForSpeech(text)
+            : text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
 
         stop(clearPending: true)
