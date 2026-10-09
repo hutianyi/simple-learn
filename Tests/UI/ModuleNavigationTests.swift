@@ -1,6 +1,31 @@
 import XCTest
 
 final class ModuleNavigationTests: XCTestCase {
+    func testListenImportImmediatelyUpdatesArticleLibrary() {
+        XCUIDevice.shared.orientation = .landscapeLeft
+        defer { XCUIDevice.shared.orientation = .portrait }
+        let app = XCUIApplication()
+        app.launch()
+        let entry = app.buttons["module.ting"]
+        XCTAssertTrue(entry.waitForExistence(timeout: 10))
+        entry.tap()
+
+        for _ in 0..<2 {
+            let title = "Library Refresh \(UUID().uuidString)"
+            app.buttons["listen.import"].tap()
+            let editor = app.textViews["listen.importText"]
+            XCTAssertTrue(editor.waitForExistence(timeout: 5))
+            editor.tap()
+            editor.typeText("# Article 1: \(title)\n\nThis is a sample article for the import refresh test.")
+            app.buttons["listen.confirmImport"].tap()
+            XCTAssertTrue(expectation(for: NSPredicate(format: "exists == false"),
+                                      evaluatedWith: editor).fulfillWithin(timeout: 10))
+            let row = app.buttons.containing(.staticText, identifier: title).firstMatch
+            XCTAssertTrue(row.waitForExistence(timeout: 5), "The imported article must appear without leaving SimpleTing")
+            XCTAssertTrue(row.isHittable, "The newest article must be visible in the sidebar")
+        }
+    }
+
     func testLongPressReordersCardsAndPersistsAfterRelaunch() {
         let app = XCUIApplication()
         app.launch()

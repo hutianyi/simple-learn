@@ -16,6 +16,7 @@ private struct ListenLibraryView: View {
     @State private var settings: ListenSettings
     @State private var speech: SpeechService
     @State private var displayedArticleID: UUID?
+    @State private var libraryRefreshID = 0
     @State private var compactColumn: NavigationSplitViewColumn = .sidebar
     @State private var presentation: ListenPresentation?
     @State private var articleToDelete: ListenArticle?
@@ -71,6 +72,7 @@ private struct ListenLibraryView: View {
                         .contextMenu { Button("删除这篇文章", role: .destructive) { requestDelete(article) } }
                     }
                 }
+                .id(libraryRefreshID)
                 .navigationTitle("文章库")
             } detail: {
                 NavigationStack {
@@ -95,7 +97,10 @@ private struct ListenLibraryView: View {
             case .settings: ListenSettingsView(speech: speech, store: store, settings: settings)
             case .pasteImport:
                 ListenPasteImportView(store: store, speech: speech) { id in
-                    displayedArticleID = id; compactColumn = .detail
+                    displayedArticleID = id
+                    // Rebuild the sidebar after a successful import so new rows appear at the top.
+                    libraryRefreshID += 1
+                    compactColumn = .detail
                 }
             }
         }
