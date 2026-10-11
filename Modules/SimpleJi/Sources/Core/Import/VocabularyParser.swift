@@ -110,9 +110,18 @@ enum VocabularyParser {
             }
         }
 
-        guard let chineseStart = line.firstIndex(where: { character in
+        guard var chineseStart = line.firstIndex(where: { character in
             character.unicodeScalars.contains(where: isCJK)
         }) else { return nil }
+
+        // Opening parentheses before the first Chinese character belong to the meaning.
+        // Leave complete English parentheses, such as "word(s)", untouched.
+        while chineseStart > line.startIndex {
+            let previous = line.index(before: chineseStart)
+            let character = line[previous]
+            guard character.isWhitespace || character == "（" || character == "(" else { break }
+            chineseStart = previous
+        }
 
         let english = String(line[..<chineseStart]).trimmingCharacters(in: .whitespacesAndNewlines)
         let chinese = String(line[chineseStart...]).trimmingCharacters(in: .whitespacesAndNewlines)

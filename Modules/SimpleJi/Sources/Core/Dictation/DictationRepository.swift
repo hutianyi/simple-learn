@@ -259,7 +259,7 @@ final class DictationRepository {
                 }
             }
             let wordRequest = WordEntity.fetchRequest()
-            wordRequest.relationshipKeyPathsForPrefetching = ["dictationState"]
+            wordRequest.relationshipKeyPathsForPrefetching = ["dictationState", "events"]
             let words = try context.fetch(wordRequest)
             let wordsByID = Dictionary(uniqueKeysWithValues: words.map { ($0.id, $0) })
             let completedBaseline = try Self.completedBaselineIDs(in: context)
@@ -274,10 +274,13 @@ final class DictationRepository {
             let dayLimit = baselinePending.isEmpty ? limit : baselineLimit
 
             let tomorrow = DictationEligibility.nextDay(after: now, calendar: calendar)
-            let candidates = words.compactMap { word -> (word: WordEntity, due: Date, priority: Int)? in
+            let candidates = words.compactMap { word -> (word: WordEntity, due: Date, priority: Int, isNew: Bool)? in
                 guard !baselinePending.contains(word.id),
-                      !masteredTerms.contains(EnglishNormalizer.normalize(word.english)),
-                      let state = word.dictationState,
+                      !masteredTerms.contains(EnglishNormalizer.normalize(word.english)) else { return nil }
+                if DictationEligibility.canStartDirectly(word: word, now: now, calendar: calendar) {
+                    return (word, now, 2, true)
+                }
+                guard let state = word.dictationState,
                       state.englishVersion == DictationAnswerMatcher.normalize(word.english),
                       (state.initialCopyCompletedAt != nil || state.totalFormal > 0),
                       let due = state.nextReviewDate,
@@ -285,12 +288,33 @@ final class DictationRepository {
                       (state.formalNotBefore ?? .distantPast) <= now,
                       state.lastFormalDay != today else { return nil }
                 let priority = due < calendar.startOfDay(for: now) ? 0 : (state.totalFormal == 0 ? 2 : 1)
-                return (word, due, priority)
+                return (word, due, priority, false)
             }.sorted {
                 if $0.priority != $1.priority { return $0.priority < $1.priority }
                 if $0.due != $1.due { return $0.due < $1.due }
                 if $0.word.createdAt != $1.word.createdAt { return $0.word.createdAt < $1.word.createdAt }
+                if $0.word.importPosition != $1.word.importPosition { return $0.word.importPosition < $1.word.importPosition }
                 return $0.word.id.uuidString < $1.word.id.uuidString
+            }
+            let completionRequest = StudyCompletionDayEntity.fetchRequest()
+            completionRequest.predicate = NSPredicate(format: "dayKey == %@", today)
+            let completedToday = try context.fetch(completionRequest).first.map {
+                try JSONDecoder().decode(StudyCompletionDay.self, from: $0.snapshotData).isComplete
+            } ?? false
+            let newItems: (Set<UUID>, Int, Int) -> [DictationItem] = { existingIDs, slots, alreadyStarted in
+                var newSlots = max(0, DictationEligibility.dailyNewWordLimit - alreadyStarted)
+                return Array(candidates.filter { candidate in
+                    guard !existingIDs.contains(candidate.word.id) else { return false }
+                    if candidate.isNew {
+                        guard newSlots > 0 else { return false }
+                        newSlots -= 1
+                    }
+                    return true
+                }.prefix(slots)).map {
+                    var item = DictationItem(wordID: $0.word.id, english: $0.word.english, chinese: $0.word.chinese)
+                    if $0.isNew { item.isNewWord = true }
+                    return item
+                }
             }
             if let existing = allDays.first(where: { $0.dayKey == today }) {
                 var day = try Self.snapshot(existing)
@@ -326,8 +350,10 @@ final class DictationRepository {
                     try Self.save(day, to: existing, now: now, in: context, calendar: self.calendar)
                     return day
                 }
-                guard day.limit != limit else { return day }
+                // An empty preview may fill after card review; a finished task stays finished.
+                guard day.limit != limit || (day.items.isEmpty && !completedToday && !candidates.isEmpty) else { return day }
                 day.limit = limit
+                let alreadyStarted = day.items.filter { $0.isNewWord == true }.count
                 // Keep results and any question already attempted; only postpone untouched words.
                 var slots = limit == 0 ? Int.max : max(0, limit - day.items.filter(hasProgress).count)
                 day.items = day.items.filter { item in
@@ -337,10 +363,7 @@ final class DictationRepository {
                     return true
                 }
                 let existingIDs = Set(day.items.map(\.wordID))
-                let additions = candidates.filter { !existingIDs.contains($0.word.id) }.prefix(slots)
-                day.items.append(contentsOf: additions.map {
-                    DictationItem(wordID: $0.word.id, english: $0.word.english, chinese: $0.word.chinese)
-                })
+                day.items.append(contentsOf: newItems(existingIDs, slots, alreadyStarted))
                 if day.items.contains(where: { $0.formalResult == nil }) {
                     day.phase = .firstPass
                 } else if day.unresolved == 0 {
@@ -358,12 +381,9 @@ final class DictationRepository {
                 excluding: [], masteredTerms: masteredTerms,
                 limit: baselinePending.isEmpty ? 0 : dayLimit
             )
-            let regularSlots = baselinePending.isEmpty
+            let regularSlots = baselinePending.isEmpty && !completedToday
                 ? (limit == 0 ? Int.max : limit) : 0
-            let selected = Array(candidates.prefix(regularSlots))
-            items.append(contentsOf: selected.map {
-                DictationItem(wordID: $0.word.id, english: $0.word.english, chinese: $0.word.chinese)
-            })
+            items.append(contentsOf: newItems([], regularSlots, 0))
             let day = DictationDay(
                 id: UUID(), dayKey: today, timeZoneID: calendar.timeZone.identifier,
                 limit: dayLimit, phase: items.isEmpty ? .complete : .firstPass,
@@ -527,7 +547,7 @@ final class DictationRepository {
             let state: DictationStateEntity
             if let existing = word.dictationState {
                 state = existing
-            } else if item.belongsToBaseline {
+            } else if item.belongsToBaseline || item.isNewWord == true {
                 state = Self.newState(for: word, in: context, now: now)
             } else {
                 throw DictationError.answerChanged

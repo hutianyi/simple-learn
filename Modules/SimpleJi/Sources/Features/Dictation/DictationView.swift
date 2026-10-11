@@ -405,10 +405,9 @@ struct DictationView: View {
                         .foregroundStyle(AppPalette.textSecondary)
                 }
             }
-            Button("开始新词抄写") { Task { await viewModel.startInitialCopy() } }
+            Button("返回首页", action: returnHome)
                 .buttonStyle(LargePrimaryButtonStyle())
                 .frame(maxWidth: 400)
-            Button("返回首页", action: returnHome)
         }
         .padding(28)
     }

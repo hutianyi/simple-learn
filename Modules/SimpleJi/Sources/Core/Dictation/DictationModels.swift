@@ -32,6 +32,7 @@ struct DictationItem: Codable, Equatable, Identifiable {
     var interruptionCount = 0
     var isBaseline: Bool? = nil
     // Optional fields keep older saved queues and backups readable.
+    var isNewWord: Bool? = nil
     var consecutiveCopyFailures: Int? = nil
     var keyboardAllowed: Bool? = nil
     var deferred: Bool? = nil
@@ -136,6 +137,31 @@ enum DictationSubmission {
 }
 
 enum DictationEligibility {
+    static let dailyNewWordLimit = 5
+
+    static func canStartDirectly(
+        word: WordEntity, now: Date, calendar: Calendar = calendar()
+    ) -> Bool {
+        if let state = word.dictationState {
+            guard state.englishVersion == DictationAnswerMatcher.normalize(word.english),
+                  state.totalFormal == 0, state.initialCopyCompletedAt == nil,
+                  (state.formalNotBefore ?? .distantPast) <= now else { return false }
+            // Continue words already admitted to the old first-copy workflow.
+            if state.initialCopyCount > 0 { return true }
+        }
+        let events = word.events.compactMap { event -> DictationCardEvent? in
+            guard let direction = ReviewDirection(rawValue: event.direction),
+                  let result = ReviewResult(rawValue: event.result),
+                  let mode = PracticeMode(rawValue: event.practiceMode) else { return nil }
+            return DictationCardEvent(
+                reviewedAt: event.reviewedAt, direction: direction, result: result,
+                mode: mode, isSameSessionRetry: event.isSameSessionRetry,
+                englishSnapshot: event.wordEnglishSnapshot
+            )
+        }
+        return qualifies(events: events, currentEnglish: word.english, calendar: calendar)
+    }
+
     static func calendar(timeZone: TimeZone = .current) -> Calendar {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = timeZone

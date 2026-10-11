@@ -38,6 +38,7 @@ final class VocabularyRepository {
         let context = container.newBackgroundContext()
         context.mergePolicy = NSErrorMergePolicy
         context.undoManager = nil
+        let calendar = self.calendar
         let startOfToday = calendar.startOfDay(for: now)
 
         return try await context.perform {
@@ -47,6 +48,19 @@ final class VocabularyRepository {
                 request.predicate = NSPredicate(format: "normalizedEnglish IN %@", normalizedValues)
                 request.propertiesToFetch = ["normalizedEnglish"]
                 let alreadyPresent = Set(try context.fetch(request).map(\.normalizedEnglish))
+
+                var firstReviewDate = startOfToday
+                if entries.contains(where: { !alreadyPresent.contains($0.normalizedEnglish) }) {
+                    // Check completion before adding cards so a finished day's work stays finished.
+                    try StudyCompletionRepository.refresh(in: context, now: now, calendar: calendar)
+                    let completionRequest = StudyCompletionDayEntity.fetchRequest()
+                    completionRequest.predicate = NSPredicate(format: "dayKey == %@",
+                        DictationEligibility.dayKey(for: now, calendar: calendar))
+                    if let completion = try context.fetch(completionRequest).first,
+                       try JSONDecoder().decode(StudyCompletionDay.self, from: completion.snapshotData).isComplete {
+                        firstReviewDate = DictationEligibility.nextDay(after: now, calendar: calendar)
+                    }
+                }
 
                 var inserted = 0
                 var skipped = 0
@@ -71,9 +85,9 @@ final class VocabularyRepository {
                         state.id = UUID()
                         state.direction = direction.rawValue
                         state.level = 0
-                        state.nextReviewDate = startOfToday
+                        state.nextReviewDate = firstReviewDate
                         state.fsrsCardData = try SRSScheduler.encodeCard(
-                            SRSScheduler.emptyCard(due: startOfToday)
+                            SRSScheduler.emptyCard(due: firstReviewDate)
                         )
                         state.fsrsMigrationVersion = SRSScheduler.migrationVersion
                         state.createdAt = now

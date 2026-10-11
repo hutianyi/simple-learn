@@ -10,12 +10,17 @@ struct HomeView: View {
     @FetchRequest private var dictationStates: FetchedResults<DictationStateEntity>
     @FetchRequest private var dictationDays: FetchedResults<DictationDayEntity>
     @FetchRequest private var dictationEvents: FetchedResults<DictationEventEntity>
+    @FetchRequest private var completionDays: FetchedResults<StudyCompletionDayEntity>
+    private let calendar: Calendar
+    private let now: Date
     private let today: String
     private let startOfToday: Date
     private let tomorrow: Date
 
     init(settings: SettingsStore, calendar: Calendar = .current, now: Date = Date()) {
         self.settings = settings
+        self.calendar = calendar
+        self.now = now
         let start = calendar.startOfDay(for: now)
         let tomorrow = calendar.date(byAdding: .day, value: 1, to: start) ?? now
         self.today = DictationEligibility.dayKey(for: now, calendar: calendar)
@@ -38,6 +43,10 @@ struct HomeView: View {
         let eventRequest = DictationEventEntity.fetchRequest()
         eventRequest.sortDescriptors = []
         _dictationEvents = FetchRequest(fetchRequest: eventRequest)
+        let completionRequest = StudyCompletionDayEntity.fetchRequest()
+        completionRequest.sortDescriptors = []
+        completionRequest.predicate = NSPredicate(format: "dayKey == %@", today)
+        _completionDays = FetchRequest(fetchRequest: completionRequest)
     }
 
     var body: some View {
@@ -148,13 +157,28 @@ struct HomeView: View {
             let count = (try? JSONDecoder().decode([DictationItem].self,
                                                     from: todayDay.tasksData))?.count ?? 0
             let baselineLimit = settings.dictationLimit.rawValue == 0 ? 50 : min(50, settings.dictationLimit.rawValue)
+            if count == 0 && hasNewDictationWords && !completedToday { return true }
             return hasPendingBaseline && count < baselineLimit
         }
         if hasPendingBaseline { return true }
+        if hasNewDictationWords && !completedToday { return true }
         return dictationStates.contains {
             ($0.initialCopyCompletedAt != nil || $0.totalFormal > 0)
                 && ($0.nextReviewDate.map { $0 < tomorrow } ?? false)
                 && ($0.word.map { !isMasteredForDictation($0) } ?? false)
+        }
+    }
+
+    private var completedToday: Bool {
+        completionDays.first.flatMap {
+            try? JSONDecoder().decode(StudyCompletionDay.self, from: $0.snapshotData)
+        }?.isComplete == true
+    }
+
+    private var hasNewDictationWords: Bool {
+        words.contains {
+            !isMasteredForDictation($0)
+                && DictationEligibility.canStartDirectly(word: $0, now: now, calendar: calendar)
         }
     }
 

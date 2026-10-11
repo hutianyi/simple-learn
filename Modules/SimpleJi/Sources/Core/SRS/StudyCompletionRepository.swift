@@ -69,10 +69,15 @@ final class StudyCompletionRepository {
         let overduePending = pendingRegularWords.contains {
             ($0.dictationState?.nextReviewDate ?? .distantFuture) < start
         }
+        let newWordsPending = words.contains { word in
+            !(day.scope.baselineWordIDs?.contains(word.id) ?? (word.createdAt < start))
+                && DictationEligibility.canStartDirectly(word: word, now: now, calendar: calendar)
+        }
         if unfinished || overduePending {
             day.dictationComplete = false
-        } else if dictationDays.contains(where: { $0.dayKey == key }) {
-            day.dictationComplete = true
+        } else if let today = dictationDays.first(where: { $0.dayKey == key }) {
+            let items = try JSONDecoder().decode([DictationItem].self, from: today.tasksData)
+            day.dictationComplete = !items.isEmpty || previous?.isComplete == true || !newWordsPending
         } else {
             let dictationEvents = try context.fetch(DictationEventEntity.fetchRequest())
             let tested = Set(dictationEvents.filter { $0.kind == "baselineFormal" }.map(\.wordID))
@@ -81,6 +86,7 @@ final class StudyCompletionRepository {
                 return selected && !tested.contains(word.id) && (word.dictationState?.totalFormal ?? 0) == 0
             }
             day.dictationComplete = !baselinePending && pendingRegularWords.isEmpty
+                && (previous?.isComplete == true || !newWordsPending)
         }
         let dictationEvents = try context.fetch(DictationEventEntity.fetchRequest())
         day.hasActivity = !events.isEmpty || dictationEvents.contains {

@@ -585,6 +585,203 @@ final class StudyStreakTests: XCTestCase {
         return (controller, repository, day, word.id, StudyCompletionScope(baselineWordIDs: [word.id]))
     }
 
+    func testDirectNewWordNeedsNoInitialCopyAndCompletesTodayOnlyOnce() async throws {
+        let controller = PersistenceController(inMemory: true)
+        let word = try seedDirectWord(in: controller.container.viewContext)
+        let repository = DictationRepository(container: controller.container, calendar: calendar)
+        let campaign = BaselineCampaignSnapshot(selectedWordIDs: [], activatedAt: date(3))
+        let day = try await repository.loadOrCreateDay(limit: 20, campaign: campaign, now: date(3))
+        XCTAssertEqual(day.items.map(\.wordID), [word.id])
+        XCTAssertEqual(day.items.first?.isNewWord, true)
+        XCTAssertEqual(day.phase, .firstPass)
+        XCTAssertFalse(try snapshot(controller, day: 3).dictationComplete)
+        XCTAssertEqual(try controller.container.viewContext.count(for: DictationStateEntity.fetchRequest()), 0)
+        let answer = try await repository.submitFormal(dayID: day.id, wordID: word.id,
+            recognized: "apple", now: date(3))
+        guard case .result(let finished, let correct, _) = answer else { return XCTFail("Expected result") }
+        XCTAssertTrue(correct)
+        XCTAssertEqual(finished.phase, .complete)
+        XCTAssertTrue(try snapshot(controller, day: 3).isComplete)
+        let state = try XCTUnwrap(word.dictationState)
+        XCTAssertEqual(state.totalFormal, 1)
+        XCTAssertEqual(state.initialCopyCount, 0)
+        XCTAssertNil(state.initialCopyCompletedAt)
+        XCTAssertNotNil(state.nextReviewDate)
+        do {
+            _ = try await repository.submitFormal(dayID: day.id, wordID: word.id,
+                recognized: "apple", now: date(3))
+            XCTFail("Must not score the same first answer twice")
+        } catch DictationRepository.DictationError.alreadyAnswered {}
+        XCTAssertEqual(try controller.container.viewContext.fetch(DictationEventEntity.fetchRequest()).map(\.kind), ["formal"])
+    }
+
+    func testDirectWrongWordRequiresCopyAndRetestWithoutChangingFirstScore() async throws {
+        let controller = PersistenceController(inMemory: true)
+        let word = try seedDirectWord(in: controller.container.viewContext)
+        let repository = DictationRepository(container: controller.container, calendar: calendar)
+        let day = try await repository.loadOrCreateDay(limit: 20,
+            campaign: BaselineCampaignSnapshot(selectedWordIDs: [], activatedAt: date(3)), now: date(3))
+        _ = try await repository.submitFormal(dayID: day.id, wordID: word.id, recognized: "aple", now: date(3))
+        controller.container.viewContext.refreshAllObjects()
+        let state = try XCTUnwrap(word.dictationState)
+        let cardAfterFirst = state.fsrsCardData
+        XCTAssertFalse(try snapshot(controller, day: 3).isComplete)
+        _ = try await repository.beginRemediation(dayID: day.id, now: date(3))
+        for _ in 0..<3 {
+            _ = try await repository.recordRemediationCopy(dayID: day.id, wordID: word.id,
+                recognized: "apple", now: date(3))
+        }
+        XCTAssertFalse(try snapshot(controller, day: 3).isComplete)
+        let result = try await repository.submitRetest(dayID: day.id, wordID: word.id,
+            recognized: "apple", now: date(3))
+        guard case .result(let finished, let correct, _) = result else { return XCTFail("Expected retest") }
+        XCTAssertTrue(correct)
+        XCTAssertEqual(finished.phase, .complete)
+        XCTAssertEqual(finished.firstPassAccuracy, 0)
+        XCTAssertTrue(try snapshot(controller, day: 3).isComplete)
+        XCTAssertEqual(state.totalFormal, 1)
+        XCTAssertEqual(state.fsrsCardData, cardAfterFirst)
+    }
+
+    func testDirectNewWordsShareDailyAllowanceKeepFiveWordCapAndDoNotReopenCompletion() async throws {
+        let controller = PersistenceController(inMemory: true)
+        let context = controller.container.viewContext
+        let overdue = try seedDirectWord(in: context, english: "overdue")
+        let state = DictationStateEntity(context: context)
+        state.id = UUID(); state.word = overdue; state.wordID = overdue.id
+        state.englishVersion = overdue.english; state.totalFormal = 1
+        state.initialCopyStartedAt = date(1); state.nextReviewDate = date(2)
+        state.fsrsCardData = try SRSScheduler.encodeCard(SRSScheduler.emptyCard(due: date(2)))
+        let newWords = try (0..<7).map { try seedDirectWord(in: context, english: "word\($0)", position: Int64($0)) }
+        let repository = DictationRepository(container: controller.container, calendar: calendar)
+        let campaign = BaselineCampaignSnapshot(selectedWordIDs: [], activatedAt: date(3))
+        let small = try await repository.loadOrCreateDay(limit: 3, campaign: campaign, now: date(3))
+        XCTAssertEqual(small.items.map(\.wordID), [overdue.id] + newWords.prefix(2).map(\.id))
+        let expanded = try await repository.loadOrCreateDay(limit: 20, campaign: campaign, now: date(3))
+        XCTAssertEqual(expanded.items.count, 6)
+        XCTAssertEqual(expanded.items.filter { $0.isNewWord == true }.count, 5)
+        for item in expanded.items {
+            _ = try await repository.submitFormal(dayID: expanded.id, wordID: item.wordID,
+                recognized: item.english, now: date(3))
+        }
+        let completion = try snapshot(controller, day: 3)
+        XCTAssertTrue(completion.isComplete, "Unscheduled new words must not block today's completion")
+        let repeated = try await repository.loadOrCreateDay(limit: 20, campaign: campaign, now: date(3))
+        XCTAssertEqual(repeated.items.count, 6)
+        XCTAssertEqual(repeated.phase, .complete)
+        XCTAssertEqual(try snapshot(controller, day: 3).completedAt, completion.completedAt)
+        let tomorrow = try await repository.loadOrCreateDay(limit: 20, campaign: campaign, now: date(4))
+        XCTAssertTrue(Set(newWords.suffix(2).map(\.id)).isSubset(of: Set(tomorrow.items.map(\.wordID))))
+    }
+
+    func testDirectDictationResumesLegacyPartialCopyWithoutInventingCopyCompletion() async throws {
+        let controller = PersistenceController(inMemory: true)
+        let word = try seedDirectWord(in: controller.container.viewContext)
+        let repository = DictationRepository(container: controller.container, calendar: calendar)
+        let campaign = BaselineCampaignSnapshot(selectedWordIDs: [], activatedAt: date(3))
+        _ = try await repository.initialCopyQueue(campaign: campaign, now: date(3))
+        _ = try await repository.recordInitialCopy(wordID: word.id, recognized: "apple", now: date(3))
+        let day = try await repository.loadOrCreateDay(limit: 20, campaign: campaign, now: date(3))
+        XCTAssertEqual(day.items.map(\.wordID), [word.id])
+        XCTAssertEqual(day.items.first?.isNewWord, true)
+        _ = try await repository.submitFormal(dayID: day.id, wordID: word.id, recognized: "apple", now: date(3))
+        _ = try snapshot(controller, day: 3)
+        XCTAssertEqual(word.dictationState?.initialCopyCount, 1)
+        XCTAssertNil(word.dictationState?.initialCopyCompletedAt)
+        XCTAssertEqual(word.dictationState?.totalFormal, 1)
+    }
+
+    func testDirectWordBecomingEligibleAfterEmptyPreviewBlocksPrematureCompletion() async throws {
+        let controller = PersistenceController(inMemory: true)
+        let (word, cards) = try seedWord(in: controller.container.viewContext, due: date(10), now: date(1))
+        let review = ReviewRepository(container: controller.container, calendar: calendar)
+        let card = try XCTUnwrap(cards.first { $0.direction == ReviewDirection.chineseToEnglish.rawValue })
+        let first = try await review.startSession(mode: .scheduled, baseTaskCount: 1, startedAt: date(1))
+        _ = try await review.recordAnswer(stateID: card.id, sessionID: first, mode: .scheduled,
+            answer: .known, isSameSessionRetry: false, reviewedAt: date(1))
+        let repository = DictationRepository(container: controller.container, calendar: calendar)
+        let campaign = BaselineCampaignSnapshot(selectedWordIDs: [], activatedAt: date(3))
+        let empty = try await repository.loadOrCreateDay(limit: 20, campaign: campaign, now: date(3))
+        XCTAssertTrue(empty.items.isEmpty)
+        let second = try await review.startSession(mode: .scheduled, baseTaskCount: 1, startedAt: date(3))
+        _ = try await review.recordAnswer(stateID: card.id, sessionID: second, mode: .scheduled,
+            answer: .known, isSameSessionRetry: false, reviewedAt: date(3))
+        XCTAssertFalse(try snapshot(controller, day: 3).isComplete)
+        let filled = try await repository.loadOrCreateDay(limit: 20, campaign: campaign, now: date(3))
+        XCTAssertEqual(filled.id, empty.id)
+        XCTAssertEqual(filled.items.map(\.wordID), [word.id])
+        _ = try await repository.submitFormal(dayID: filled.id, wordID: word.id, recognized: "apple", now: date(3))
+        XCTAssertTrue(try snapshot(controller, day: 3).isComplete)
+    }
+
+    func testDirectEligibleWordsDoNotReopenAnAlreadyCompletedEmptyDayAfterUpgrade() async throws {
+        let controller = PersistenceController(inMemory: true)
+        let context = controller.container.viewContext
+        let repository = DictationRepository(container: controller.container, calendar: calendar)
+        let campaign = BaselineCampaignSnapshot(selectedWordIDs: [], activatedAt: date(3))
+        let empty = try await repository.loadOrCreateDay(limit: 20, campaign: campaign, now: date(3))
+        let word = try seedDirectWord(in: context)
+        try XCTUnwrap(word.events.first).reviewedAt = date(3)
+        let entity = try XCTUnwrap(try context.fetch(StudyCompletionDayEntity.fetchRequest()).first)
+        var prior = completed(3)
+        prior.scope = StudyCompletionScope(baselineWordIDs: [])
+        entity.snapshotData = try JSONEncoder().encode(prior)
+        try context.save()
+        let sameDay = try await repository.loadOrCreateDay(limit: 20, campaign: campaign, now: date(3))
+        XCTAssertEqual(sameDay.id, empty.id)
+        XCTAssertTrue(sameDay.items.isEmpty)
+        XCTAssertTrue(try snapshot(controller, day: 3).isComplete)
+        let nextDay = try await repository.loadOrCreateDay(limit: 20, campaign: campaign, now: date(4))
+        XCTAssertTrue(nextDay.items.contains { $0.wordID == word.id })
+    }
+
+    func testDirectNewQueueSurvivesBackupAndMasteredOrUnlearnedWordsStayExcluded() async throws {
+        let controller = PersistenceController(inMemory: true)
+        let context = controller.container.viewContext
+        let word = try seedDirectWord(in: context)
+        let mastered = try seedDirectWord(in: context, english: "mastered")
+        _ = try seedWord(in: context, due: date(10), now: date(3), english: "unlearned")
+        let repository = DictationRepository(container: controller.container, calendar: calendar)
+        let campaign = BaselineCampaignSnapshot(selectedWordIDs: [], activatedAt: date(3))
+        let day = try await repository.loadOrCreateDay(limit: 20, campaign: campaign,
+            masteredTerms: [mastered.english], now: date(3))
+        XCTAssertEqual(day.items.map(\.wordID), [word.id])
+        let settings = BackupSettings(sessionLimit: 30, englishVoiceIdentifier: nil, chineseVoiceIdentifier: nil,
+            englishSpeechRate: 0.46, chineseSpeechRate: 0.46, autoSpeakFront: true, autoSpeakBack: true,
+            hapticsEnabled: true, extraPracticeScope: "weakest20")
+        let envelope = try await BackupService.makeEnvelope(container: controller.container,
+            settings: settings, appVersion: "test")
+        let restored = PersistenceController(inMemory: true)
+        try await BackupService.restore(BackupService.decodeAndValidate(BackupService.encode(envelope)), into: restored.container)
+        let restoredRepository = DictationRepository(container: restored.container, calendar: calendar)
+        let resumed = try await restoredRepository.loadOrCreateDay(limit: 20, campaign: campaign,
+            masteredTerms: [mastered.english], now: date(3))
+        XCTAssertEqual(resumed, day)
+        _ = try await restoredRepository.submitFormal(dayID: resumed.id, wordID: word.id,
+            recognized: "apple", now: date(3))
+        XCTAssertTrue(try snapshot(restored, day: 3).isComplete)
+    }
+
+    private func seedDirectWord(in context: NSManagedObjectContext, english: String = "apple", position: Int64 = 0) throws -> WordEntity {
+        let (word, cards) = try seedWord(in: context, due: date(10), now: date(1), english: english)
+        word.importPosition = position
+        let card = try XCTUnwrap(cards.first { $0.direction == ReviewDirection.chineseToEnglish.rawValue })
+        let session = StudySessionEntity(context: context)
+        session.id = UUID(); session.mode = PracticeMode.scheduled.rawValue
+        session.startedAt = date(1); session.completed = true; session.baseTaskCount = 2
+        session.formalAnswered = 2; session.formalKnown = 2
+        for day in [1, 2] {
+            let event = ReviewEventEntity(context: context)
+            event.id = UUID(); event.word = word; event.reviewState = card
+            event.session = session; event.sessionID = session.id; event.reviewedAt = date(day)
+            event.direction = card.direction; event.result = ReviewResult.known.rawValue
+            event.practiceMode = PracticeMode.scheduled.rawValue
+            event.wordEnglishSnapshot = english; event.wordChineseSnapshot = word.chinese
+        }
+        try context.save()
+        return word
+    }
+
     private func seedWord(in context: NSManagedObjectContext, due: Date, now: Date, english: String = "apple") throws
         -> (WordEntity, [ReviewStateEntity]) {
         let word = WordEntity(context: context)
