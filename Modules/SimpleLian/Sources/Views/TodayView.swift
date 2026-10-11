@@ -10,11 +10,11 @@ struct TodayView: View {
 
     private var active: PracticeSession? { sessions.first { $0.completedAt == nil } }
     private var due: [ProblemGroup] {
+        PracticeService.dailyGroups(in: groups)
+    }
+    private var unavailable: [ProblemGroup] {
         let day = DayKey.make(from: .now)
-        return groups.filter {
-            guard !$0.isArchived, let state = $0.reviewState else { return false }
-            return state.status == .new || (state.status == .scheduled && (state.nextReviewDay ?? day) <= day)
-        }
+        return groups.filter { PracticeService.isDue($0, day: day) && !PracticeService.hasUsableQuestion($0) }
     }
     private var needsExplanation: [ProblemGroup] { groups.filter { !$0.isArchived && $0.reviewState?.status == .needsExplanation } }
     private var pendingCorrection: [ProblemGroup] { groups.filter { !$0.isArchived && $0.reviewState?.status == .pendingCorrection } }
@@ -43,6 +43,18 @@ struct TodayView: View {
                     if !pendingCorrection.isEmpty && active == nil {
                         StatusSection(title: "等待订正", icon: "arrow.trianglehead.2.clockwise.rotate.90", groups: pendingCorrection) { startCorrection($0) }
                     }
+                    if !unavailable.isEmpty {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Label("缺少可用题目", systemImage: "exclamationmark.triangle").font(.headline)
+                            Text("以下题型的扩展题已全部停用或缺失。请启用题目，或导入补充题库后再练习。")
+                                .foregroundStyle(.secondary)
+                            ForEach(unavailable) { group in
+                                NavigationLink { GroupDetailView(group: group) } label: {
+                                    HStack { Text(group.title); Spacer(); Text("查看题目") }
+                                }.padding(12).background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
+                            }
+                        }
+                    }
                     if groups.isEmpty {
                         ContentUnavailableView("还没有题目", systemImage: "tray", description: Text("到“题库”页导入 ChatGPT 生成的题库。"))
                     }
@@ -59,9 +71,13 @@ struct TodayView: View {
         }
     }
 
-    private var greeting: String { due.isEmpty && active == nil ? "今天已完成" : "今天练一点" }
+    private var greeting: String {
+        if active != nil || !due.isEmpty { return "今天练一点" }
+        return unavailable.isEmpty ? "今天已完成" : "需要补充题目"
+    }
     private var statusText: String {
         if active != nil { return "有一组练习还没有完成。" }
+        if due.isEmpty && !unavailable.isEmpty { return "有 \(unavailable.count) 个到期题型缺少可用题目，请先处理下方提示。" }
         if due.isEmpty { return "目前没有到期题目，不需要额外练习。" }
         return "系统已选好 \(due.count) 个题型，每个题型 1 道。"
     }

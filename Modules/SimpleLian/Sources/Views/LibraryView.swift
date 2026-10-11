@@ -69,17 +69,13 @@ private struct BatchDetailView: View {
 
     private func deleteBatch() {
         do {
-            let groupIDs = Set(batch.groups.map(\.id))
-            for attempt in try context.fetch(FetchDescriptor<Attempt>()) where attempt.group.map({ groupIDs.contains($0.id) }) == true { context.delete(attempt) }
-            for progress in try context.fetch(FetchDescriptor<SessionGroupProgress>()) where progress.group.map({ groupIDs.contains($0.id) }) == true { context.delete(progress) }
-            context.delete(batch)
-            try context.save()
+            try PracticeService.deleteBatch(batch, context: context)
             dismiss()
         } catch { deleteError = error.localizedDescription }
     }
 }
 
-private struct GroupDetailView: View {
+struct GroupDetailView: View {
     @Environment(\.modelContext) private var context
     let group: ProblemGroup
     @State private var errorMessage: String?

@@ -56,6 +56,10 @@ struct LearningHomeView: View {
     @State private var dragOrigin: CGRect = .zero
     @State private var dragTranslation: CGSize = .zero
     @State private var dragStartLocation: CGPoint = .zero
+    @State private var overview: [LearningModule: String] = [:]
+    @State private var overviewReadCount = 0
+    @State private var overviewRevision = UUID()
+    @Environment(\.scenePhase) private var scenePhase
 
     private var orderedModules: [LearningModule] {
         var modules: [LearningModule] = []
@@ -104,17 +108,19 @@ struct LearningHomeView: View {
             } else {
                 NavigationStack {
                     ScrollView {
-                        VStack(alignment: .leading, spacing: 28) {
+                        VStack(alignment: .leading, spacing: 18) {
                             VStack(alignment: .leading, spacing: 10) {
                                 HStack {
-                                    Text("简单学").font(.system(size: 48, weight: .bold, design: .rounded))
+                                    Text("简单学").font(.system(size: 38, weight: .bold, design: .rounded))
                                     Spacer()
                                     Button("备份与恢复", systemImage: "externaldrive") { presentation = .backup }
                                         .buttonStyle(.bordered).accessibilityIdentifier("home.backup")
+                                        .disabled(overviewReadCount > 0)
                                 }
                                 Text("选一个，开始今天的学习。") .font(.title3).foregroundStyle(.secondary)
                             }
-                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 280), spacing: 20)], spacing: 20) {
+                            learningOverview
+                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 280), spacing: 16)], spacing: 16) {
                                 ForEach(orderedModules) { module in
                                     Button { openModule(module) } label: { moduleCard(module) }
                                     .buttonStyle(.plain).accessibilityIdentifier("module.\(module.rawValue)")
@@ -150,16 +156,21 @@ struct LearningHomeView: View {
                             .gesture(ModuleReorderGesture(onTouchBegan: { suppressCardTap = false },
                                                           onChanged: updateReordering, onEnded: finishReordering))
                         }
-                        .padding(32).frame(maxWidth: 1000).frame(maxWidth: .infinity)
+                        .padding(24).frame(maxWidth: 1000).frame(maxWidth: .infinity)
                     }
                     .scrollDisabled(isReordering)
                 }
             }
         }
         .environmentObject(session)
-        .onChange(of: selected) { _, _ in finishReordering() }
+        .onChange(of: selected) { _, _ in finishReordering(); overviewRevision = UUID() }
+        .onChange(of: scenePhase) { _, phase in if phase == .active { overviewRevision = UUID() } }
+        .task(id: overviewRevision) {
+            guard backupReady, selected == nil, presentation == nil else { return }
+            await refreshOverview()
+        }
         .task { await prepareBackupRecovery() }
-        .sheet(item: $presentation) { _ in
+        .sheet(item: $presentation, onDismiss: { overviewRevision = UUID() }) { _ in
             WholeBackupView { pending in
                 backupReady = !pending
                 if pending { recoveryError = "上次整体恢复的回退尚未完成，请先重试回退。" }
@@ -172,14 +183,50 @@ struct LearningHomeView: View {
     }
 
     private func moduleCard(_ module: LearningModule) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Image(systemName: module.symbol).font(.system(size: 38)).foregroundStyle(module.color)
-            Text(module.title).font(.title.bold()).foregroundStyle(.primary)
-            Text(module.detail).font(.headline).foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 10) {
+            Image(systemName: module.symbol).font(.system(size: 30)).foregroundStyle(module.color)
+            Text(module.title).font(.title2.bold()).foregroundStyle(.primary)
+            Text(module.detail).font(.subheadline).foregroundStyle(.secondary)
         }
-        .frame(maxWidth: .infinity, minHeight: 150, alignment: .leading).padding(24)
+        .frame(maxWidth: .infinity, minHeight: 112, alignment: .leading).padding(18)
         .background(module.color.opacity(0.09), in: RoundedRectangle(cornerRadius: 24))
         .contentShape(RoundedRectangle(cornerRadius: 24))
+    }
+
+    private var learningOverview: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("今天的学习").font(.headline).foregroundStyle(.secondary)
+            HStack(alignment: .top, spacing: 16) {
+                ForEach([LearningModule.ji, .suan, .lian]) { module in
+                    Button { suppressCardTap = false; openModule(module) } label: {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Label(module.title, systemImage: module.symbol).font(.title3.weight(.semibold)).foregroundStyle(module.color)
+                            Text(overview[module] ?? "正在读取…").font(.title3).foregroundStyle(.primary)
+                                .lineLimit(3).fixedSize(horizontal: false, vertical: true)
+                        }.frame(maxWidth: .infinity, alignment: .leading)
+                    }.buttonStyle(.plain).accessibilityIdentifier("home.overview.\(module.rawValue)")
+                }
+            }
+        }
+        .padding(20)
+        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 20))
+    }
+
+    @MainActor private func refreshOverview() async {
+        overviewReadCount += 1
+        defer { overviewReadCount -= 1 }
+        let now = Date()
+        do {
+            let text = try await SimpleJiBackupTransfer.learningOverview(now: now)
+            guard !Task.isCancelled else { return }
+            overview[.ji] = text
+        }
+        catch { if !Task.isCancelled { overview[.ji] = "读取失败，点此查看" } }
+        guard !Task.isCancelled else { return }
+        do { overview[.lian] = try SimpleLianBackupTransfer.learningOverview(now: now) }
+        catch { overview[.lian] = "读取失败，点此查看" }
+        do { overview[.suan] = try SimpleSuanBackupTransfer.learningOverview(now: now) }
+        catch { overview[.suan] = "读取失败，点此查看" }
     }
 
     private func openModule(_ module: LearningModule, accessibility: Bool = false) {
@@ -234,6 +281,7 @@ struct LearningHomeView: View {
         do {
             let recovered = try await WholeBackupService.coordinator().recoverIfNeeded()
             backupReady = true
+            overviewRevision = UUID()
             if recovered { recoveryNotice = "上次整体恢复未完成，已自动回退到恢复前数据。" }
         } catch { backupReady = false; recoveryError = error.localizedDescription }
     }

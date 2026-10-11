@@ -1,6 +1,40 @@
 import XCTest
 
 final class ModuleNavigationTests: XCTestCase {
+    func testHomeOverviewAndAllSixCardsFitPortraitAndLandscape() {
+        let app = XCUIApplication()
+        app.launch()
+        defer { XCUIDevice.shared.orientation = .portrait }
+        for orientation in [UIDeviceOrientation.portrait, .landscapeLeft] {
+            XCUIDevice.shared.orientation = orientation
+            XCTAssertTrue(app.buttons["module.ji"].waitForExistence(timeout: 10))
+            let viewport = app.windows.firstMatch.frame
+            if orientation == .portrait { XCTAssertLessThan(viewport.width, viewport.height) }
+            else { XCTAssertGreaterThan(viewport.width, viewport.height) }
+            for module in ["ji", "suan", "ting", "lian", "bei", "mo"] {
+                let card = app.buttons["module.\(module)"]
+                XCTAssertTrue(card.exists)
+                XCTAssertTrue(card.isHittable)
+                XCTAssertGreaterThanOrEqual(card.frame.minY, viewport.minY)
+                XCTAssertLessThanOrEqual(card.frame.maxY, viewport.maxY, "Every card should fit without scrolling")
+            }
+            let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+            screenshot.name = orientation == .portrait ? "首页竖屏" : "首页横屏"
+            screenshot.lifetime = .keepAlways
+            add(screenshot)
+            XCTAssertLessThan(app.buttons["home.overview.ji"].frame.minX, app.buttons["home.overview.suan"].frame.minX)
+            XCTAssertLessThan(app.buttons["home.overview.suan"].frame.minX, app.buttons["home.overview.lian"].frame.minX)
+            for module in ["ji", "suan", "lian"] {
+                let overview = app.buttons["home.overview.\(module)"]
+                XCTAssertTrue(overview.isHittable)
+                overview.tap()
+                let back = app.buttons["shell.switch"]
+                XCTAssertTrue(back.waitForExistence(timeout: 10))
+                back.tap()
+            }
+        }
+    }
+
     func testListenImportImmediatelyUpdatesArticleLibrary() {
         XCUIDevice.shared.orientation = .landscapeLeft
         defer { XCUIDevice.shared.orientation = .portrait }
@@ -70,6 +104,9 @@ final class ModuleNavigationTests: XCTestCase {
 
         first.press(forDuration: 0.7)
         XCTAssertFalse(back.exists, "A long press without dragging must not open a module")
+        app.buttons["home.overview.ji"].tap()
+        XCTAssertTrue(back.waitForExistence(timeout: 10), "Overview must still open after reordering")
+        back.tap()
         first.tap()
         XCTAssertTrue(back.waitForExistence(timeout: 10))
         back.tap()

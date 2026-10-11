@@ -46,6 +46,10 @@ public enum SimpleLianBackupTransfer {
         let container = try open()
         return try BackupService.exportData(context: container.mainContext)
     }
+    public static func learningOverview(now: Date = Date()) throws -> String {
+        let container = try open()
+        return try PracticeService.overview(context: container.mainContext, day: DayKey.make(from: now))
+    }
     public static func validate(_ data: Data) throws -> String {
         let backup = try BackupService.validate(data)
         return "题目 \(backup.questions.count) 道 · 练习会话 \(backup.sessions.count) 次"

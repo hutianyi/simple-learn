@@ -17,6 +17,10 @@ public struct SimpleSuanModuleView: View {
 
 @MainActor
 public enum SimpleSuanBackupTransfer {
+    public static func learningOverview(now: Date = Date()) throws -> String {
+        let data = try PersistenceService.shared.load()
+        return "今日已做 \(PracticeActivity(sessions: data.sessions, now: now).todayCount) 题"
+    }
     public static func exportData() throws -> Data {
         try SuanBackup.encode(PersistenceService.shared.load())
     }

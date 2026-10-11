@@ -14,18 +14,24 @@ enum WholeBackupService {
     static func coordinator() throws -> WholeBackupCoordinator {
         WholeBackupCoordinator(endpoints: [
             WholeBackupEndpoint(id: "SimpleJi", title: "简单记", export: { try await SimpleJiBackupTransfer.exportData() },
-                validate: SimpleJiBackupTransfer.validate, restore: { try await SimpleJiBackupTransfer.restore($0) }),
+                validate: SimpleJiBackupTransfer.validate, restore: { try await SimpleJiBackupTransfer.restore($0) },
+                rawStorage: try rawStorage("SimpleJi", domains: ["com.hutianyi.SimpleXue.SimpleJi"], standardKeys: ["simpleJi.lastCelebratedCompletionDay"])),
             WholeBackupEndpoint(id: "SimpleSuan", title: "简单算", export: { try SimpleSuanBackupTransfer.exportData() },
-                validate: SimpleSuanBackupTransfer.validate, restore: { try SimpleSuanBackupTransfer.restore($0) }),
+                validate: SimpleSuanBackupTransfer.validate, restore: { try SimpleSuanBackupTransfer.restore($0) }, rawStorage: try rawStorage("SimpleSuan")),
             WholeBackupEndpoint(id: "SimpleTing", title: "简单听", export: { try SimpleTingBackupTransfer.exportData() },
-                validate: SimpleTingBackupTransfer.validate, restore: { try SimpleTingBackupTransfer.restore($0) }),
+                validate: SimpleTingBackupTransfer.validate, restore: { try SimpleTingBackupTransfer.restore($0) },
+                rawStorage: try rawStorage("SimpleTing", domains: ["com.hutianyi.SimpleXue.SimpleTing"])),
             WholeBackupEndpoint(id: "SimpleLian", title: "简单练", export: { try SimpleLianBackupTransfer.exportData() },
-                validate: SimpleLianBackupTransfer.validate, restore: { try SimpleLianBackupTransfer.restore($0) }),
+                validate: SimpleLianBackupTransfer.validate, restore: { try SimpleLianBackupTransfer.restore($0) }, rawStorage: try rawStorage("SimpleLian")),
             WholeBackupEndpoint(id: "SimpleBei", title: "简单背", export: { try SimpleBeiBackupTransfer.exportData() },
-                validate: SimpleBeiBackupTransfer.validate, restore: { try SimpleBeiBackupTransfer.restore($0) }),
+                validate: SimpleBeiBackupTransfer.validate, restore: { try SimpleBeiBackupTransfer.restore($0) }, rawStorage: try rawStorage("SimpleBei")),
             WholeBackupEndpoint(id: "SimpleMo", title: "简单默", export: { try SimpleMoBackupTransfer.exportData() },
-                validate: SimpleMoBackupTransfer.validate, restore: { try SimpleMoBackupTransfer.restore($0) })
+                validate: SimpleMoBackupTransfer.validate, restore: { try SimpleMoBackupTransfer.restore($0) },
+                rawStorage: try rawStorage("SimpleMo", domains: ["com.hutianyi.SimpleXue.SimpleMo"]))
         ], directory: try ModuleStorage.directory("WholeBackup"))
+    }
+    private static func rawStorage(_ module: String, domains: [String] = [], standardKeys: [String] = []) throws -> WholeBackupRawStorage {
+        WholeBackupRawStorage(directory: try ModuleStorage.directory(module), defaultsDomains: domains, standardKeys: standardKeys)
     }
 }
 
@@ -76,7 +82,7 @@ struct WholeBackupView: View {
                 Section("整体恢复") {
                     Button("从整体备份恢复", systemImage: "square.and.arrow.down") { importing = true }
                         .disabled(needsRecovery).accessibilityIdentifier("backup.restoreAll")
-                    Text("恢复将替换全部六个模块的数据和设置，包括简单背课文库。恢复前自动保存整体安全副本；失败时回退到原数据。")
+                    Text("恢复将替换全部六个模块的数据和设置，包括简单背课文库。恢复前保存安全副本；无法读取的模块会原样保留文件和设置，再从备份恢复。失败时回退到恢复前状态。")
                         .font(.footnote).foregroundStyle(.secondary)
                     if needsRecovery {
                         Button("重试回退到恢复前数据") { Task { await recover() } }

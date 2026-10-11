@@ -52,6 +52,16 @@ public enum SimpleJiBackupTransfer {
         envelope.lastCelebratedCompletionDay = UserDefaults.standard.string(forKey: "simpleJi.lastCelebratedCompletionDay") ?? ""
         return try BackupService.encode(envelope)
     }
+    public static func learningOverview(now: Date = Date()) async throws -> String {
+        let persistence = try await open()
+        let settings = SettingsStore(defaults: UserDefaults(suiteName: "com.hutianyi.SimpleXue.SimpleJi")!)
+        let baseline = settings.baselineCampaign
+        let mastered = settings.masteredDictationTerms
+        let context = persistence.newBackgroundContext()
+        return try await context.perform {
+            try StudyCompletionRepository.overview(in: context, now: now, baseline: baseline, masteredTerms: mastered)
+        }
+    }
     public static func validate(_ data: Data) throws -> String {
         let backup = try BackupService.decodeAndValidate(data)
         return "单词 \(backup.data.words.count) 个 · 学习会话 \(backup.data.studySessions.count) 次"
