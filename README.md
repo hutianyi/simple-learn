@@ -2,9 +2,9 @@
 
 一个使用 SwiftUI 编写的本地 iPad 学习 App，将单词记忆、错题复习、语音默写、心算练习、英文听读和课文背诵整合到同一入口。
 
-当前正式版本：**1.6（构建 19）**。仅支持 **iPadOS 27 及以上**。
+当前正式版本：**1.6.1（构建 20）**。仅支持 **iPadOS 27 及以上**。
 
-[1.6 正式版](https://github.com/hutianyi/simple-learn/releases/tag/v1.6)新增更醒目的首页学习概况，按“简单记、简单算、简单练”排列；修复题库删除导致练习卡住、全部题目停用后空启动，以及当前数据损坏时无法整体恢复的问题。保留六个模块、长按排序及整体备份与恢复；此前的五模块公开版本归类为 [0.9 预览版](https://github.com/hutianyi/simple-learn/releases/tag/v0.9)。版本变化见 [CHANGELOG.md](CHANGELOG.md)。
+[1.6.1 正式版](https://github.com/hutianyi/simple-learn/releases/tag/v1.6.1)改进简单听 Sleep Timer：动态显示剩余分秒，随播放暂停和继续，按钮随状态自然伸缩并始终居中。保留六个模块、首页学习概况、长按排序及整体备份与恢复；此前的五模块公开版本归类为 [0.9 预览版](https://github.com/hutianyi/simple-learn/releases/tag/v0.9)。版本变化见 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 功能
 

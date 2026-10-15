@@ -226,42 +226,125 @@ final class ListenCoreTests: XCTestCase {
             XCTAssertEqual(value.article(next.item.articleID)?.articleNumber, 1)
         }
     }
-    func testTimerRunsWhilePausedAndBlocksExpiredResumeAndFinish() async throws {
+    func testTimerWaitsForPlaybackAndPreservesRemainingTimeAcrossPauses() async throws {
         let value = try library()
         try await MainActor.run {
             var clock = Date(timeIntervalSince1970: 500)
             let session = PlaybackSession(now: { clock })
             session.library = value
-            session.setTimer(minutes: 10)
-            let request = try XCTUnwrap(session.begin())
-            session.started(request.id); session.paused()
-            clock = clock.addingTimeInterval(601)
-            XCTAssertTrue(session.expired)
-            XCTAssertEqual(session.secondsRemaining, 0)
-            session.resumed()
-            XCTAssertEqual(session.state, .paused)
-            XCTAssertNil(session.restartCurrent())
-            XCTAssertEqual(session.state, .stopped)
+            session.setTimer(minutes: 20)
+            XCTAssertTrue(session.hasSession)
             XCTAssertNil(session.timerEndDate)
-            XCTAssertNil(session.finished(request.id))
+            clock = clock.addingTimeInterval(900)
+            XCTAssertEqual(session.secondsRemaining, 1_200)
+            let request = try XCTUnwrap(session.begin())
+            clock = clock.addingTimeInterval(30)
+            XCTAssertEqual(session.secondsRemaining, 1_200)
+            XCTAssertTrue(session.started(request.id))
+            clock = clock.addingTimeInterval(60.25)
+            XCTAssertEqual(session.secondsRemaining, 1_140)
+            session.paused()
+            XCTAssertNil(session.timerEndDate)
+            clock = clock.addingTimeInterval(3_600)
+            XCTAssertFalse(session.expired)
+            XCTAssertEqual(session.secondsRemaining, 1_140)
+            session.resumed()
+            XCTAssertEqual(session.state, .playing)
+            clock = clock.addingTimeInterval(0.5)
+            session.paused()
+            clock = clock.addingTimeInterval(600)
+            session.resumed()
+            clock = clock.addingTimeInterval(0.5)
+            XCTAssertEqual(session.secondsRemaining, 1_139)
         }
     }
-    func testResetTimerAndSongChangePreserveDeadline() async throws {
+    func testTimerPreservesBudgetAcrossArticlePreparationAndSystemInterruption() async throws {
         let value = try library()
-        await MainActor.run {
+        try await MainActor.run {
             var clock = Date(timeIntervalSince1970: 1_000)
             let session = PlaybackSession(now: { clock })
             session.library = value
             session.setTimer(minutes: 20)
-            let deadline = session.timerEndDate
-            _ = session.begin(); _ = session.move(1)
-            XCTAssertEqual(session.timerEndDate, deadline)
+            let first = try XCTUnwrap(session.begin())
+            session.started(first.id)
             clock = clock.addingTimeInterval(60)
+            let next = try XCTUnwrap(session.finished(first.id))
+            clock = clock.addingTimeInterval(30)
+            XCTAssertEqual(session.secondsRemaining, 1_140)
+            session.started(next.id)
+            clock = clock.addingTimeInterval(20)
+            session.interrupt()
+            clock = clock.addingTimeInterval(3_600)
+            XCTAssertEqual(session.secondsRemaining, 1_120)
+            let restart = try XCTUnwrap(session.restartCurrent())
+            clock = clock.addingTimeInterval(10)
+            session.started(restart.id)
+            clock = clock.addingTimeInterval(20)
+            XCTAssertEqual(session.secondsRemaining, 1_100)
+            let moved = try XCTUnwrap(session.move(1))
+            clock = clock.addingTimeInterval(30)
+            session.started(moved.id)
+            XCTAssertEqual(session.secondsRemaining, 1_100)
+        }
+    }
+    func testResetDisableAndStopTimerWhilePlayingOrPaused() async throws {
+        let value = try library()
+        try await MainActor.run {
+            var clock = Date(timeIntervalSince1970: 1_000)
+            let session = PlaybackSession(now: { clock })
+            session.library = value
+            let request = try XCTUnwrap(session.begin())
+            session.started(request.id)
             session.setTimer(minutes: 10)
             XCTAssertEqual(session.timerEndDate, clock.addingTimeInterval(600))
+            clock = clock.addingTimeInterval(60)
+            XCTAssertEqual(session.secondsRemaining, 540)
+            session.paused()
+            session.setTimer(minutes: 20)
+            clock = clock.addingTimeInterval(60)
+            XCTAssertEqual(session.secondsRemaining, 1_200)
+            session.resumed()
+            session.setTimer(minutes: nil)
+            XCTAssertNil(session.secondsRemaining)
+            XCTAssertFalse(session.expired)
+            session.setTimer(minutes: 10)
             session.beginStopping()
             XCTAssertNil(session.requestID)
             XCTAssertNil(session.timerEndDate)
+            XCTAssertNil(session.secondsRemaining)
+            session.stop()
+            XCTAssertFalse(session.hasSession)
+            session.setTimer(minutes: 20)
+            session.stop()
+            XCTAssertNil(session.secondsRemaining)
+            XCTAssertFalse(session.hasSession)
+        }
+    }
+    func testExpiredTimerBlocksResumeAndArticleAdvance() async throws {
+        let value = try library()
+        try await MainActor.run {
+            var clock = Date(timeIntervalSince1970: 500)
+            let session = PlaybackSession(now: { clock })
+            session.library = value
+            let request = try XCTUnwrap(session.begin())
+            session.started(request.id)
+            session.setTimer(minutes: 10)
+            clock = clock.addingTimeInterval(600)
+            XCTAssertTrue(session.expired)
+            XCTAssertEqual(session.secondsRemaining, 0)
+            session.paused()
+            session.resumed()
+            XCTAssertEqual(session.state, .paused)
+            XCTAssertNil(session.restartCurrent())
+            XCTAssertEqual(session.state, .stopped)
+            XCTAssertNil(session.secondsRemaining)
+            XCTAssertNil(session.finished(request.id))
+            let next = try XCTUnwrap(session.begin())
+            session.started(next.id)
+            session.setTimer(minutes: 10)
+            clock = clock.addingTimeInterval(601)
+            XCTAssertNil(session.finished(next.id))
+            XCTAssertEqual(session.state, .stopped)
         }
     }
     func testEmptySingleAndLoopingQueues() async throws {

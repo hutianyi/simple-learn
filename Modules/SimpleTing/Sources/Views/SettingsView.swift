@@ -39,7 +39,7 @@ struct ListenSettingsView: View {
                         Text("关闭").tag(0)
                         ForEach([10, 15, 20, 30, 60], id: \.self) { Text("\($0) 分钟").tag($0) }
                     }.disabled(speech.playback.state == .stopping)
-                    Text("选择后立即计时；暂停和切歌不重置时间，停止播放会取消定时。").font(.footnote).foregroundStyle(.secondary)
+                    Text("仅在播放时倒计时，播放器显示剩余分秒；暂停时保留剩余时间，继续播放后接着计时。切换文章不重置，停止播放会取消定时。").font(.footnote).foregroundStyle(.secondary)
                 }
                 backupSection
             }

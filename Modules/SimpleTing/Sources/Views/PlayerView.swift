@@ -3,6 +3,7 @@ import SwiftUI
 struct PlayerView: View {
     let speech: SpeechService
     let showCurrent: () -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private var unavailable: Bool { speech.playback.article == nil || speech.playback.state == .stopping }
     var body: some View {
         VStack(spacing: 12) {
@@ -30,34 +31,12 @@ struct PlayerView: View {
                     .disabled(!speech.playback.hasSession || speech.playback.state == .stopping)
                     .accessibilityIdentifier("listen.stop")
             }
-            Menu {
-                Button("关闭定时", systemImage: "xmark.circle") { speech.setSleepTimer(nil) }
-                Divider()
-                ForEach([10, 15, 20, 30, 60], id: \.self) { minutes in
-                    Button { speech.setSleepTimer(minutes) } label: {
-                        if speech.timerMinutes == minutes { Label("\(minutes) 分钟", systemImage: "checkmark") }
-                        else { Text("\(minutes) 分钟") }
-                    }
-                }
-            } label: {
-                Label("Sleep Timer · \(speech.timerMinutes.map { "\($0) 分钟" } ?? "关闭")", systemImage: "moon.zzz")
-            }
-            .buttonStyle(.bordered)
-            .disabled(speech.playback.state == .stopping)
-            .accessibilityLabel("睡眠定时")
-            .accessibilityValue(speech.timerMinutes.map { "\($0) 分钟" } ?? "关闭")
-            .accessibilityIdentifier("listen.sleepTimer")
+            sleepTimer
             HStack(spacing: 12) {
                 Text(speech.playback.state.title)
                 Text(speech.settings.order.title)
                 Text(speech.settings.rate.title)
                 if speech.settings.loopEnabled { Text("全库循环") }
-                if speech.playback.timerEndDate != nil {
-                    TimelineView(.periodic(from: .now, by: 1)) { _ in
-                        let seconds = speech.playback.secondsRemaining ?? 0
-                        Text("定时 \(seconds / 60):\(String(format: "%02d", seconds % 60))").monospacedDigit()
-                    }
-                }
             }.font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
             if let notice = speech.voiceNotice { Text(notice).font(.caption).foregroundStyle(.orange) }
             if let message = speech.message {
@@ -69,5 +48,38 @@ struct PlayerView: View {
         }
         .padding(.horizontal, 20).padding(.vertical, 14)
         .frame(maxWidth: .infinity).background(.bar)
+    }
+
+    private var sleepTimer: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { _ in
+            let remaining = speech.playback.secondsRemaining.map { seconds in
+                let time = String(format: "%02d:%02d", seconds / 60, seconds % 60)
+                let status = speech.playback.state == .playing ? "" : (speech.playback.state == .paused ? " · 已暂停" : " · 等待播放")
+                return "剩余 \(time)\(status)"
+            } ?? "关闭"
+            Menu {
+                Button("关闭定时", systemImage: "xmark.circle") { speech.setSleepTimer(nil) }
+                Divider()
+                ForEach([10, 15, 20, 30, 60], id: \.self) { minutes in
+                    Button { speech.setSleepTimer(minutes) } label: {
+                        if speech.timerMinutes == minutes { Label("\(minutes) 分钟", systemImage: "checkmark") }
+                        else { Text("\(minutes) 分钟") }
+                    }
+                }
+            } label: {
+                Label("Sleep Timer · \(remaining)", systemImage: "moon.zzz")
+                    .monospacedDigit()
+                    .fixedSize(horizontal: true, vertical: false)
+            }
+            .buttonStyle(.bordered)
+            .buttonBorderShape(.capsule)
+            .disabled(speech.playback.state == .stopping)
+            .accessibilityLabel("睡眠定时")
+            .accessibilityValue(remaining)
+            .accessibilityIdentifier("listen.sleepTimer")
+            .frame(maxWidth: .infinity, alignment: .center)
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: speech.timerMinutes != nil)
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: speech.playback.state)
+        }
     }
 }

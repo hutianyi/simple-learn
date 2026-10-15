@@ -17,12 +17,21 @@ final class PlaybackSession {
     var library = ListenLibrary()
     private(set) var order: PlaybackOrder
     var loopEnabled: Bool
-    private(set) var state: ListenPlaybackState = .stopped
+    private(set) var state: ListenPlaybackState = .stopped {
+        didSet {
+            guard oldValue != state else { return }
+            let date = now()
+            // Preserve fractional seconds whenever playback pauses or prepares another article.
+            if let end = timerEndDate { timerRemainingDuration = max(0, end.timeIntervalSince(date)) }
+            timerEndDate = state == .playing ? timerRemainingDuration.map { date.addingTimeInterval($0) } : nil
+        }
+    }
     private(set) var selectedArticleID: UUID?
     private(set) var queue: [PlaybackItem] = []
     private(set) var index = 0
     private(set) var requestID: UUID?
     private(set) var timerEndDate: Date?
+    private var timerRemainingDuration: TimeInterval?
     @ObservationIgnored private let now: () -> Date
 
     init(order: PlaybackOrder = .forward, loopEnabled: Bool = true, now: @escaping () -> Date = Date.init) {
@@ -31,9 +40,10 @@ final class PlaybackSession {
 
     var article: ListenArticle? { selectedArticleID.flatMap { library.article($0) } }
     var day: ListenDay? { selectedArticleID.flatMap { library.day(for: $0) } }
-    var hasSession: Bool { state != .stopped || timerEndDate != nil }
-    var expired: Bool { timerEndDate.map { $0 <= now() } ?? false }
-    var secondsRemaining: Int? { timerEndDate.map { max(0, Int(ceil($0.timeIntervalSince(now())))) } }
+    var hasSession: Bool { state != .stopped || timerRemainingDuration != nil }
+    private var remainingDuration: TimeInterval? { timerEndDate.map { max(0, $0.timeIntervalSince(now())) } ?? timerRemainingDuration }
+    var expired: Bool { remainingDuration.map { $0 <= 0 } ?? false }
+    var secondsRemaining: Int? { remainingDuration.map { Int(ceil($0)) } }
     var canGoPrevious: Bool {
         if !queue.isEmpty { return index > 0 || loopEnabled }
         guard article != nil else { return false }
@@ -102,13 +112,14 @@ final class PlaybackSession {
     }
 
     func setTimer(minutes: Int?) {
-        timerEndDate = minutes.map { now().addingTimeInterval(Double($0) * 60) }
+        timerRemainingDuration = minutes.map { max(0, Double($0) * 60) }
+        timerEndDate = state == .playing ? timerRemainingDuration.map { now().addingTimeInterval($0) } : nil
     }
     func beginStopping() {
-        requestID = nil; timerEndDate = nil; state = .stopping
+        requestID = nil; timerEndDate = nil; timerRemainingDuration = nil; state = .stopping
     }
     func stop() {
-        requestID = nil; timerEndDate = nil; queue = []; index = 0; state = .stopped
+        requestID = nil; timerEndDate = nil; timerRemainingDuration = nil; queue = []; index = 0; state = .stopped
     }
 
     private func requestCurrent() -> SpeechRequest? {
