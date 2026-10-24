@@ -279,7 +279,7 @@ private struct PracticeHeatmapView: View {
                                     }
                                     .buttonStyle(.plain)
                                     .disabled(date < activity.firstDay || date > activity.today)
-                                    .accessibilityLabel("\(date.formatted(date: .complete, time: .omitted))，\(activity.isRepaired(date) ? "补学完成" : "完成 \(activity.count(on: date)) 题")")
+                                    .accessibilityLabel("\(date.formatted(date: .complete, time: .omitted))，\(status(date))")
                                 }
                             }
                         }
@@ -288,7 +288,7 @@ private struct PracticeHeatmapView: View {
             }.frame(height: 140)
 
             HStack {
-                Text("\(selection.formatted(.dateTime.month().day())) · \(activity.isRepaired(selection) ? "补学完成（实际作答记在补学当天）" : "完成 \(activity.count(on: selection)) 题")")
+                Text("\(selection.formatted(.dateTime.month().day())) · \(status(selection))")
                     .font(.subheadline.weight(.medium))
                 Spacer(minLength: 0)
                 HStack(spacing: 4) {
@@ -311,7 +311,14 @@ private struct PracticeHeatmapView: View {
 
     private func color(date: Date) -> Color {
         guard date >= activity.firstDay && date <= activity.today else { return .clear }
-        return activity.isRepaired(date) ? purple : color(count: activity.count(on: date))
+        return activity.isRepaired(date) || (activity.isComplete(date) && activity.count(on: date) == 0)
+            ? purple : color(count: activity.count(on: date))
+    }
+
+    private func status(_ date: Date) -> String {
+        if activity.isRepaired(date) { return "补学完成（实际作答记在补学当天）" }
+        if activity.isComplete(date) && activity.count(on: date) == 0 { return "已完成" }
+        return "完成 \(activity.count(on: date)) 题"
     }
 
     private func color(count: Int) -> Color {

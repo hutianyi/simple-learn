@@ -99,8 +99,27 @@ final class StudyStreakTests: XCTestCase {
     }
 
     func testIncompleteYesterdayBreaksStreakAndTodayStartsNewOne() {
-        XCTAssertEqual(StudyStreak.count(completedDays: [completed(1), completed(2)], now: date(4), calendar: calendar), 0)
-        XCTAssertEqual(StudyStreak.count(completedDays: [completed(1), completed(2), completed(4)], now: date(4), calendar: calendar), 1)
+        XCTAssertEqual(StudyStreak.count(completedDays: [completed(7), completed(8)], now: date(10), calendar: calendar), 0)
+        XCTAssertEqual(StudyStreak.count(completedDays: [completed(7), completed(8), completed(10)], now: date(10), calendar: calendar), 1)
+    }
+
+    func testEitherCompletedWeekendDayCoversBothWithoutChangingTasks() throws {
+        for completedDay in [3, 4] {
+            var unfinished = completed(completedDay == 3 ? 4 : 3)
+            unfinished.requiredCardIDs = [UUID()]
+            unfinished.completedAt = nil
+            let records = [completed(2), completed(completedDay), unfinished]
+            let restored = try JSONDecoder().decode([StudyCompletionDay].self, from: JSONEncoder().encode(records))
+            XCTAssertEqual(StudyStreak.completionKeys(completedDays: restored, historicalKeys: [], now: date(5), calendar: calendar),
+                ["2026-10-02", "2026-10-03", "2026-10-04"])
+            XCTAssertEqual(StudyStreak.count(completedDays: restored, now: date(5), calendar: calendar), 3)
+            XCTAssertFalse(unfinished.isComplete)
+            XCTAssertFalse(StudyStreak.shouldCelebrate(day: unfinished, todayKey: unfinished.dayKey, lastCelebratedKey: ""))
+        }
+        var unfinished = completed(3)
+        unfinished.dictationComplete = false
+        XCTAssertTrue(StudyStreak.completionKeys(completedDays: [unfinished], historicalKeys: [], now: date(5), calendar: calendar).isEmpty)
+        XCTAssertEqual(StudyStreak.count(completedDays: [completed(2), completed(4), completed(5)], now: date(5), calendar: calendar), 4)
     }
 
     func testNoTasksAndNoActivityCannotCompleteADay() {

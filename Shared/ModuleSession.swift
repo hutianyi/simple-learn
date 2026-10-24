@@ -29,6 +29,48 @@ public enum ModuleStorage {
     }
 }
 
+public enum WeekendStreak {
+    public static func completionKeys(_ keys: Set<String>, now: Date = Date(),
+                                      calendar: Calendar = .current) -> Set<String> {
+        let today = calendar.startOfDay(for: now)
+        let todayKey = OneDayStreakRepair.dayKey(today, calendar: calendar)
+        var result = keys.filter { $0 <= todayKey }
+        for key in result {
+            let parts = key.split(separator: "-").compactMap { Int($0) }
+            guard parts.count == 3,
+                  let date = calendar.date(from: DateComponents(year: parts[0], month: parts[1], day: parts[2], hour: 12)),
+                  OneDayStreakRepair.dayKey(date, calendar: calendar) == key else { continue }
+            let weekday = calendar.component(.weekday, from: date)
+            guard weekday == 7 || weekday == 1,
+                  let companion = calendar.date(byAdding: .day, value: weekday == 7 ? 1 : -1, to: date),
+                  calendar.startOfDay(for: companion) <= today else { continue }
+            result.insert(OneDayStreakRepair.dayKey(companion, calendar: calendar))
+        }
+        return result
+    }
+
+    public static func count(completedKeys: Set<String>, now: Date = Date(),
+                             calendar: Calendar = .current) -> Int {
+        var cursor = calendar.startOfDay(for: now)
+        if !completedKeys.contains(OneDayStreakRepair.dayKey(cursor, calendar: calendar)) {
+            guard let yesterday = calendar.date(byAdding: .day, value: -1, to: cursor) else { return 0 }
+            // Sunday is still available to finish this weekend; retain Friday's streak meanwhile.
+            if calendar.component(.weekday, from: cursor) == 1
+                && !completedKeys.contains(OneDayStreakRepair.dayKey(yesterday, calendar: calendar)) {
+                guard let friday = calendar.date(byAdding: .day, value: -1, to: yesterday) else { return 0 }
+                cursor = friday
+            } else { cursor = yesterday }
+        }
+        var count = 0
+        while completedKeys.contains(OneDayStreakRepair.dayKey(cursor, calendar: calendar)) {
+            count += 1
+            guard let previous = calendar.date(byAdding: .day, value: -1, to: cursor) else { break }
+            cursor = previous
+        }
+        return count
+    }
+}
+
 public enum OneDayStreakRepair {
     public struct Offer: Equatable {
         public let todayKey: String
@@ -44,6 +86,9 @@ public enum OneDayStreakRepair {
     public static func offer(completedKeys: Set<String>, handledKeys: Set<String> = [],
                              now: Date = Date(), calendar: Calendar = .current) -> Offer? {
         let today = calendar.startOfDay(for: now)
+        // A missed Saturday can still be covered by Sunday's normal work.
+        guard calendar.component(.weekday, from: today) != 1 else { return nil }
+        let completedKeys = WeekendStreak.completionKeys(completedKeys, now: now, calendar: calendar)
         guard let yesterday = calendar.date(byAdding: .day, value: -1, to: today),
               var cursor = calendar.date(byAdding: .day, value: -2, to: today) else { return nil }
         let todayKey = dayKey(today, calendar: calendar)

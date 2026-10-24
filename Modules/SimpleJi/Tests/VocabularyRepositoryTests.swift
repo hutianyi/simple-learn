@@ -36,7 +36,7 @@ final class VocabularyRepositoryTests: XCTestCase {
         XCTAssertTrue(stillFinished.isComplete)
         XCTAssertEqual(stillFinished.requiredCardIDs, finished.requiredCardIDs)
         XCTAssertEqual(stillFinished.completedAt, finished.completedAt)
-        XCTAssertEqual(StudyStreak.count(completedDays: [stillFinished], now: evening, calendar: calendar), 1)
+        XCTAssertEqual(StudyStreak.count(completedDays: [stillFinished], now: evening, calendar: calendar), 2)
         let dueToday = try await review.dueStates(today: evening)
         XCTAssertFalse(dueToday.contains { $0.english != "apple" })
 

@@ -30,13 +30,13 @@ final class ModuleSessionTests: XCTestCase {
     func testRepairOnlyOffersYesterdayAfterAnExistingStreak() {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
-        let now = calendar.date(from: DateComponents(year: 2026, month: 10, day: 5, hour: 12))!
-        let keys: Set<String> = ["2026-10-01", "2026-10-02", "2026-10-03"]
+        let now = calendar.date(from: DateComponents(year: 2026, month: 10, day: 9, hour: 12))!
+        let keys: Set<String> = ["2026-10-05", "2026-10-06", "2026-10-07"]
         let offer = OneDayStreakRepair.offer(completedKeys: keys, now: now, calendar: calendar)
-        XCTAssertEqual(offer?.yesterdayKey, "2026-10-04")
+        XCTAssertEqual(offer?.yesterdayKey, "2026-10-08")
         XCTAssertEqual(offer?.previousStreak, 3)
-        XCTAssertNil(OneDayStreakRepair.offer(completedKeys: keys, handledKeys: ["2026-10-04"], now: now, calendar: calendar))
-        XCTAssertNil(OneDayStreakRepair.offer(completedKeys: keys.union(["2026-10-04"]), now: now, calendar: calendar))
+        XCTAssertNil(OneDayStreakRepair.offer(completedKeys: keys, handledKeys: ["2026-10-08"], now: now, calendar: calendar))
+        XCTAssertNil(OneDayStreakRepair.offer(completedKeys: keys.union(["2026-10-08"]), now: now, calendar: calendar))
         XCTAssertNil(OneDayStreakRepair.offer(completedKeys: [], now: now, calendar: calendar))
         let tomorrow = calendar.date(byAdding: .day, value: 1, to: now)!
         XCTAssertNil(OneDayStreakRepair.offer(completedKeys: keys, now: tomorrow, calendar: calendar))
@@ -46,10 +46,41 @@ final class ModuleSessionTests: XCTestCase {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "America/Los_Angeles")!
         let now = calendar.date(from: DateComponents(year: 2026, month: 11, day: 2, hour: 0))!
-        let offer = OneDayStreakRepair.offer(completedKeys: ["2026-10-30", "2026-10-31"], now: now, calendar: calendar)
-        XCTAssertEqual(offer?.yesterdayKey, "2026-11-01")
-        XCTAssertEqual(offer?.previousStreak, 2)
+        let keys = WeekendStreak.completionKeys(["2026-10-30", "2026-10-31"], now: now, calendar: calendar)
+        XCTAssertEqual(keys, ["2026-10-30", "2026-10-31", "2026-11-01"])
+        XCTAssertEqual(WeekendStreak.count(completedKeys: keys, now: now, calendar: calendar), 3)
+        XCTAssertNil(OneDayStreakRepair.offer(completedKeys: keys, now: now, calendar: calendar))
         XCTAssertTrue(OneDayStreakRepair.isYesterday("2026-11-01", on: now, calendar: calendar))
+    }
+
+    func testWeekendCompletionDefersFutureSundayAndDoesNotCrossWeeks() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        func date(_ day: Int) -> Date {
+            calendar.date(from: DateComponents(year: 2026, month: 10, day: day, hour: 12))!
+        }
+        XCTAssertEqual(WeekendStreak.completionKeys(["2026-10-03"], now: date(3), calendar: calendar), ["2026-10-03"])
+        XCTAssertEqual(WeekendStreak.completionKeys(["2026-10-03"], now: date(4), calendar: calendar), ["2026-10-03", "2026-10-04"])
+        XCTAssertEqual(WeekendStreak.completionKeys(["2026-10-04"], now: date(4), calendar: calendar), ["2026-10-03", "2026-10-04"])
+        XCTAssertEqual(WeekendStreak.completionKeys(["2026-10-02"], now: date(5), calendar: calendar), ["2026-10-02"])
+        let keys = WeekendStreak.completionKeys(["2026-10-04", "2026-10-11"], now: date(12), calendar: calendar)
+        XCTAssertEqual(keys, ["2026-10-03", "2026-10-04", "2026-10-10", "2026-10-11"])
+        XCTAssertEqual(WeekendStreak.count(completedKeys: keys, now: date(12), calendar: calendar), 2)
+        XCTAssertEqual(WeekendStreak.completionKeys(keys, now: date(12), calendar: calendar), keys)
+    }
+
+    func testSundayKeepsFridayStreakWhilePendingWithoutOfferingRepair() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        func date(_ day: Int) -> Date {
+            calendar.date(from: DateComponents(year: 2026, month: 10, day: day, hour: 12))!
+        }
+        let keys: Set<String> = ["2026-10-01", "2026-10-02"]
+        XCTAssertEqual(WeekendStreak.count(completedKeys: keys, now: date(4), calendar: calendar), 2)
+        XCTAssertNil(OneDayStreakRepair.offer(completedKeys: keys, now: date(4), calendar: calendar))
+        XCTAssertEqual(WeekendStreak.count(completedKeys: keys, now: date(5), calendar: calendar), 0)
+        XCTAssertNil(OneDayStreakRepair.offer(completedKeys: keys, now: date(5), calendar: calendar))
+        XCTAssertNotNil(OneDayStreakRepair.offer(completedKeys: ["2026-10-01"], now: date(3), calendar: calendar))
     }
 
 }

@@ -37,18 +37,7 @@ struct StudyCompletionDay: Codable, Equatable {
 enum StudyStreak {
     static func count(completedDays: [StudyCompletionDay], now: Date = Date(), calendar: Calendar = .current, historicalKeys: Set<String> = []) -> Int {
         let keys = completionKeys(completedDays: completedDays, historicalKeys: historicalKeys, now: now, calendar: calendar)
-        var cursor = calendar.startOfDay(for: now)
-        if !keys.contains(DictationEligibility.dayKey(for: cursor, calendar: calendar)) {
-            guard let yesterday = calendar.date(byAdding: .day, value: -1, to: cursor) else { return 0 }
-            cursor = yesterday
-        }
-        var count = 0
-        while keys.contains(DictationEligibility.dayKey(for: cursor, calendar: calendar)) {
-            count += 1
-            guard let previous = calendar.date(byAdding: .day, value: -1, to: cursor) else { break }
-            cursor = previous
-        }
-        return count
+        return WeekendStreak.count(completedKeys: keys, now: now, calendar: calendar)
     }
 
     // Historical sessions predate the complete daily task snapshots. Never let this
@@ -57,9 +46,10 @@ enum StudyStreak {
                                now: Date = Date(), calendar: Calendar = .current) -> Set<String> {
         let cutoff = completedDays.map(\.dayKey).min()
             ?? DictationEligibility.dayKey(for: now, calendar: calendar)
-        return Set(completedDays.filter { $0.isComplete && ($0.completedAt.map { $0 <= now } ?? false) }.map(\.dayKey))
+        let keys = Set(completedDays.filter { $0.isComplete && ($0.completedAt.map { $0 <= now } ?? false) }.map(\.dayKey))
             .union(historicalKeys.filter { $0 < cutoff })
             .union(repairedKeys(completedDays: completedDays, now: now))
+        return WeekendStreak.completionKeys(keys, now: now, calendar: calendar)
     }
 
     static func repairedKeys(completedDays: [StudyCompletionDay], now: Date = Date()) -> Set<String> {

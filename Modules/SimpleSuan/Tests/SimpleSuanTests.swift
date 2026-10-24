@@ -132,22 +132,68 @@ final class SimpleSuanTests: XCTestCase {
 
 
     func testRepairRestoresOnlyYesterdayWithoutMovingActualAnswers() throws {
-        let now = activityDate(2026, 10, 5, hour: 12)
-        let old = activitySession(count: 40, at: activityDate(2026, 10, 3, hour: 12))
+        let now = activityDate(2026, 10, 8, hour: 12)
+        let old = activitySession(count: 40, at: activityDate(2026, 10, 6, hour: 12))
         var repair = activitySession(count: 80, at: now)
-        repair.repairedDayKey = "2026-10-04"
-        let data = try SuanBackup.decode(SuanBackup.encode(AppData(sessions: [old, repair], handledRepairDays: ["2026-10-04"])))
+        repair.repairedDayKey = "2026-10-07"
+        let data = try SuanBackup.decode(SuanBackup.encode(AppData(sessions: [old, repair], handledRepairDays: ["2026-10-07"])))
         let activity = PracticeActivity(sessions: data.sessions, now: now, calendar: activityCalendar)
         XCTAssertEqual(activity.streak, 3)
         XCTAssertEqual(activity.todayCount, 80)
-        XCTAssertEqual(activity.count(on: activityDate(2026, 10, 4)), 0)
-        XCTAssertTrue(activity.isRepaired(activityDate(2026, 10, 4)))
+        XCTAssertEqual(activity.count(on: activityDate(2026, 10, 7)), 0)
+        XCTAssertTrue(activity.isRepaired(activityDate(2026, 10, 7)))
         XCTAssertEqual(activity.annualPracticeDays, 3)
         let deleted = data.removingSession(withID: repair.id)
         XCTAssertEqual(PracticeActivity(sessions: deleted.sessions, now: now, calendar: activityCalendar).streak, 0)
         var invalid = repair
-        invalid.repairedDayKey = "2026-10-03"
+        invalid.repairedDayKey = "2026-10-06"
         XCTAssertThrowsError(try SuanBackup.decode(SuanBackup.encode(AppData(sessions: [invalid]))))
+    }
+
+    func testWeekendCreditSurvivesBackupWithoutDuplicatingAnswersAndFollowsDeletion() throws {
+        let friday = activityDate(2026, 10, 2, hour: 12)
+        let saturday = activityDate(2026, 10, 3, hour: 12)
+        let sunday = activityDate(2026, 10, 4, hour: 12)
+        for workedDay in [saturday, sunday] {
+            let session = activitySession(count: 40, at: workedDay)
+            let data = try SuanBackup.decode(SuanBackup.encode(AppData(sessions: [
+                activitySession(count: 40, at: friday), session
+            ])))
+            let activity = PracticeActivity(sessions: data.sessions, now: sunday, calendar: activityCalendar)
+            let restDay = workedDay == saturday ? sunday : saturday
+            XCTAssertEqual(activity.streak, 3)
+            XCTAssertEqual(activity.annualPracticeDays, 3)
+            XCTAssertTrue(activity.isComplete(restDay))
+            XCTAssertFalse(activity.isRepaired(restDay))
+            XCTAssertEqual(activity.count(on: restDay), 0)
+            XCTAssertEqual(activity.questionCounts.values.reduce(0, +), 80)
+            let deleted = data.removingSession(withID: session.id)
+            let monday = activityDate(2026, 10, 5, hour: 12)
+            XCTAssertEqual(PracticeActivity(sessions: deleted.sessions, now: monday, calendar: activityCalendar).streak, 0)
+        }
+        let both = PracticeActivity(sessions: [activitySession(count: 40, at: saturday),
+            activitySession(count: 40, at: sunday)], now: sunday, calendar: activityCalendar)
+        XCTAssertEqual(both.streak, 2)
+        XCTAssertEqual(both.annualPracticeDays, 2)
+        XCTAssertEqual(both.count(on: saturday), 40)
+        XCTAssertEqual(both.todayCount, 40)
+    }
+
+    func testPartialWeekendDoesNotEarnCreditAndSundayWorkReachesSevenDays() {
+        let sunday = activityDate(2026, 10, 11, hour: 12)
+        var partial = activitySession(count: 10, at: sunday)
+        partial.isPartial = true
+        let activity = PracticeActivity(sessions: [partial], now: sunday, calendar: activityCalendar)
+        XCTAssertTrue(activity.completedKeys.isEmpty)
+        XCTAssertEqual(activity.streak, 0)
+        let weekdays = (5...9).map { activitySession(count: 40, at: activityDate(2026, 10, $0, hour: 12)) }
+        let pending = PracticeActivity(sessions: weekdays, now: sunday, calendar: activityCalendar)
+        XCTAssertEqual(pending.streak, 5)
+        XCTAssertEqual(pending.annualPracticeDays, 5)
+        let finished = PracticeActivity(sessions: weekdays + [activitySession(count: 40, at: sunday)],
+            now: sunday, calendar: activityCalendar)
+        XCTAssertEqual(finished.streak, 7)
+        XCTAssertEqual(finished.annualPracticeDays, 7)
     }
 
     func testPartialRepairPreservesAnswersButDoesNotRestoreStreak() throws {
@@ -166,7 +212,7 @@ final class SimpleSuanTests: XCTestCase {
     @MainActor func testHandledRepairSurvivesRelaunch() throws {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         let persistence = PersistenceService(directoryURL: folder)
-        let now = Date()
+        let now = activityDate(2026, 10, 8, hour: 12)
         let prior = Calendar.current.date(byAdding: .day, value: -2, to: now)!
         let store = AppDataStore(persistence: persistence)
         try store.add(activitySession(count: 40, at: prior))
