@@ -54,11 +54,16 @@ struct StatisticsView: View {
                         StreakRewardCard(moduleName: "简单记", streak: completionHistory.streak)
                     }
                     celebrationHeader
+                    if completionError == nil && completionHistory.error == nil
+                        && completionHistory.keys.contains(DictationEligibility.dayKey(for: Date(), calendar: calendar)) {
+                        WeekendCompletionNotice(calendar: calendar)
+                    }
                 }
                 completionHeatmap
 
                 if celebration {
-                    Button("太棒了，明天继续！") { dismiss() }
+                    Button([1, 7].contains(calendar.component(.weekday, from: Date()))
+                        ? "太棒了，完成啦！" : "太棒了，明天继续！") { dismiss() }
                         .buttonStyle(LargePrimaryButtonStyle())
                         .accessibilityIdentifier("dismissDailyCelebration")
                 } else {

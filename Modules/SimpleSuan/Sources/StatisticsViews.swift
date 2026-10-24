@@ -15,6 +15,9 @@ struct SessionResultView: View {
                 if saved {
                     StreakRewardCard(moduleName: "简单算", streak: activity.streak)
                     celebrationHeader(activity: activity)
+                    if activity.isComplete(activity.today) {
+                        WeekendCompletionNotice(date: activity.today, calendar: activity.calendar)
+                    }
                     PracticeHeatmapView(activity: activity)
                 } else {
                     Text("本次练习完成").font(.largeTitle.bold())

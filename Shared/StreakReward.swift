@@ -20,6 +20,35 @@ public struct StreakRewardProgress: Equatable {
 #if os(iOS)
 import SwiftUI
 
+public struct WeekendCompletionNotice: View {
+    private let date: Date
+    private let calendar: Calendar
+
+    public init(date: Date = Date(), calendar: Calendar = .current) {
+        self.date = date
+        self.calendar = calendar
+    }
+
+    public var body: some View {
+        if [1, 7].contains(calendar.component(.weekday, from: date)) {
+            VStack(spacing: 8) {
+                Label("周末完成一天，两天都算打卡成功！", systemImage: "calendar.badge.checkmark")
+                    .font(.title2.bold())
+                Text("另一天可以放心休息啦。")
+                    .font(.title3)
+            }
+            .foregroundStyle(.purple)
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity)
+            .padding(20)
+            .background(.purple.opacity(0.10), in: RoundedRectangle(cornerRadius: 20))
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("weekendCompletionNotice")
+        }
+    }
+}
+
 public struct StreakRewardCard: View {
     private let moduleName: String
     private let progress: StreakRewardProgress
