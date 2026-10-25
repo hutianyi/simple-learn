@@ -1,5 +1,6 @@
 import SwiftData
 import SwiftUI
+import UIKit
 
 struct PracticeFlowView: View {
     @Environment(\.dismiss) private var dismiss
@@ -140,6 +141,9 @@ private struct MarkingCard: View {
                     .tint(tint(for: result))
                 }
             }
+            if attempt.draftResult == .wrong, let question = attempt.question {
+                ChatGPTHelpButton(question: question)
+            }
         }
         .padding(20).background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16))
     }
@@ -177,6 +181,7 @@ private struct CorrectionView: View {
                                     Divider()
                                     MarkdownView(text: question.answerMarkdown)
                                     if !question.explanationMarkdown.isEmpty { MarkdownView(text: question.explanationMarkdown).foregroundStyle(.secondary) }
+                                    ChatGPTHelpButton(question: question)
                                 }.padding(18).background(.thinMaterial, in: RoundedRectangle(cornerRadius: 14))
                             }
                         }
@@ -229,6 +234,48 @@ private struct CorrectionView: View {
         catch { errorMessage = error.localizedDescription }
     }
     private func save() { do { try context.save() } catch { errorMessage = error.localizedDescription } }
+}
+
+private struct ChatGPTHelpButton: View {
+    let question: Question
+    @State private var showsCopiedAlert = false
+
+    var body: some View {
+        Button {
+            UIPasteboard.general.string = helpPrompt
+            showsCopiedAlert = true
+        } label: {
+            Label("求助 ChatGPT", systemImage: "doc.on.clipboard")
+        }
+        .buttonStyle(.bordered)
+        .accessibilityHint("复制这道题和逐步引导的提示词，供粘贴到 ChatGPT")
+        .accessibilityIdentifier("lian.chatGPTHelp.\(question.id.uuidString)")
+        .alert("已复制到剪贴板", isPresented: $showsCopiedAlert) {
+            Button("好", role: .cancel) { }
+        } message: {
+            Text("题目和引导提示词已复制。请打开 ChatGPT，粘贴并发送，让孩子跟着提示一步步思考。")
+        }
+    }
+
+    private var helpPrompt: String {
+        """
+        你是一位耐心、善于启发孩子的老师。下面是一道孩子做错的题，请直接和孩子对话，帮助孩子自己想明白并解出这道题。
+
+        请遵守这些要求：
+        1. 使用孩子容易理解的语言，语气温和，不责备；根据孩子的回答调整讲解难度。
+        2. 每次只问一个小问题，然后停下来等待孩子回答，再决定下一步。不要一次列出所有问题或步骤。
+        3. 先了解孩子对题意的理解和原来的想法，再逐步引导孩子找出已知条件、要求的问题和解题方法。
+        4. 不要直接给出最终答案、完整解法，或替孩子完成关键计算。孩子卡住时，先给一点提示，仍不理解时再把问题拆小。
+        5. 孩子答错时，帮助孩子检查思路，让孩子再试一次；答对时，简短肯定并请孩子说说理由。解出后，引导孩子检查结果，并用自己的话总结方法。
+        6. 如果题目缺少图片、条件或有歧义，请先让孩子补充，不要猜测。
+
+        现在请从一个帮助孩子理解题意的小问题开始。
+
+        【原题】
+        \(question.promptMarkdown)
+        【原题结束】
+        """
+    }
 }
 
 private struct SummaryView: View {
