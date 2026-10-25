@@ -63,12 +63,12 @@ struct StartPracticeView: View {
         .fullScreenCover(item: $practice) { PracticeFlowView(viewModel: $0).interactiveDismissDisabled() }
         .onAppear(perform: checkRepair)
         .onChange(of: scenePhase) { _, phase in if phase == .active { checkRepair() } }
-        .alert("补上昨天，接回连续记录？", isPresented: Binding(
+        .alert("补上打卡，接回连续记录？", isPresented: Binding(
             get: { repairOffer != nil }, set: { if !$0 { repairOffer = nil } }), presenting: repairOffer) { offer in
-            Button("补上昨天") { decideRepair(offer, accepted: true) }
+            Button("补上打卡") { decideRepair(offer, accepted: true) }
             Button("放弃连续记录", role: .cancel) { decideRepair(offer, accepted: false) }
         } message: { offer in
-            Text("你之前已经连续完成了 \(offer.previousStreak) 天！\n昨天还没完成。补昨天 \(questionCount) 题，加今天 \(questionCount) 题，共 \(questionCount * 2) 题，接着一次做完就能恢复连续记录。\n主动结束或过了今天，这次机会就结束。")
+            Text("你之前已经连续完成了 \(offer.previousStreak) 天！\n上次漏做了一天。补漏做那天 \(questionCount) 题，加今天 \(questionCount) 题，共 \(questionCount * 2) 题，接着一次做完就能恢复连续记录。\n主动结束或过了今天，这次机会就结束。")
         }
         .alert("无法准备补学", isPresented: Binding(get: { repairError != nil }, set: { if !$0 { repairError = nil } })) {
             Button("好", role: .cancel) {}

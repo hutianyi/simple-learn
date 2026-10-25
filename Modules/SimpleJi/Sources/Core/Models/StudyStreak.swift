@@ -59,7 +59,7 @@ enum StudyStreak {
                   let completedAt = plan.restoredAt ?? day.completedAt, completedAt <= now,
                   let zone = TimeZone(identifier: day.timeZoneID),
                   OneDayStreakRepair.dayKey(completedAt, calendar: DictationEligibility.calendar(timeZone: zone)) == day.dayKey,
-                  OneDayStreakRepair.isYesterday(plan.yesterdayKey, on: completedAt,
+                  OneDayStreakRepair.isRepairableDay(plan.yesterdayKey, on: completedAt,
                     calendar: DictationEligibility.calendar(timeZone: zone)) else { return nil }
             return plan.yesterdayKey
         })

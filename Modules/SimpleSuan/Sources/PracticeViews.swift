@@ -25,7 +25,7 @@ struct PracticeFlowView: View {
             Button("结束练习", role: .destructive) { endPractice() }
         } message: {
             Text(viewModel.repairDayKey == nil ? "未完成的练习不会计入历史统计。"
-                : "结束后，本次补打卡机会将失效。已经完成的回答会保留，但不会恢复昨天的打卡。")
+                : "结束后，本次补打卡机会将失效。已经完成的回答会保留，但不会恢复漏做那天的打卡。")
         }
         .alert("无法保存练习", isPresented: Binding(get: { saveError != nil }, set: { if !$0 { saveError = nil } })) {
             Button("重试保存") {
@@ -35,15 +35,15 @@ struct PracticeFlowView: View {
         } message: { Text(saveError ?? "请保留当前页面。") }
         .onDisappear { viewModel.stop() }
         .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { _ in
-            guard let key = viewModel.repairDayKey, !saved, !hasExpired, viewModel.completedSession == nil,
-                  !OneDayStreakRepair.isYesterday(key, on: Date()) else { return }
+            guard viewModel.repairDayKey != nil, !saved, !hasExpired, viewModel.completedSession == nil,
+                  !Calendar.current.isDate(viewModel.sessionStartedAt, inSameDayAs: Date()) else { return }
             expired = true
             hasExpired = true
             viewModel.stop()
         }
         .alert("今天的补学机会已结束", isPresented: $expired) {
             Button("回到练习首页") { endPractice() }
-        } message: { Text("已经跨天，昨天的连续记录不再恢复。做过的回答会保留，接下来正常开始今天。") }
+        } message: { Text("已经跨天，漏做那天的打卡不再恢复。做过的回答会保留，接下来正常开始今天。") }
     }
     private func save(_ session: SessionRecord) {
         do { try store.add(session); saved = true; saveError = nil }
@@ -69,7 +69,7 @@ struct PracticeView: View {
         VStack(spacing: 18) {
             Text("第 \(viewModel.questionNumber) / \(viewModel.questions.count) 题").font(.title2.weight(.semibold))
             if viewModel.repairDayKey != nil {
-                Text("补上昨天＋完成今天 · 全部完成后接回连续记录")
+                Text("补上打卡＋完成今天 · 全部完成后接回连续记录")
                     .font(.subheadline).foregroundStyle(.secondary)
             }
             Text(String(format: "%.1f 秒", viewModel.elapsed)).font(.title3.monospacedDigit()).foregroundStyle(.secondary)

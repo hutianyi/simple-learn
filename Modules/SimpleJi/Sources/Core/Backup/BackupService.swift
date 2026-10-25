@@ -214,7 +214,7 @@ enum BackupService {
                 let parts = day.dayKey.split(separator: "-").compactMap { Int($0) }
                 guard parts.count == 3,
                       let date = calendar.date(from: DateComponents(year: parts[0], month: parts[1], day: parts[2])),
-                      OneDayStreakRepair.isYesterday(repair.yesterdayKey, on: date, calendar: calendar),
+                      OneDayStreakRepair.isRepairableDay(repair.yesterdayKey, on: date, calendar: calendar),
                       repair.previousStreak > 0,
                       Set(repair.extraCardIDs).count == repair.extraCardIDs.count else {
                     throw BackupError.invalidData("补学日期或卡片任务无效")

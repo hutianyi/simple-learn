@@ -150,6 +150,47 @@ final class SimpleSuanTests: XCTestCase {
         XCTAssertThrowsError(try SuanBackup.decode(SuanBackup.encode(AppData(sessions: [invalid]))))
     }
 
+    @MainActor func testSundayRepairsFridayAndCreditsWeekendWithoutMovingAnswers() throws {
+        let thursday = activityDate(2026, 10, 1, hour: 12)
+        let sunday = activityDate(2026, 10, 4, hour: 12)
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let persistence = PersistenceService(directoryURL: folder)
+        let store = AppDataStore(persistence: persistence)
+        try store.add(activitySession(count: 40, at: thursday))
+        let offer = try XCTUnwrap(store.repairOffer(now: sunday, calendar: activityCalendar))
+        XCTAssertEqual(offer.yesterdayKey, "2026-10-02")
+        try store.handleRepair(offer, now: sunday)
+        var repair = activitySession(count: 80, at: sunday)
+        repair.repairedDayKey = offer.yesterdayKey
+        repair.repairTimeZoneID = activityCalendar.timeZone.identifier
+        try store.add(repair)
+        let data = try SuanBackup.decode(store.exportData())
+        let relaunched = AppDataStore(persistence: persistence)
+        XCTAssertNil(relaunched.repairOffer(now: sunday, calendar: activityCalendar))
+        let activity = PracticeActivity(sessions: data.sessions, now: sunday, calendar: activityCalendar)
+        XCTAssertEqual(activity.streak, 4)
+        XCTAssertEqual(activity.annualPracticeDays, 4)
+        XCTAssertEqual(activity.todayCount, 80)
+        XCTAssertTrue(activity.isRepaired(activityDate(2026, 10, 2)))
+        XCTAssertTrue(activity.isComplete(activityDate(2026, 10, 3)))
+        XCTAssertEqual(activity.count(on: activityDate(2026, 10, 2)), 0)
+        XCTAssertEqual(activity.count(on: activityDate(2026, 10, 3)), 0)
+        XCTAssertEqual(activity.questionCounts.values.reduce(0, +), 120)
+        let deleted = data.removingSession(withID: repair.id)
+        XCTAssertEqual(PracticeActivity(sessions: deleted.sessions, now: sunday, calendar: activityCalendar).streak, 0)
+        for invalidKey in ["2026-10-01", "2026-10-04"] {
+            var invalid = repair
+            invalid.repairedDayKey = invalidKey
+            XCTAssertThrowsError(try SuanBackup.decode(SuanBackup.encode(AppData(sessions: [invalid]))))
+        }
+        var expired = SessionRecord(id: repair.id, startedAt: sunday,
+            completedAt: activityDate(2026, 10, 5, hour: 12), practiceMode: .mixed,
+            targetQuestionCount: 80, questions: repair.questions)
+        expired.repairedDayKey = offer.yesterdayKey
+        expired.repairTimeZoneID = activityCalendar.timeZone.identifier
+        XCTAssertThrowsError(try SuanBackup.decode(SuanBackup.encode(AppData(sessions: [expired]))))
+    }
+
     func testWeekendCreditSurvivesBackupWithoutDuplicatingAnswersAndFollowsDeletion() throws {
         let friday = activityDate(2026, 10, 2, hour: 12)
         let saturday = activityDate(2026, 10, 3, hour: 12)

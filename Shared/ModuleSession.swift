@@ -86,11 +86,11 @@ public enum OneDayStreakRepair {
     public static func offer(completedKeys: Set<String>, handledKeys: Set<String> = [],
                              now: Date = Date(), calendar: Calendar = .current) -> Offer? {
         let today = calendar.startOfDay(for: now)
-        // A missed Saturday can still be covered by Sunday's normal work.
-        guard calendar.component(.weekday, from: today) != 1 else { return nil }
+        // Saturday and Sunday share one learning opportunity, so Sunday can repair Friday.
+        let offset = calendar.component(.weekday, from: today) == 1 ? -2 : -1
         let completedKeys = WeekendStreak.completionKeys(completedKeys, now: now, calendar: calendar)
-        guard let yesterday = calendar.date(byAdding: .day, value: -1, to: today),
-              var cursor = calendar.date(byAdding: .day, value: -2, to: today) else { return nil }
+        guard let yesterday = calendar.date(byAdding: .day, value: offset, to: today),
+              var cursor = calendar.date(byAdding: .day, value: -1, to: yesterday) else { return nil }
         let todayKey = dayKey(today, calendar: calendar)
         let yesterdayKey = dayKey(yesterday, calendar: calendar)
         guard !completedKeys.contains(todayKey), !completedKeys.contains(yesterdayKey),
@@ -108,5 +108,13 @@ public enum OneDayStreakRepair {
     public static func isYesterday(_ key: String, on date: Date, calendar: Calendar = .current) -> Bool {
         guard let yesterday = calendar.date(byAdding: .day, value: -1, to: calendar.startOfDay(for: date)) else { return false }
         return key == dayKey(yesterday, calendar: calendar)
+    }
+
+    public static func isRepairableDay(_ key: String, on date: Date, calendar: Calendar = .current) -> Bool {
+        // Keep recognizing saved next-day repairs, including older Sunday repairs of Saturday.
+        if isYesterday(key, on: date, calendar: calendar) { return true }
+        guard calendar.component(.weekday, from: date) == 1,
+              let friday = calendar.date(byAdding: .day, value: -2, to: calendar.startOfDay(for: date)) else { return false }
+        return key == dayKey(friday, calendar: calendar)
     }
 }

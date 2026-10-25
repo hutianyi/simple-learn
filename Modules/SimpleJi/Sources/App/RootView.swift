@@ -44,9 +44,9 @@ struct RootView: View {
         } message: {
             Text(baselineErrorMessage ?? "发生未知错误。")
         }
-        .alert("补上昨天，接回连续记录？", isPresented: Binding(
+        .alert("补上打卡，接回连续记录？", isPresented: Binding(
             get: { repairOffer != nil }, set: { if !$0 { repairOffer = nil } }), presenting: repairOffer) { offer in
-            Button("补上昨天") { decideRepair(offer, accepted: true) }
+            Button("补上打卡") { decideRepair(offer, accepted: true) }
             Button("放弃连续记录", role: .cancel) { decideRepair(offer, accepted: false) }
         } message: { offer in Text(offer.message) }
         .fullScreenCover(item: $repairFlow) { offer in

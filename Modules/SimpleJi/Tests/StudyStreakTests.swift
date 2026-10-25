@@ -263,6 +263,8 @@ final class StudyStreakTests: XCTestCase {
         let afterDecline = try await repository.prepare(now: date(3))
         XCTAssertNil(afterDecline)
         XCTAssertEqual(try snapshot(controller, day: 3).repair?.status, .declined)
+        let afterDeclineOnSunday = try await repository.prepare(now: date(4))
+        XCTAssertNil(afterDeclineOnSunday)
         let (second, secondRepository, secondOffer) = try await repairFixture()
         try await secondRepository.decide(secondOffer, accepted: true, now: date(3))
         let afterReentry = try await secondRepository.prepare(now: date(3))
@@ -288,6 +290,41 @@ final class StudyStreakTests: XCTestCase {
         let day = try await repository.today(now: date(3))
         XCTAssertEqual(day.repair?.status, .completed)
         XCTAssertEqual(StudyStreak.count(completedDays: [completed(1), day], now: date(3), calendar: calendar), 3)
+    }
+
+    func testSundayRepairsFridayAfterNormalWorkAndSurvivesBackupRestore() async throws {
+        let (controller, repository, offer) = try await repairFixture(repairDay: 4)
+        XCTAssertEqual(offer.plan.yesterdayKey, "2026-10-02")
+        try await repository.decide(offer, accepted: true, now: date(4))
+        let before = try await repository.today(now: date(4))
+        XCTAssertFalse(before.isComplete)
+        XCTAssertTrue(StudyStreak.repairedKeys(completedDays: [before], now: date(4)).isEmpty)
+        let review = ReviewRepository(container: controller.container, calendar: calendar)
+        let cards = try await review.dueStates(today: date(4))
+        let session = try await review.startSession(mode: .scheduled, baseTaskCount: cards.count, startedAt: date(4))
+        for card in cards {
+            _ = try await review.recordAnswer(stateID: card.id, sessionID: session, mode: .scheduled,
+                answer: .known, isSameSessionRetry: false, reviewedAt: date(4))
+        }
+        try await review.finishSession(id: session, completed: true, finishedAt: date(4))
+        let after = try await repository.today(now: date(4))
+        XCTAssertEqual(after.repair?.status, .completed)
+        XCTAssertEqual(StudyStreak.repairedKeys(completedDays: [after], now: date(4)), ["2026-10-02"])
+        XCTAssertEqual(StudyStreak.count(completedDays: [completed(1), after], now: date(4), calendar: calendar), 4)
+        let settings = BackupSettings(sessionLimit: 30, englishVoiceIdentifier: nil, chineseVoiceIdentifier: nil,
+            englishSpeechRate: 0.46, chineseSpeechRate: 0.46, autoSpeakFront: true, autoSpeakBack: true,
+            hapticsEnabled: true, extraPracticeScope: "weakest20")
+        let envelope = try await BackupService.makeEnvelope(container: controller.container, settings: settings, appVersion: "test")
+        let decoded = try BackupService.decodeAndValidate(BackupService.encode(envelope))
+        let restored = PersistenceController(inMemory: true)
+        try await BackupService.restore(decoded, into: restored.container)
+        XCTAssertEqual(try snapshot(restored, day: 4).repair, after.repair)
+        XCTAssertEqual(StudyStreak.count(completedDays: decoded.data.completionDays ?? [], now: date(4), calendar: calendar), 4)
+        XCTAssertTrue(decoded.data.reviewEvents.allSatisfy { calendar.isDate($0.reviewedAt, inSameDayAs: date(4)) })
+        var invalid = after
+        invalid.repair = StudyRepairPlan(yesterdayKey: "2026-10-01", previousStreak: 1,
+            extraCardIDs: [], cardsComplete: true, dictationComplete: true, status: .completed, restoredAt: date(4))
+        XCTAssertTrue(StudyStreak.repairedKeys(completedDays: [invalid], now: date(4)).isEmpty)
     }
 
     func testRepairDictationReusesCorrectionsWithoutChangingFormalSchedule() async throws {
@@ -562,10 +599,10 @@ final class StudyStreakTests: XCTestCase {
         return (controller, DictationRepository(container: controller.container, calendar: calendar), ids, campaign)
     }
 
-    private func repairFixture(overdue: Bool = false) async throws -> (PersistenceController, StudyRepairRepository, StudyRepairOffer) {
+    private func repairFixture(overdue: Bool = false, repairDay: Int = 3) async throws -> (PersistenceController, StudyRepairRepository, StudyRepairOffer) {
         let controller = PersistenceController(inMemory: true)
         let context = controller.container.viewContext
-        let (_, cards) = try seedWord(in: context, due: date(overdue ? 2 : 3), now: date(1))
+        let (_, cards) = try seedWord(in: context, due: date(overdue ? 2 : repairDay), now: date(1))
         for card in cards {
             card.totalReviews = 1; card.knownCount = 1
             card.fsrsCardData = try SRSScheduler.encodeCard(SRSScheduler.emptyCard(due: card.nextReviewDate))
@@ -579,9 +616,9 @@ final class StudyStreakTests: XCTestCase {
         entity.snapshotData = try JSONEncoder().encode(past)
         try context.save()
         try await StudyCompletionRepository(container: controller.container, calendar: calendar)
-            .refresh(scope: StudyCompletionScope(baselineWordIDs: []), now: date(3))
+            .refresh(scope: StudyCompletionScope(baselineWordIDs: []), now: date(repairDay))
         let repository = StudyRepairRepository(container: controller.container, calendar: calendar)
-        let prepared = try await repository.prepare(now: date(3))
+        let prepared = try await repository.prepare(now: date(repairDay))
         let offer = try XCTUnwrap(prepared)
         return (controller, repository, offer)
     }

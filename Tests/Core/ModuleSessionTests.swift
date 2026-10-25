@@ -83,4 +83,42 @@ final class ModuleSessionTests: XCTestCase {
         XCTAssertNotNil(OneDayStreakRepair.offer(completedKeys: ["2026-10-01"], now: date(3), calendar: calendar))
     }
 
+    func testFridayRepairRemainsAvailableOnSundayUntilWeekendIsCompletedOrOpportunityHandled() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        func date(_ day: Int) -> Date {
+            calendar.date(from: DateComponents(year: 2026, month: 10, day: day, hour: 12))!
+        }
+        let keys: Set<String> = ["2026-09-30", "2026-10-01"]
+        for day in [3, 4] {
+            let offer = OneDayStreakRepair.offer(completedKeys: keys, now: date(day), calendar: calendar)
+            XCTAssertEqual(offer?.yesterdayKey, "2026-10-02")
+            XCTAssertEqual(offer?.previousStreak, 2)
+            XCTAssertNil(OneDayStreakRepair.offer(completedKeys: keys, handledKeys: ["2026-10-02"],
+                now: date(day), calendar: calendar))
+        }
+        for completedDay in ["2026-10-02", "2026-10-03", "2026-10-04"] {
+            XCTAssertNil(OneDayStreakRepair.offer(completedKeys: keys.union([completedDay]), now: date(4), calendar: calendar))
+        }
+        XCTAssertNil(OneDayStreakRepair.offer(completedKeys: ["2026-09-30"], now: date(4), calendar: calendar))
+        XCTAssertNil(OneDayStreakRepair.offer(completedKeys: keys, now: date(5), calendar: calendar))
+        let finished = WeekendStreak.completionKeys(keys.union(["2026-10-02", "2026-10-04"]), now: date(4), calendar: calendar)
+        XCTAssertEqual(WeekendStreak.count(completedKeys: finished, now: date(4), calendar: calendar), 5)
+    }
+
+    func testSundayRepairValidationCrossesMonthAndDSTWithoutAllowingOtherOlderDays() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "America/Los_Angeles")!
+        let sunday = calendar.date(from: DateComponents(year: 2026, month: 11, day: 1, hour: 12))!
+        let offer = OneDayStreakRepair.offer(completedKeys: ["2026-10-29"], now: sunday, calendar: calendar)
+        XCTAssertEqual(offer?.yesterdayKey, "2026-10-30")
+        XCTAssertTrue(OneDayStreakRepair.isRepairableDay("2026-10-30", on: sunday, calendar: calendar))
+        XCTAssertTrue(OneDayStreakRepair.isRepairableDay("2026-10-31", on: sunday, calendar: calendar), "Older next-day repair records remain valid")
+        XCTAssertFalse(OneDayStreakRepair.isRepairableDay("2026-10-29", on: sunday, calendar: calendar))
+        XCTAssertFalse(OneDayStreakRepair.isRepairableDay("2026-11-01", on: sunday, calendar: calendar))
+        let monday = calendar.date(byAdding: .day, value: 1, to: sunday)!
+        XCTAssertFalse(OneDayStreakRepair.isRepairableDay("2026-10-30", on: monday, calendar: calendar))
+        XCTAssertFalse(OneDayStreakRepair.isRepairableDay("2026-10-31", on: monday, calendar: calendar))
+    }
+
 }

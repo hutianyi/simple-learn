@@ -84,7 +84,7 @@ struct SessionRecord: Identifiable, Codable, Equatable {
         guard isPartial != true, let key = repairedDayKey,
               targetQuestionCount >= 2, targetQuestionCount.isMultiple(of: 2),
               questions.count == targetQuestionCount,
-              OneDayStreakRepair.isYesterday(key, on: completedAt, calendar: calendar),
+              OneDayStreakRepair.isRepairableDay(key, on: completedAt, calendar: calendar),
               calendar.isDate(startedAt, inSameDayAs: completedAt),
               questions.allSatisfy({ calendar.isDate($0.answeredAt, inSameDayAs: completedAt) }) else { return nil }
         return key

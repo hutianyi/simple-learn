@@ -23,7 +23,7 @@ struct StudyRepairFlowView: View {
             case .cards: return "先完成今天的卡片"
             case .dictation: return "接着完成默写和订正"
             case .dailyLimit: return "今天的默写额度已完成"
-            default: return "补上昨天＋完成今天"
+            default: return "补上打卡＋完成今天"
             }
         }
     }

@@ -9,7 +9,7 @@ struct StudyRepairOffer: Identifiable {
     var id: String { todayKey }
 
     var message: String {
-        return "你之前已经连续完成了 \(plan.previousStreak) 天！\n昨天还没完成，要把连续记录接回来吗？\n今天待复习卡片 \(normalCardCount) 张，默写按设置的每日上限安排，积欠优先，错词照常订正。选择补上不会额外增加学习量。\n完成今天的任务并清完以前积欠的默写，才能补上昨天的打卡。主动结束或过了今天，这次机会就结束。"
+        return "你之前已经连续完成了 \(plan.previousStreak) 天！\n上次漏做了一天，要把连续记录接回来吗？\n今天待复习卡片 \(normalCardCount) 张，默写按设置的每日上限安排，积欠优先，错词照常订正。选择补上不会额外增加学习量。\n完成今天的任务并清完以前积欠的默写，才能补上漏做那天的打卡。主动结束或过了今天，这次机会就结束。"
     }
 }
 

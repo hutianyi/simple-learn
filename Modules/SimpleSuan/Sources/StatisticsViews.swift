@@ -50,7 +50,7 @@ struct SessionResultView: View {
         VStack(spacing: 14) {
             Image(systemName: "party.popper.fill")
                 .font(.system(size: 64)).foregroundStyle(Color.purple.gradient)
-            Text(session.validRepairKey() == nil ? "又完成一批口算，太棒了！" : "昨天补上了，连续记录接回来了！")
+            Text(session.validRepairKey() == nil ? "又完成一批口算，太棒了！" : "漏做的打卡补上了，连续记录接回来了！")
                 .font(.system(.largeTitle, design: .rounded, weight: .bold))
             Text("本次完成 \(statistics.total) 题 · 今天累计 \(activity.todayCount) 题")
                 .font(.title2.weight(.semibold))
