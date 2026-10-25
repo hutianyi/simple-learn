@@ -166,7 +166,10 @@ enum PracticeService {
             guard question.kind == .near else { return nil }
             return .init(id: question.id, kind: .near, disabled: question.disabledAt != nil, lastPresentedAt: lastShown[question.id])
         }
-        guard let selected = QuestionSelector.choose(from: candidates, creditedCorrectCount: 0, excluding: usedIDs),
+        // Once this session has used every usable near variant, rotate through the oldest again.
+        let selected = QuestionSelector.choose(from: candidates, creditedCorrectCount: 0, excluding: usedIDs)
+            ?? QuestionSelector.choose(from: candidates, creditedCorrectCount: 0)
+        guard let selected,
               let question = group.questions.first(where: { $0.id == selected.id }) else {
             progress.stage = .materialShortage
             try context.save()

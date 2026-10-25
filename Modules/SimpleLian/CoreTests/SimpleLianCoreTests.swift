@@ -72,3 +72,26 @@ import Testing
     #expect(table?.headers == ["项目", "数值"])
     #expect(table?.rows == [["苹果", "3"]])
 }
+
+@Test(arguments: [0, 1]) func selectorRotatesTwentyQuestionsAcrossThreeRounds(creditCount: Int) throws {
+    let kind: VariantKind = creditCount == 0 ? .near : .transfer
+    let ids = (0..<20).map { _ in UUID() }
+    var lastShown: [UUID: Date] = [:]
+    var selectedIDs: [UUID] = []
+    for index in 0..<60 {
+        let candidates = ids.map { SelectionCandidate(id: $0, kind: kind, lastPresentedAt: lastShown[$0]) }
+        let selected = try #require(QuestionSelector.choose(from: candidates, creditedCorrectCount: creditCount))
+        selectedIDs.append(selected.id)
+        lastShown[selected.id] = Date(timeIntervalSince1970: Double(index + 1))
+    }
+    #expect(Set(selectedIDs.prefix(20)).count == 20)
+    #expect(Array(selectedIDs.prefix(20)) == Array(selectedIDs[20..<40]))
+    #expect(Array(selectedIDs.prefix(20)) == Array(selectedIDs[40..<60]))
+}
+
+@Test func selectorNeverReusesDisabledOrExplicitlyExcludedQuestions() {
+    let disabled = SelectionCandidate(id: UUID(), kind: .near, disabled: true)
+    let excluded = SelectionCandidate(id: UUID(), kind: .near)
+    #expect(QuestionSelector.choose(from: [disabled, excluded], creditedCorrectCount: 0, excluding: [excluded.id]) == nil)
+    #expect(QuestionSelector.choose(from: [disabled, excluded], creditedCorrectCount: 0)?.id == excluded.id)
+}
