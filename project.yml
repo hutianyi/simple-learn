@@ -1,5 +1,6 @@
 name: SimpleXue
 options:
+  xcodeVersion: "27.1"
   deploymentTarget:
     iOS: "27.0"
   developmentLanguage: zh-Hans
@@ -14,6 +15,8 @@ settings:
     MARKETING_VERSION: "1.6.7"
     CURRENT_PROJECT_VERSION: "26"
     CODE_SIGN_STYLE: Automatic
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    STRING_CATALOG_GENERATE_SYMBOLS: YES
 packages:
   FSRS:
     url: https://github.com/open-spaced-repetition/swift-fsrs.git
@@ -37,6 +40,11 @@ targets:
           UIApplicationSupportsMultipleScenes: false
           UISceneConfigurations: {}
         UILaunchScreen: {}
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.hutianyi.SimpleXue
@@ -47,7 +55,6 @@ targets:
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
         INFOPLIST_KEY_UIBackgroundModes: audio
-        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     dependencies:
       - target: StudyShell
@@ -64,6 +71,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.hutianyi.SimpleXue.StudyShell
+        ENABLE_MODULE_VERIFIER: YES
+        MODULE_VERIFIER_SUPPORTED_LANGUAGE_STANDARDS: "gnu11 gnu++14"
   WordMemoryCards:
     type: framework
     platform: iOS
@@ -75,6 +84,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.hutianyi.SimpleXue.WordMemoryCards
+        ENABLE_MODULE_VERIFIER: YES
+        MODULE_VERIFIER_SUPPORTED_LANGUAGE_STANDARDS: "gnu11 gnu++14"
   SimpleLian:
     type: framework
     platform: iOS
@@ -84,6 +95,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.hutianyi.SimpleXue.SimpleLian
+        ENABLE_MODULE_VERIFIER: YES
+        MODULE_VERIFIER_SUPPORTED_LANGUAGE_STANDARDS: "gnu11 gnu++14"
         SWIFT_VERSION: "6.0"
         SWIFT_STRICT_CONCURRENCY: minimal
   DictationApp:
@@ -95,6 +108,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.hutianyi.SimpleXue.SimpleMo
+        ENABLE_MODULE_VERIFIER: YES
+        MODULE_VERIFIER_SUPPORTED_LANGUAGE_STANDARDS: "gnu11 gnu++14"
   SimpleSuan:
     type: framework
     platform: iOS
@@ -104,6 +119,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.hutianyi.SimpleXue.SimpleSuan
+        ENABLE_MODULE_VERIFIER: YES
+        MODULE_VERIFIER_SUPPORTED_LANGUAGE_STANDARDS: "gnu11 gnu++14"
   SimpleTing:
     type: framework
     platform: iOS
@@ -113,6 +130,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.hutianyi.SimpleXue.SimpleTing
+        ENABLE_MODULE_VERIFIER: YES
+        MODULE_VERIFIER_SUPPORTED_LANGUAGE_STANDARDS: "gnu11 gnu++14"
   SimpleBei:
     type: framework
     platform: iOS
@@ -122,6 +141,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.hutianyi.SimpleXue.SimpleBei
+        ENABLE_MODULE_VERIFIER: YES
+        MODULE_VERIFIER_SUPPORTED_LANGUAGE_STANDARDS: "gnu11 gnu++14"
   SimpleBeiTests:
     type: bundle.unit-test
     platform: iOS

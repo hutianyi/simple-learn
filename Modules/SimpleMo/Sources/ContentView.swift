@@ -40,7 +40,7 @@ struct ContentView: View {
             moduleSession.setBusy(phase != .setup, reason: "mo.study")
         }
         .onDisappear { session.returnToSetup(); moduleSession.setBusy(false, reason: "mo.study") }
-        .onChange(of: scenePhase) { session.handleScenePhase($0) }
+        .onChange(of: scenePhase) { _, phase in session.handleScenePhase(phase) }
     }
 
     private var setupView: some View {
