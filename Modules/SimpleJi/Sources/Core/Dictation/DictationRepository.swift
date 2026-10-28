@@ -225,7 +225,7 @@ final class DictationRepository {
                 }
                 Self.advanceRemediation(&day)
                 if day != savedDay {
-                    try Self.save(day, to: entity, now: now, in: context, calendar: self.calendar)
+                    try Self.save(day, to: entity, now: now, in: context, calendar: calendar)
                 }
                 if day.dayKey == today,
                    let index = Self.activeTimedIndex(in: day),
@@ -240,18 +240,18 @@ final class DictationRepository {
                         english: item.english, chinese: item.chinese, now: now,
                         round: item.remediationRound
                     )
-                    try Self.save(day, to: entity, now: now, in: context, calendar: self.calendar)
+                    try Self.save(day, to: entity, now: now, in: context, calendar: calendar)
                 }
                 if day.dayKey != today && day.phase == .firstPass {
                     day.items.removeAll { $0.formalResult == nil && !$0.awaitsVerification }
                     day.phase = day.items.contains(where: \.awaitsVerification) ? .firstPass
                         : (day.unresolved > 0 ? .firstPassSummary : .complete)
-                    try Self.save(day, to: entity, now: now, in: context, calendar: self.calendar)
+                    try Self.save(day, to: entity, now: now, in: context, calendar: calendar)
                 }
                 if day.items.contains(where: \.isDeferred) {
                     for index in day.items.indices { day.items[index].deferred = nil }
                     Self.advanceRemediation(&day)
-                    try Self.save(day, to: entity, now: now, in: context, calendar: self.calendar)
+                    try Self.save(day, to: entity, now: now, in: context, calendar: calendar)
                 }
                 if day.phase != .complete {
                     if day.dayKey != today { return day }
@@ -347,7 +347,7 @@ final class DictationRepository {
                     } else if day.phase == .firstPass || day.phase == .complete {
                         day.phase = .firstPassSummary
                     }
-                    try Self.save(day, to: existing, now: now, in: context, calendar: self.calendar)
+                    try Self.save(day, to: existing, now: now, in: context, calendar: calendar)
                     return day
                 }
                 // An empty preview may fill after card review; a finished task stays finished.
@@ -371,7 +371,7 @@ final class DictationRepository {
                 } else if day.phase == .firstPass || day.phase == .complete {
                     day.phase = .firstPassSummary
                 }
-                try Self.save(day, to: existing, now: now, in: context, calendar: self.calendar)
+                try Self.save(day, to: existing, now: now, in: context, calendar: calendar)
                 return day
             }
 
@@ -395,29 +395,31 @@ final class DictationRepository {
             entity.timeZoneID = day.timeZoneID
             entity.limit = Int32(dayLimit)
             entity.createdAt = now
-            try Self.save(day, to: entity, now: now, in: context, calendar: self.calendar)
+            try Self.save(day, to: entity, now: now, in: context, calendar: calendar)
             return day
         }
     }
 
     func beginRemediation(dayID: UUID, now: Date = Date()) async throws -> DictationDay {
         let context = makeContext()
+        let calendar = self.calendar
         return try await context.perform {
             let entity = try Self.fetchDay(dayID, in: context)
             var day = try Self.snapshot(entity)
             guard day.phase == .firstPassSummary else { throw DictationError.invalidPhase }
             day.phase = .remediationCopy
             Self.advanceRemediation(&day)
-            try Self.save(day, to: entity, now: now, in: context, calendar: self.calendar)
+            try Self.save(day, to: entity, now: now, in: context, calendar: calendar)
             return day
         }
     }
 
     func repairDay(id: UUID, now: Date = Date()) async throws -> DictationDay {
         let context = makeContext()
+        let calendar = self.calendar
         return try await context.perform {
             let day = try Self.snapshot(Self.fetchDay(id, in: context))
-            guard day.dayKey == DictationEligibility.dayKey(for: now, calendar: self.calendar) + "#repair" else {
+            guard day.dayKey == DictationEligibility.dayKey(for: now, calendar: calendar) + "#repair" else {
                 throw StudyRepairRepository.RepairError.expired
             }
             return day
@@ -428,6 +430,7 @@ final class DictationRepository {
         dayID: UUID, wordID: UUID, recognized: String?, now: Date = Date()
     ) async throws -> DictationDay {
         let context = makeContext()
+        let calendar = self.calendar
         return try await context.perform {
             let entity = try Self.fetchDay(dayID, in: context)
             var day = try Self.snapshot(entity)
@@ -447,13 +450,14 @@ final class DictationRepository {
                              kind: "recognitionMismatch", correct: nil, recognized: recognized,
                              english: item.english, chinese: item.chinese, now: now,
                              remaining: item.remainingSeconds, round: item.remediationRound)
-            try Self.save(day, to: entity, now: now, in: context, calendar: self.calendar)
+            try Self.save(day, to: entity, now: now, in: context, calendar: calendar)
             return day
         }
     }
 
     func beginKeyboardVerification(dayID: UUID, wordID: UUID, now: Date = Date()) async throws -> DictationDay {
         let context = makeContext()
+        let calendar = self.calendar
         return try await context.perform {
             let entity = try Self.fetchDay(dayID, in: context)
             var day = try Self.snapshot(entity)
@@ -461,7 +465,7 @@ final class DictationRepository {
                   day.items[index].awaitsVerification else { throw DictationError.invalidPhase }
             if day.items[index].keyboardDeadline == nil {
                 day.items[index].keyboardDeadline = now.addingTimeInterval(DictationKeyboardClock.duration)
-                try Self.save(day, to: entity, now: now, in: context, calendar: self.calendar)
+                try Self.save(day, to: entity, now: now, in: context, calendar: calendar)
             }
             return day
         }
@@ -536,7 +540,7 @@ final class DictationRepository {
                     english: item.english, chinese: item.chinese, now: now,
                     remaining: item.remainingSeconds
                 )
-                try Self.save(day, to: entity, now: now, in: context, calendar: self.calendar)
+                try Self.save(day, to: entity, now: now, in: context, calendar: calendar)
                 return .retry(day)
             }
             let correct = input.reason == nil
@@ -590,7 +594,7 @@ final class DictationRepository {
             if day.items.allSatisfy({ $0.formalResult != nil }) {
                 day.phase = day.unresolved > 0 ? .firstPassSummary : .complete
             }
-            try Self.save(day, to: entity, now: now, in: context, calendar: self.calendar)
+            try Self.save(day, to: entity, now: now, in: context, calendar: calendar)
             return .result(day, correct: correct, reason: reason)
         }
     }
@@ -600,6 +604,7 @@ final class DictationRepository {
         explicitReason: DictationFailureReason? = nil, now: Date = Date()
     ) async throws -> DictationDay {
         let context = makeContext()
+        let calendar = self.calendar
         return try await context.perform {
             let entity = try Self.fetchDay(dayID, in: context)
             var day = try Self.snapshot(entity)
@@ -629,7 +634,7 @@ final class DictationRepository {
                 now: now, round: day.items[index].remediationRound
             )
             Self.advanceRemediation(&day)
-            try Self.save(day, to: entity, now: now, in: context, calendar: self.calendar)
+            try Self.save(day, to: entity, now: now, in: context, calendar: calendar)
             return day
         }
     }
@@ -666,7 +671,7 @@ final class DictationRepository {
                     english: item.english, chinese: item.chinese, now: now,
                     remaining: item.remainingSeconds, round: item.remediationRound
                 )
-                try Self.save(day, to: entity, now: now, in: context, calendar: self.calendar)
+                try Self.save(day, to: entity, now: now, in: context, calendar: calendar)
                 return .retry(day)
             }
             let correct = input.reason == nil
@@ -702,13 +707,14 @@ final class DictationRepository {
                 remaining: item.remainingSeconds, round: item.remediationRound
             )
             Self.advanceRemediation(&day)
-            try Self.save(day, to: entity, now: now, in: context, calendar: self.calendar)
+            try Self.save(day, to: entity, now: now, in: context, calendar: calendar)
             return .result(day, correct: correct, reason: reason)
         }
     }
 
     func deferRemediation(dayID: UUID, wordID: UUID, now: Date = Date()) async throws -> DictationDay {
         let context = makeContext()
+        let calendar = self.calendar
         return try await context.perform {
             let entity = try Self.fetchDay(dayID, in: context)
             var day = try Self.snapshot(entity)
@@ -723,7 +729,7 @@ final class DictationRepository {
                              kind: "deferred", correct: nil, recognized: nil,
                              english: item.english, chinese: item.chinese, now: now, round: item.remediationRound)
             Self.advanceRemediation(&day)
-            try Self.save(day, to: entity, now: now, in: context, calendar: self.calendar)
+            try Self.save(day, to: entity, now: now, in: context, calendar: calendar)
             return day
         }
     }
@@ -811,6 +817,7 @@ final class DictationRepository {
         now: Date = Date()
     ) async throws {
         let context = makeContext()
+        let calendar = self.calendar
         try await context.perform {
             let entity = try Self.fetchDay(dayID, in: context)
             var day = try Self.snapshot(entity)
@@ -818,7 +825,7 @@ final class DictationRepository {
                   day.items[index].wordID == wordID else { return }
             day.items[index].remainingSeconds = min(30, max(0, remaining))
             day.items[index].isWriting = isWriting
-            try Self.save(day, to: entity, now: now, in: context, calendar: self.calendar)
+            try Self.save(day, to: entity, now: now, in: context, calendar: calendar)
         }
     }
 

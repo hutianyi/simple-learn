@@ -824,6 +824,7 @@ final class StudyStreakTests: XCTestCase {
         let context = controller.container.viewContext
         let campaign = BaselineCampaignSnapshot(selectedWordIDs: [], activatedAt: date(3))
         XCTAssertEqual(try StudyCompletionRepository.overview(in: context, now: date(3), baseline: campaign, masteredTerms: [], calendar: calendar), "还没有单词")
+        XCTAssertFalse(try StudyCompletionRepository.overviewStatus(in: context, now: date(3), baseline: campaign, masteredTerms: [], calendar: calendar).isComplete)
         let (word, _) = try seedWord(in: context, due: date(3), now: date(1))
         XCTAssertEqual(try StudyCompletionRepository.overview(in: context, now: date(3), baseline: campaign, masteredTerms: [], calendar: calendar), "待复习 2 张")
         _ = try seedDirectWord(in: context, english: "eligible")
@@ -841,6 +842,7 @@ final class StudyStreakTests: XCTestCase {
         _ = try await repository.submitFormal(dayID: day.id, wordID: item.wordID, recognized: item.english, now: date(3))
         XCTAssertTrue(try snapshot(controller, day: 3).isComplete)
         XCTAssertEqual(try StudyCompletionRepository.overview(in: controller.container.viewContext, now: date(3), baseline: campaign, masteredTerms: [], calendar: calendar), "今日已完成")
+        XCTAssertTrue(try StudyCompletionRepository.overviewStatus(in: controller.container.viewContext, now: date(3), baseline: campaign, masteredTerms: [], calendar: calendar).isComplete)
     }
     private func seedDirectWord(in context: NSManagedObjectContext, english: String = "apple", position: Int64 = 0) throws -> WordEntity {
         let (word, cards) = try seedWord(in: context, due: date(10), now: date(1), english: english)

@@ -18,8 +18,12 @@ public struct SimpleSuanModuleView: View {
 @MainActor
 public enum SimpleSuanBackupTransfer {
     public static func learningOverview(now: Date = Date()) throws -> String {
+        try learningOverviewStatus(now: now).text
+    }
+    public static func learningOverviewStatus(now: Date = Date()) throws -> (text: String, isComplete: Bool) {
         let data = try PersistenceService.shared.load()
-        return "今日已做 \(PracticeActivity(sessions: data.sessions, now: now).todayCount) 题"
+        let count = PracticeActivity(sessions: data.sessions, now: now).todayCount
+        return ("今日已做 \(count) 题", count > 0)
     }
     public static func exportData() throws -> Data {
         try SuanBackup.encode(PersistenceService.shared.load())

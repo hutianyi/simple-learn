@@ -30,15 +30,19 @@ enum PracticeService {
     }
 
     static func overview(context: ModelContext, day: String = DayKey.make(from: .now)) throws -> String {
+        try overviewStatus(context: context, day: day).text
+    }
+
+    static func overviewStatus(context: ModelContext, day: String = DayKey.make(from: .now)) throws -> (text: String, isComplete: Bool) {
         let groups = try context.fetch(FetchDescriptor<ProblemGroup>())
-        guard !groups.isEmpty else { return "还没有题目" }
-        if let active = try activeSession(context: context), !active.attempts.isEmpty || !active.groupProgress.isEmpty { return "有练习待继续" }
+        guard !groups.isEmpty else { return ("还没有题目", false) }
+        if let active = try activeSession(context: context), !active.attempts.isEmpty || !active.groupProgress.isEmpty { return ("有练习待继续", false) }
         let due = dailyGroups(in: groups, day: day).count
         let correction = groups.filter { !$0.isArchived && [.pendingCorrection, .needsExplanation].contains($0.reviewState?.status) }.count
         let unavailable = groups.filter { isDue($0, day: day) && !hasUsableQuestion($0) }.count
         let text = [due > 0 ? "待练 \(due) 类" : nil, correction > 0 ? "待订正 \(correction) 类" : nil,
                     unavailable > 0 ? "缺题 \(unavailable) 类" : nil].compactMap { $0 }.joined(separator: " · ")
-        return text.isEmpty ? "暂无到期任务" : text
+        return text.isEmpty ? ("暂无到期任务", true) : (text, false)
     }
 
     static func discardEmptySessions(context: ModelContext) throws {

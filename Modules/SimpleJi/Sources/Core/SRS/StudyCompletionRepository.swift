@@ -12,11 +12,16 @@ final class StudyCompletionRepository {
 
     static func overview(in context: NSManagedObjectContext, now: Date, baseline: BaselineCampaignSnapshot?,
                          masteredTerms: Set<String>, calendar: Calendar = .current) throws -> String {
+        try overviewStatus(in: context, now: now, baseline: baseline, masteredTerms: masteredTerms, calendar: calendar).text
+    }
+
+    static func overviewStatus(in context: NSManagedObjectContext, now: Date, baseline: BaselineCampaignSnapshot?,
+                               masteredTerms: Set<String>, calendar: Calendar = .current) throws -> (text: String, isComplete: Bool) {
         let start = calendar.startOfDay(for: now)
         let tomorrow = DictationEligibility.nextDay(after: now, calendar: calendar)
         let key = DictationEligibility.dayKey(for: now, calendar: calendar)
         let allWords = try context.fetch(WordEntity.fetchRequest())
-        guard !allWords.isEmpty else { return "还没有单词" }
+        guard !allWords.isEmpty else { return ("还没有单词", false) }
         let words = allWords.filter { !masteredTerms.contains(EnglishNormalizer.normalize($0.english)) }
         let cards = try context.fetch(ReviewStateEntity.fetchRequest()).filter { $0.nextReviewDate < tomorrow }.count
         let days = try context.fetch(DictationDayEntity.fetchRequest())
@@ -50,8 +55,8 @@ final class StudyCompletionRepository {
             // A completed queue defers today's excess to tomorrow, just like the module.
             pending = unfinished || overdue || (items.isEmpty && newPending)
         } else { pending = unfinished || baselinePending || newPending || !regular.isEmpty }
-        if cards == 0 && !pending { return complete ? "今日已完成" : "暂无到期任务" }
-        return [cards > 0 ? "待复习 \(cards) 张" : nil, pending ? "待默写" : nil].compactMap { $0 }.joined(separator: " · ")
+        if cards == 0 && !pending { return (complete ? "今日已完成" : "暂无到期任务", complete) }
+        return ([cards > 0 ? "待复习 \(cards) 张" : nil, pending ? "待默写" : nil].compactMap { $0 }.joined(separator: " · "), false)
     }
 
     func refresh(scope: StudyCompletionScope, now: Date = Date()) async throws {

@@ -48,6 +48,7 @@ private func practiceFixture() throws -> (ModelContainer, ModelContext, ImportBa
     session.attempts.first?.draftResult = .correct
     try PracticeService.commitMarking(session: session, context: context)
     try PracticeService.complete(session, context: context)
+    #expect(try PracticeService.overviewStatus(context: context).isComplete)
     try PracticeService.deleteBatch(batch, context: context)
     #expect(try context.fetchCount(FetchDescriptor<PracticeSession>()) == 0)
     #expect(try context.fetchCount(FetchDescriptor<Attempt>()) == 0)
@@ -84,6 +85,7 @@ private func practiceFixture() throws -> (ModelContainer, ModelContext, ImportBa
     #expect(try PracticeService.dueGroups(context: context).isEmpty)
     #expect(try PracticeService.makeDailySession(context: context) == nil)
     #expect(try PracticeService.overview(context: context) == "缺题 1 类")
+    #expect(try !PracticeService.overviewStatus(context: context).isComplete)
     #expect(try context.fetchCount(FetchDescriptor<PracticeSession>()) == 0)
     variant.disabledAt = nil
     try context.save()

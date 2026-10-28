@@ -79,10 +79,11 @@ final class StudyRepairRepository {
 
     func today(now: Date = Date()) async throws -> StudyCompletionDay {
         let context = container.newBackgroundContext()
+        let calendar = self.calendar
         return try await context.perform {
-            try StudyCompletionRepository.refresh(in: context, now: now, calendar: self.calendar)
+            try StudyCompletionRepository.refresh(in: context, now: now, calendar: calendar)
             if context.hasChanges { try context.save() }
-            let key = DictationEligibility.dayKey(for: now, calendar: self.calendar)
+            let key = DictationEligibility.dayKey(for: now, calendar: calendar)
             let entity = try context.fetch(StudyCompletionDayEntity.fetchRequest()).first { $0.dayKey == key }
             guard let entity else { throw RepairError.unavailable }
             return try JSONDecoder().decode(StudyCompletionDay.self, from: entity.snapshotData)
@@ -91,10 +92,11 @@ final class StudyRepairRepository {
 
     func dictationAllowanceExhausted(now: Date = Date()) async throws -> Bool {
         let context = container.newBackgroundContext()
+        let calendar = self.calendar
         return try await context.perform {
             let request = DictationDayEntity.fetchRequest()
             request.predicate = NSPredicate(format: "dayKey == %@",
-                DictationEligibility.dayKey(for: now, calendar: self.calendar))
+                DictationEligibility.dayKey(for: now, calendar: calendar))
             guard let day = try context.fetch(request).first, day.limit > 0 else { return false }
             let items = try JSONDecoder().decode([DictationItem].self, from: day.tasksData)
             return items.count >= Int(day.limit)
@@ -104,17 +106,18 @@ final class StudyRepairRepository {
 
     func finishCards(dayKey: String, now: Date = Date()) async throws {
         let context = container.newBackgroundContext()
+        let calendar = self.calendar
         try await context.perform {
-            guard dayKey == DictationEligibility.dayKey(for: now, calendar: self.calendar) else { throw RepairError.expired }
+            guard dayKey == DictationEligibility.dayKey(for: now, calendar: calendar) else { throw RepairError.expired }
             let sessions = Set(try context.fetch(StudySessionEntity.fetchRequest()).filter {
                 $0.completed && $0.mode == PracticeMode.extraPractice.rawValue
-                    && DictationEligibility.dayKey(for: $0.startedAt, calendar: self.calendar) == dayKey
+                    && DictationEligibility.dayKey(for: $0.startedAt, calendar: calendar) == dayKey
             }.map(\.id))
             let answered = Set(try context.fetch(ReviewEventEntity.fetchRequest()).filter {
                 sessions.contains($0.sessionID) && $0.practiceMode == PracticeMode.extraPractice.rawValue
-                    && DictationEligibility.dayKey(for: $0.reviewedAt, calendar: self.calendar) == dayKey
+                    && DictationEligibility.dayKey(for: $0.reviewedAt, calendar: calendar) == dayKey
             }.map { $0.reviewState.id })
-            try Self.update(in: context, dayKey: dayKey, now: now, calendar: self.calendar) { day in
+            try Self.update(in: context, dayKey: dayKey, now: now, calendar: calendar) { day in
                 guard let plan = day.repair, plan.status == .accepted,
                       Set(plan.extraCardIDs).isSubset(of: answered) else { throw RepairError.unavailable }
                 day.repair?.cardsComplete = true
@@ -124,8 +127,9 @@ final class StudyRepairRepository {
 
     func abandon(dayKey: String, now: Date = Date()) async throws {
         let context = container.newBackgroundContext()
+        let calendar = self.calendar
         try await context.perform {
-            try Self.update(in: context, dayKey: dayKey, now: now, calendar: self.calendar) { day in
+            try Self.update(in: context, dayKey: dayKey, now: now, calendar: calendar) { day in
                 if day.repair?.status == .accepted { day.repair?.status = .abandoned }
             }
         }

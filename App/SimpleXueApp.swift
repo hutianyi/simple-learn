@@ -40,6 +40,11 @@ enum LearningModule: String, CaseIterable, Identifiable {
     }
 }
 
+private struct HomeOverviewStatus {
+    let text: String
+    let isComplete: Bool
+}
+
 struct LearningHomeView: View {
     @State private var selected: LearningModule?
     @StateObject private var session = ModuleSession()
@@ -57,7 +62,7 @@ struct LearningHomeView: View {
     @State private var dragOrigin: CGRect = .zero
     @State private var dragTranslation: CGSize = .zero
     @State private var dragStartLocation: CGPoint = .zero
-    @State private var overview: [LearningModule: String] = [:]
+    @State private var overview: [LearningModule: HomeOverviewStatus] = [:]
     @State private var overviewReadCount = 0
     @State private var overviewRevision = UUID()
     @Environment(\.scenePhase) private var scenePhase
@@ -206,15 +211,59 @@ struct LearningHomeView: View {
     private var learningOverview: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("今天的学习").font(.headline).foregroundStyle(.secondary)
-            HStack(alignment: .top, spacing: 16) {
-                ForEach([LearningModule.ji, .suan, .lian]) { module in
-                    Button { suppressCardTap = false; openModule(module) } label: {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Label(module.title, systemImage: module.symbol).font(.title3.weight(.semibold)).foregroundStyle(module.color)
-                            Text(overview[module] ?? "正在读取…").font(.title3).foregroundStyle(.primary)
-                                .lineLimit(3).fixedSize(horizontal: false, vertical: true)
-                        }.frame(maxWidth: .infinity, alignment: .leading)
-                    }.buttonStyle(.plain).accessibilityIdentifier("home.overview.\(module.rawValue)")
+            if [LearningModule.ji, .suan, .lian].allSatisfy({ overview[$0]?.isComplete == true }) {
+                HStack(spacing: 16) {
+                    Image(systemName: "party.popper.fill")
+                        .font(.system(size: 38)).foregroundStyle(.orange)
+                        .accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("今天的学习全部完成！").font(.title2.bold())
+                        Text("简单记、简单算、简单练都完成啦，真棒！")
+                            .font(.subheadline).foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .frame(maxWidth: .infinity, minHeight: 96, alignment: .leading)
+                .padding(18)
+                .background(LinearGradient(colors: [.yellow.opacity(0.2), .green.opacity(0.15)],
+                                           startPoint: .topLeading, endPoint: .bottomTrailing),
+                            in: RoundedRectangle(cornerRadius: 18))
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("home.overview.completed")
+            } else {
+                HStack(alignment: .top, spacing: 10) {
+                    ForEach([LearningModule.ji, .suan, .lian]) { module in
+                        let status = overview[module]
+                        let isComplete = status?.isComplete == true
+                        Button { suppressCardTap = false; openModule(module) } label: {
+                            VStack(alignment: .leading, spacing: 9) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: isComplete ? "checkmark.circle.fill" : module.symbol)
+                                    Text(module.title).lineLimit(1)
+                                }
+                                .font(.headline)
+                                .foregroundStyle(isComplete ? Color.secondary : module.color)
+                                Text(status?.text ?? "正在读取…")
+                                    .font(.subheadline)
+                                    .foregroundStyle(isComplete ? Color.secondary : Color.primary)
+                                    .lineLimit(3)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                Text(isComplete ? "已完成" : "待完成")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(isComplete ? Color.secondary : module.color)
+                            }
+                            .frame(maxWidth: .infinity, minHeight: 92, alignment: .leading)
+                            .padding(12)
+                            .background(isComplete ? Color.gray.opacity(0.08) : module.color.opacity(0.13),
+                                        in: RoundedRectangle(cornerRadius: 16))
+                            .overlay(RoundedRectangle(cornerRadius: 16)
+                                .strokeBorder(isComplete ? Color.gray.opacity(0.12) : module.color.opacity(0.3)))
+                            .contentShape(RoundedRectangle(cornerRadius: 16))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("\(module.title)，\(status?.text ?? "正在读取")，\(isComplete ? "已完成" : "待完成")")
+                        .accessibilityIdentifier("home.overview.\(module.rawValue)")
+                    }
                 }
             }
         }
@@ -225,18 +274,26 @@ struct LearningHomeView: View {
     @MainActor private func refreshOverview() async {
         overviewReadCount += 1
         defer { overviewReadCount -= 1 }
+        overview = [:]
         let now = Date()
+        var updated: [LearningModule: HomeOverviewStatus] = [:]
         do {
-            let text = try await SimpleJiBackupTransfer.learningOverview(now: now)
+            let status = try await SimpleJiBackupTransfer.learningOverviewStatus(now: now)
             guard !Task.isCancelled else { return }
-            overview[.ji] = text
+            updated[.ji] = .init(text: status.text, isComplete: status.isComplete)
         }
-        catch { if !Task.isCancelled { overview[.ji] = "读取失败，点此查看" } }
+        catch { if !Task.isCancelled { updated[.ji] = .init(text: "读取失败，点此查看", isComplete: false) } }
         guard !Task.isCancelled else { return }
-        do { overview[.lian] = try SimpleLianBackupTransfer.learningOverview(now: now) }
-        catch { overview[.lian] = "读取失败，点此查看" }
-        do { overview[.suan] = try SimpleSuanBackupTransfer.learningOverview(now: now) }
-        catch { overview[.suan] = "读取失败，点此查看" }
+        do {
+            let status = try SimpleLianBackupTransfer.learningOverviewStatus(now: now)
+            updated[.lian] = .init(text: status.text, isComplete: status.isComplete)
+        } catch { updated[.lian] = .init(text: "读取失败，点此查看", isComplete: false) }
+        do {
+            let status = try SimpleSuanBackupTransfer.learningOverviewStatus(now: now)
+            updated[.suan] = .init(text: status.text, isComplete: status.isComplete)
+        } catch { updated[.suan] = .init(text: "读取失败，点此查看", isComplete: false) }
+        guard !Task.isCancelled else { return }
+        overview = updated
     }
 
     private func openModule(_ module: LearningModule, accessibility: Bool = false) {

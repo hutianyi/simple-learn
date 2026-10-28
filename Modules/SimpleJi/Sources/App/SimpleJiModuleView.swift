@@ -53,13 +53,16 @@ public enum SimpleJiBackupTransfer {
         return try BackupService.encode(envelope)
     }
     public static func learningOverview(now: Date = Date()) async throws -> String {
+        try await learningOverviewStatus(now: now).text
+    }
+    public static func learningOverviewStatus(now: Date = Date()) async throws -> (text: String, isComplete: Bool) {
         let persistence = try await open()
         let settings = SettingsStore(defaults: UserDefaults(suiteName: "com.hutianyi.SimpleXue.SimpleJi")!)
         let baseline = settings.baselineCampaign
         let mastered = settings.masteredDictationTerms
         let context = persistence.newBackgroundContext()
         return try await context.perform {
-            try StudyCompletionRepository.overview(in: context, now: now, baseline: baseline, masteredTerms: mastered)
+            try StudyCompletionRepository.overviewStatus(in: context, now: now, baseline: baseline, masteredTerms: mastered)
         }
     }
     public static func validate(_ data: Data) throws -> String {

@@ -47,8 +47,11 @@ public enum SimpleLianBackupTransfer {
         return try BackupService.exportData(context: container.mainContext)
     }
     public static func learningOverview(now: Date = Date()) throws -> String {
+        try learningOverviewStatus(now: now).text
+    }
+    public static func learningOverviewStatus(now: Date = Date()) throws -> (text: String, isComplete: Bool) {
         let container = try open()
-        return try PracticeService.overview(context: container.mainContext, day: DayKey.make(from: now))
+        return try PracticeService.overviewStatus(context: container.mainContext, day: DayKey.make(from: now))
     }
     public static func validate(_ data: Data) throws -> String {
         let backup = try BackupService.validate(data)
