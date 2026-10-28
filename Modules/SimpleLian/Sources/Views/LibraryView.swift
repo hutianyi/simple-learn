@@ -1,5 +1,6 @@
 import SwiftData
 import SwiftUI
+import UIKit
 
 struct LibraryView: View {
     @Query(sort: \ImportBatch.importedAt, order: .reverse) private var batches: [ImportBatch]
@@ -79,6 +80,7 @@ struct GroupDetailView: View {
     @Environment(\.modelContext) private var context
     let group: ProblemGroup
     @State private var errorMessage: String?
+    @State private var showsCopiedAlert = false
 
     var body: some View {
         List {
@@ -97,6 +99,10 @@ struct GroupDetailView: View {
                     Section(kind.label) {
                         ForEach(questions) { question in
                             DisclosureGroup {
+                                Text("题目").font(.caption.bold()).foregroundStyle(.secondary)
+                                MarkdownView(text: question.promptMarkdown)
+                                    .lineLimit(nil)
+                                    .fixedSize(horizontal: false, vertical: true)
                                 Text("答案").font(.caption.bold()).foregroundStyle(.secondary)
                                 MarkdownView(text: question.answerMarkdown)
                                 if !question.explanationMarkdown.isEmpty {
@@ -113,12 +119,24 @@ struct GroupDetailView: View {
                                     if question.disabledAt != nil { Text("已停用").font(.caption).foregroundStyle(.orange) }
                                 }
                             }
+                            if question.kind == .original {
+                                Button("复制原错题", systemImage: "doc.on.doc") {
+                                    UIPasteboard.general.string = question.promptMarkdown
+                                    showsCopiedAlert = true
+                                }
+                                .buttonStyle(.borderless)
+                            }
                         }
                     }
                 }
             }
         }
         .navigationTitle(group.title)
+        .alert("已复制到剪贴板", isPresented: $showsCopiedAlert) {
+            Button("好", role: .cancel) {}
+        } message: {
+            Text("原错题题干已按 Markdown 原文复制。")
+        }
         .alert("保存失败", isPresented: .constant(errorMessage != nil), presenting: errorMessage) { _ in Button("好") { errorMessage = nil } } message: { Text($0) }
     }
 
