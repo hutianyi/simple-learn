@@ -46,6 +46,7 @@ struct LearningHomeView: View {
     @State private var backupReady = false
     @State private var recoveryError: String?
     @State private var recoveryNotice: String?
+    @State private var leaveError: String?
     @State private var presentation: HomePresentation?
     @AppStorage("SimpleXue.home.moduleOrder") private var savedModuleOrder = ""
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -92,7 +93,13 @@ struct LearningHomeView: View {
                     ZStack {
                         Text(selected.title).font(.headline)
                         HStack {
-                            Button { AudioPlaybackCoordinator.shared.selectOwner(nil); self.selected = nil } label: { Label("切换功能", systemImage: "square.grid.2x2") }
+                            Button {
+                                do {
+                                    try session.prepareToLeave?()
+                                    AudioPlaybackCoordinator.shared.selectOwner(nil)
+                                    self.selected = nil
+                                } catch { leaveError = error.localizedDescription }
+                            } label: { Label("切换功能", systemImage: "square.grid.2x2") }
                                 .disabled(!session.canLeave)
                                 .accessibilityIdentifier("shell.switch")
                             Spacer()
@@ -180,6 +187,9 @@ struct LearningHomeView: View {
         .alert("数据恢复", isPresented: Binding(get: { recoveryNotice != nil }, set: { if !$0 { recoveryNotice = nil } })) {
             Button("好", role: .cancel) {}
         } message: { Text(recoveryNotice ?? "") }
+        .alert("进度保存失败，暂未退出", isPresented: Binding(get: { leaveError != nil }, set: { if !$0 { leaveError = nil } })) {
+            Button("好", role: .cancel) {}
+        } message: { Text(leaveError ?? "") }
     }
 
     private func moduleCard(_ module: LearningModule) -> some View {

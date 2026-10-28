@@ -5,6 +5,7 @@ import Foundation
 public final class ModuleSession: ObservableObject {
     @Published public private(set) var reasons: Set<String> = []
     public var canLeave: Bool { reasons.isEmpty }
+    public var prepareToLeave: (() throws -> Void)?
     public init() {}
 
     public func setBusy(_ busy: Bool, reason: String) {

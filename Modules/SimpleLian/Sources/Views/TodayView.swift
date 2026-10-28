@@ -5,7 +5,7 @@ struct TodayView: View {
     @Environment(\.modelContext) private var context
     @Query private var groups: [ProblemGroup]
     @Query(sort: \PracticeSession.createdAt, order: .reverse) private var sessions: [PracticeSession]
-    @State private var presentedSession: PracticeSession?
+    let openSession: (PracticeSession) -> Void
     @State private var errorMessage: String?
 
     private var active: PracticeSession? { sessions.first { $0.completedAt == nil } }
@@ -64,7 +64,6 @@ struct TodayView: View {
                 .frame(maxWidth: .infinity)
             }
             .navigationTitle("简单练")
-            .fullScreenCover(item: $presentedSession) { PracticeFlowView(session: $0) }
             .alert("无法开始", isPresented: .constant(errorMessage != nil), presenting: errorMessage) { _ in
                 Button("好") { errorMessage = nil }
             } message: { Text($0) }
@@ -84,13 +83,13 @@ struct TodayView: View {
 
     private func beginOrResume() {
         do {
-            if let active { presentedSession = active }
-            else { presentedSession = try PracticeService.makeDailySession(context: context) }
+            if let active { openSession(active) }
+            else if let session = try PracticeService.makeDailySession(context: context) { openSession(session) }
         } catch { errorMessage = error.localizedDescription }
     }
 
     private func startCorrection(_ group: ProblemGroup) {
-        do { presentedSession = try PracticeService.makeCorrectionSession(for: group, context: context) }
+        do { openSession(try PracticeService.makeCorrectionSession(for: group, context: context)) }
         catch { errorMessage = error.localizedDescription }
     }
 }

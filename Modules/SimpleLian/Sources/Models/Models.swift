@@ -128,6 +128,20 @@ final class PracticeSession {
         set { modeRaw = newValue.rawValue }
     }
 
+    var currentCorrectionProgress: SessionGroupProgress? {
+        let pending = groupProgress.filter { ![.passed, .needsExplanation, .materialShortage].contains($0.stage) }
+        // SwiftData relationship arrays do not preserve ordering when loaded again.
+        let orderByGroup = attempts.reduce(into: [UUID: Int]()) { order, attempt in
+            guard let groupID = attempt.group?.id else { return }
+            order[groupID] = min(order[groupID] ?? Int.max, attempt.orderIndex)
+        }
+        return pending.min { left, right in
+            let leftOrder = left.group.flatMap { orderByGroup[$0.id] } ?? Int.max
+            let rightOrder = right.group.flatMap { orderByGroup[$0.id] } ?? Int.max
+            return leftOrder == rightOrder ? left.id.uuidString < right.id.uuidString : leftOrder < rightOrder
+        }
+    }
+
     init(id: UUID = UUID(), createdAt: Date = .now, phase: SessionPhase = .answering, mode: SessionMode = .daily, currentIndex: Int = 0, dayKey: String) {
         self.id = id
         self.createdAt = createdAt

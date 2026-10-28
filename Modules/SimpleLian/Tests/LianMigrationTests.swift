@@ -40,6 +40,76 @@ private func fourFixesPracticeFixture() throws -> ModelContainer {
     return container
 }
 
+@MainActor
+@Test(arguments: ["answering", "marking", "pendingReview", "pendingFollowup", "awaitingGrade", "summary", "targeted"])
+func leavingPracticeResumesSavedCheckpoint(checkpoint: String) throws {
+    let container = try fourFixesPracticeFixture()
+    let context = container.mainContext
+    let group = try #require(try context.fetch(FetchDescriptor<ProblemGroup>()).first)
+    let session: PracticeSession
+    if checkpoint == "targeted" {
+        session = try PracticeService.makeCorrectionSession(for: group, context: context)
+    } else {
+        let second = ProblemGroup(externalID: "g2", title: "减法")
+        second.reviewState = ReviewState()
+        second.questions = [Question(externalID: "n3", kind: .near,
+            promptMarkdown: "3-1=?", answerMarkdown: "2", explanationMarkdown: "相减")]
+        group.batch?.groups.append(second)
+        context.insert(second)
+        session = try #require(try PracticeService.makeDailySession(context: context))
+        session.currentIndex = 1
+        if checkpoint != "answering" {
+            session.phase = .marking
+            for attempt in session.attempts { attempt.draftResult = .wrong }
+        }
+        if !["answering", "marking"].contains(checkpoint) {
+            try PracticeService.commitMarking(session: session, context: context)
+        }
+    }
+    if ["pendingFollowup", "awaitingGrade", "targeted"].contains(checkpoint) {
+        let progress = try #require(session.groupProgress.first)
+        _ = try PracticeService.makeCorrectionAttempt(for: progress, context: context)
+        try PracticeService.gradeCorrection(.wrong, progress: progress, context: context)
+        let followup = try #require(try PracticeService.makeCorrectionAttempt(for: progress, context: context))
+        if checkpoint == "awaitingGrade" {
+            PracticeService.markPresented(followup, context: context)
+            progress.stage = .awaitingGrade
+        }
+    }
+    if checkpoint == "summary" { session.phase = .summary }
+    try context.save()
+
+    // A new context must reconstruct the checkpoint without the previous view's objects.
+    let reentered = ModelContext(container)
+    let restored = try #require(try PracticeService.activeSession(context: reentered))
+    #expect(restored.id == session.id)
+    #expect(restored.phase == session.phase)
+    #expect(restored.mode == session.mode)
+    #expect(restored.currentIndex == session.currentIndex)
+    #expect(restored.completedAt == nil)
+    #expect(restored.attempts.count == session.attempts.count)
+    #expect(restored.currentCorrectionProgress?.id == session.currentCorrectionProgress?.id)
+    restored.groupProgress.reverse()
+    #expect(restored.currentCorrectionProgress?.id == session.currentCorrectionProgress?.id)
+    for saved in session.attempts {
+        let loaded = try #require(restored.attempts.first { $0.id == saved.id })
+        #expect(loaded.question?.id == saved.question?.id)
+        #expect(loaded.draftResult == saved.draftResult)
+        #expect(loaded.result == saved.result)
+        #expect(loaded.presentedAt == saved.presentedAt)
+    }
+    for saved in session.groupProgress {
+        let loaded = try #require(restored.groupProgress.first { $0.id == saved.id })
+        #expect(loaded.stage == saved.stage)
+        #expect(loaded.correctionFailureCount == saved.correctionFailureCount)
+    }
+    let resumed = try #require(try PracticeService.makeDailySession(context: reentered))
+    #expect(resumed.id == restored.id)
+    #expect(try reentered.fetchCount(FetchDescriptor<PracticeSession>()) == 1)
+    #expect(try reentered.fetchCount(FetchDescriptor<Attempt>()) == session.attempts.count)
+    #expect(restored.attempts.allSatisfy { $0.group?.reviewState?.creditedCorrectCount == 0 })
+}
+
 @MainActor @Test func resumedPracticeSchedulesFromActualMarkingDay() throws {
     let container = try fourFixesPracticeFixture()
     let context = container.mainContext

@@ -4,27 +4,36 @@ import StudyShell
 
 struct RootView: View {
     @Environment(\.modelContext) private var context
-    @Query private var sessions: [PracticeSession]
     @EnvironmentObject private var moduleSession: ModuleSession
+    @State private var presentedSession: PracticeSession?
     @State private var repairError: String?
     var body: some View {
-        TabView {
-            Tab("今天", systemImage: "checkmark.circle") {
-                TodayView()
-            }
-            Tab("题库", systemImage: "books.vertical") {
-                LibraryView()
-            }
-            Tab("数据", systemImage: "externaldrive") {
-                DataView()
+        VStack(spacing: 0) {
+            if let presentedSession {
+                PracticeFlowView(session: presentedSession, close: { self.presentedSession = nil })
+            } else {
+                TabView {
+                    Tab("今天", systemImage: "checkmark.circle") {
+                        TodayView(openSession: { presentedSession = $0 })
+                    }
+                    Tab("题库", systemImage: "books.vertical") {
+                        LibraryView()
+                    }
+                    Tab("数据", systemImage: "externaldrive") {
+                        DataView()
+                    }
+                }
             }
         }
-        .onChange(of: sessions.contains { $0.completedAt == nil }, initial: true) { _, busy in
-            moduleSession.setBusy(busy, reason: "lian.study")
+        .onAppear {
+            moduleSession.prepareToLeave = { try context.save() }
         }
-        .onDisappear { moduleSession.setBusy(false, reason: "lian.study") }
+        .onDisappear { moduleSession.prepareToLeave = nil }
         .task {
-            do { try PracticeService.discardEmptySessions(context: context) }
+            do {
+                try PracticeService.discardEmptySessions(context: context)
+                presentedSession = try PracticeService.activeSession(context: context)
+            }
             catch { repairError = error.localizedDescription }
         }
         .alert("无法整理未完成练习", isPresented: Binding(get: { repairError != nil }, set: { if !$0 { repairError = nil } })) {

@@ -3,9 +3,9 @@ import SwiftUI
 import UIKit
 
 struct PracticeFlowView: View {
-    @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var context
     @Bindable var session: PracticeSession
+    let close: () -> Void
     @State private var errorMessage: String?
 
     private var initialAttempts: [Attempt] { session.attempts.filter { $0.context != .correction }.sorted { $0.orderIndex < $1.orderIndex } }
@@ -23,18 +23,22 @@ struct PracticeFlowView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .toolbar {
                 if session.phase != .summary && session.phase != .completed {
-                    ToolbarItem(placement: .cancellationAction) { Button("稍后继续") { dismiss() } }
+                    ToolbarItem(placement: .cancellationAction) { Button("稍后继续", action: pause) }
                 }
             }
             .alert("操作失败", isPresented: .constant(errorMessage != nil), presenting: errorMessage) { _ in
                 Button("好") { errorMessage = nil }
             } message: { Text($0) }
         }
-        .interactiveDismissDisabled(session.phase != .summary && session.phase != .completed)
+    }
+
+    private func pause() {
+        do { try context.save(); close() }
+        catch { errorMessage = error.localizedDescription }
     }
 
     private func finish() {
-        do { try PracticeService.complete(session, context: context); dismiss() }
+        do { try PracticeService.complete(session, context: context); close() }
         catch { errorMessage = error.localizedDescription }
     }
 }
@@ -163,7 +167,7 @@ private struct CorrectionView: View {
     @State private var errorMessage: String?
 
     private var current: SessionGroupProgress? {
-        session.groupProgress.first { ![.passed, .needsExplanation, .materialShortage].contains($0.stage) }
+        session.currentCorrectionProgress
     }
 
     var body: some View {
