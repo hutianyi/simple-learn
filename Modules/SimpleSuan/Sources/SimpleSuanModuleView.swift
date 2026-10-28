@@ -23,7 +23,7 @@ public enum SimpleSuanBackupTransfer {
     public static func learningOverviewStatus(now: Date = Date()) throws -> (text: String, isComplete: Bool) {
         let data = try PersistenceService.shared.load()
         let count = PracticeActivity(sessions: data.sessions, now: now).todayCount
-        return ("今日已做 \(count) 题", count > 0)
+        return count > 0 ? ("今日已完成", true) : ("今日待做40题", false)
     }
     public static func exportData() throws -> Data {
         try SuanBackup.encode(PersistenceService.shared.load())
