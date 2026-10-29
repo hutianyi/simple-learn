@@ -828,13 +828,56 @@ final class StudyStreakTests: XCTestCase {
         let (word, _) = try seedWord(in: context, due: date(3), now: date(1))
         XCTAssertEqual(try StudyCompletionRepository.overview(in: context, now: date(3), baseline: campaign, masteredTerms: [], calendar: calendar), "待复习 2 张")
         _ = try seedDirectWord(in: context, english: "eligible")
-        XCTAssertEqual(try StudyCompletionRepository.overview(in: context, now: date(3), baseline: campaign, masteredTerms: [], calendar: calendar), "待复习 2 张 · 待默写")
+        XCTAssertEqual(try StudyCompletionRepository.overview(in: context, now: date(3), baseline: campaign, masteredTerms: [], calendar: calendar), "待复习 2 张 · 待默写 1 个单词")
         XCTAssertEqual(try StudyCompletionRepository.overview(in: context, now: date(3), baseline: campaign, masteredTerms: ["eligible"], calendar: calendar), "待复习 2 张")
         XCTAssertFalse(context.hasChanges)
         XCTAssertEqual(try context.count(for: DictationDayEntity.fetchRequest()), 0)
         XCTAssertEqual(try context.count(for: StudyCompletionDayEntity.fetchRequest()), 0)
         XCTAssertEqual(word.english, "apple")
     }
+
+    func testOverviewCountsDistinctPendingWordsAndUnfinishedCorrections() async throws {
+        let (controller, repository, _, campaign) = try limitedOverdueFixture(overdue: 1, dueToday: 2)
+        let context = controller.container.viewContext
+        XCTAssertEqual(try StudyCompletionRepository.overview(in: context, now: date(3), baseline: campaign, masteredTerms: [], calendar: calendar), "待默写 3 个单词")
+        let day = try await repository.loadOrCreateDay(limit: 3, campaign: campaign, now: date(3))
+        // Overdue words also appear in the saved queue; count each word once.
+        XCTAssertEqual(try StudyCompletionRepository.overview(in: context, now: date(3), baseline: campaign, masteredTerms: [], calendar: calendar), "待默写 3 个单词")
+        let first = try XCTUnwrap(day.items.first)
+        _ = try await repository.submitFormal(dayID: day.id, wordID: first.wordID, recognized: first.english, now: date(3))
+        XCTAssertEqual(try StudyCompletionRepository.overview(in: context, now: date(3), baseline: campaign, masteredTerms: [], calendar: calendar), "待默写 2 个单词")
+        let wrong = day.items[1]
+        _ = try await repository.submitFormal(dayID: day.id, wordID: wrong.wordID, recognized: "wrong", now: date(3))
+        let last = day.items[2]
+        _ = try await repository.submitFormal(dayID: day.id, wordID: last.wordID, recognized: last.english, now: date(3))
+        XCTAssertEqual(try StudyCompletionRepository.overview(in: context, now: date(3), baseline: campaign, masteredTerms: [], calendar: calendar), "待默写 1 个单词")
+        _ = try await repository.beginRemediation(dayID: day.id, now: date(3))
+        for _ in 0..<3 {
+            _ = try await repository.recordRemediationCopy(dayID: day.id, wordID: wrong.wordID, recognized: wrong.english, now: date(3))
+        }
+        _ = try await repository.submitRetest(dayID: day.id, wordID: wrong.wordID, recognized: wrong.english, now: date(3))
+        XCTAssertEqual(try StudyCompletionRepository.overview(in: context, now: date(3), baseline: campaign, masteredTerms: [], calendar: calendar), "今日已完成")
+    }
+
+    func testOverviewCountsBaselineWordsAndExcludesMasteredWords() throws {
+        let controller = PersistenceController(inMemory: true)
+        let context = controller.container.viewContext
+        let (first, _) = try seedWord(in: context, due: date(10), now: date(1))
+        let (second, _) = try seedWord(in: context, due: date(10), now: date(1), english: "pear")
+        let campaign = BaselineCampaignSnapshot(selectedWordIDs: [first.id, second.id], activatedAt: date(3))
+        XCTAssertEqual(try StudyCompletionRepository.overview(in: context, now: date(3), baseline: campaign, masteredTerms: [], calendar: calendar), "待默写 2 个单词")
+        XCTAssertEqual(try StudyCompletionRepository.overview(in: context, now: date(3), baseline: campaign, masteredTerms: ["pear"], calendar: calendar), "待默写 1 个单词")
+        XCTAssertFalse(context.hasChanges)
+    }
+
+    func testOverviewCountsOverdueWordsOutsideCompletedDailyAllowance() async throws {
+        let (controller, repository, _, campaign) = try limitedOverdueFixture(overdue: 2, dueToday: 1)
+        let day = try await repository.loadOrCreateDay(limit: 1, campaign: campaign, now: date(3))
+        let item = try XCTUnwrap(day.items.first)
+        _ = try await repository.submitFormal(dayID: day.id, wordID: item.wordID, recognized: item.english, now: date(3))
+        XCTAssertEqual(try StudyCompletionRepository.overview(in: controller.container.viewContext, now: date(3), baseline: campaign, masteredTerms: [], calendar: calendar), "待默写 1 个单词")
+    }
+
     func testOverviewDoesNotReopenCompletedDailyAllowance() async throws {
         let (controller, repository, _, campaign) = try limitedOverdueFixture(overdue: 0, dueToday: 2)
         let day = try await repository.loadOrCreateDay(limit: 1, campaign: campaign, now: date(3))
