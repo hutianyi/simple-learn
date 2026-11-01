@@ -105,7 +105,7 @@ struct AddWordsView: View {
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
                         .stroke(AppPalette.textSecondary.opacity(0.22))
                 )
-                .onChange(of: viewModel.batchText) { _ in viewModel.inputChanged() }
+                .onChange(of: viewModel.batchText) { viewModel.inputChanged() }
 
             Text("支持标题、项目符号、Tab、空格、短横线，以及 ice cream 冰淇淋这类词组。可录入 conversation n.对话，词性随释义显示，不参与英文默写。分析前不会写入数据库。")
                 .font(.footnote)

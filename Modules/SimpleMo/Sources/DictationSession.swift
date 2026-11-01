@@ -304,8 +304,11 @@ final class DictationSession: NSObject, ObservableObject, AVSpeechSynthesizerDel
                     if !AudioPlaybackCoordinator.shared.owns("mo") { self?.returnToSetup() }
                 }
             },
-            center.addObserver(forName: AVAudioSession.interruptionNotification, object: AVAudioSession.sharedInstance(), queue: .main) { [weak self] notification in
-                Task { @MainActor [weak self] in self?.handleAudioSessionInterruption(notification) }
+            center.addObserver(forName: AVAudioSession.didBecomeInactiveNotification, object: AVAudioSession.sharedInstance(), queue: .main) { [weak self] notification in
+                Task { @MainActor [weak self] in self?.handleAudioSessionDeactivation(notification) }
+            },
+            center.addObserver(forName: AVAudioSession.resumptionRecommendationNotification, object: AVAudioSession.sharedInstance(), queue: .main) { [weak self] notification in
+                Task { @MainActor [weak self] in self?.handleAudioSessionResumption(notification) }
             },
             center.addObserver(forName: AVAudioSession.routeChangeNotification, object: AVAudioSession.sharedInstance(), queue: .main) { [weak self] notification in
                 Task { @MainActor [weak self] in self?.handleAudioRouteChange(notification) }
@@ -316,24 +319,20 @@ final class DictationSession: NSObject, ObservableObject, AVSpeechSynthesizerDel
         ]
     }
 
-    private func handleAudioSessionInterruption(_ notification: Notification) {
-        guard phase == .dictating else { return }
-        guard let rawValue = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
-              let type = AVAudioSession.InterruptionType(rawValue: rawValue) else { return }
+    private func handleAudioSessionDeactivation(_ notification: Notification) {
+        guard phase == .dictating,
+              let context = notification.userInfo?[AVAudioSession.deactivationContextKey] as? AVAudioSession.DeactivationContext,
+              context.source == .system else { return }
+        shouldReplayAfterAudioRecovery = synthesizer.isSpeaking || synthesizer.isPaused
+        print("[DictationAudio] 音频中断开始 shouldReplay=\(shouldReplayAfterAudioRecovery)")
+    }
 
-        switch type {
-        case .began:
-            shouldReplayAfterAudioRecovery = synthesizer.isSpeaking || synthesizer.isPaused
-            print("[DictationAudio] 音频中断开始 shouldReplay=\(shouldReplayAfterAudioRecovery)")
-        case .ended:
-            let optionsValue = notification.userInfo?[AVAudioSessionInterruptionOptionKey] as? UInt ?? 0
-            let options = AVAudioSession.InterruptionOptions(rawValue: optionsValue)
-            print("[DictationAudio] 音频中断结束 systemSuggestsResume=\(options.contains(.shouldResume))")
-            if shouldReplayAfterAudioRecovery { replayLastSpeechAfterRecovery() }
-            shouldReplayAfterAudioRecovery = false
-        @unknown default:
-            break
-        }
+    private func handleAudioSessionResumption(_ notification: Notification) {
+        guard phase == .dictating,
+              let context = notification.userInfo?[AVAudioSession.resumptionContextKey] as? AVAudioSession.ResumptionContext else { return }
+        print("[DictationAudio] 音频中断结束 systemSuggestsResume=\(context.recommendation == .shouldResume)")
+        if shouldReplayAfterAudioRecovery { replayLastSpeechAfterRecovery() }
+        shouldReplayAfterAudioRecovery = false
     }
 
     private func handleAudioRouteChange(_ notification: Notification) {
