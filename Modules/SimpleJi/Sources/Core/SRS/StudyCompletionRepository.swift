@@ -11,59 +11,24 @@ final class StudyCompletionRepository {
     }
 
     static func overview(in context: NSManagedObjectContext, now: Date, baseline: BaselineCampaignSnapshot?,
-                         masteredTerms: Set<String>, calendar: Calendar = .current) throws -> String {
-        try overviewStatus(in: context, now: now, baseline: baseline, masteredTerms: masteredTerms, calendar: calendar).text
+                         masteredTerms: Set<String>, dictationLimit: Int = 20, calendar: Calendar = .current) throws -> String {
+        try overviewStatus(in: context, now: now, baseline: baseline, masteredTerms: masteredTerms, dictationLimit: dictationLimit, calendar: calendar).text
     }
 
     static func overviewStatus(in context: NSManagedObjectContext, now: Date, baseline: BaselineCampaignSnapshot?,
-                               masteredTerms: Set<String>, calendar: Calendar = .current) throws -> (text: String, isComplete: Bool) {
-        let start = calendar.startOfDay(for: now)
+                               masteredTerms: Set<String>, dictationLimit: Int = 20, calendar: Calendar = .current) throws -> (text: String, isComplete: Bool) {
         let tomorrow = DictationEligibility.nextDay(after: now, calendar: calendar)
         let key = DictationEligibility.dayKey(for: now, calendar: calendar)
         let allWords = try context.fetch(WordEntity.fetchRequest())
         guard !allWords.isEmpty else { return ("还没有单词", false) }
-        let words = allWords.filter { !masteredTerms.contains(EnglishNormalizer.normalize($0.english)) }
         let cards = try context.fetch(ReviewStateEntity.fetchRequest()).filter { $0.nextReviewDate < tomorrow }.count
-        let days = try context.fetch(DictationDayEntity.fetchRequest())
-        let today = days.first { $0.dayKey == key }
         let completion = try context.fetch(StudyCompletionDayEntity.fetchRequest()).first { $0.dayKey == key }
         let complete = try completion.map { try JSONDecoder().decode(StudyCompletionDay.self, from: $0.snapshotData).isComplete } ?? false
-        let tested = Set(try context.fetch(DictationEventEntity.fetchRequest()).filter { $0.kind == "baselineFormal" }.map(\.wordID))
-        let baselinePending = words.filter { word in
-            let selected = baseline?.selectedWordIDs.contains(word.id) ?? (word.createdAt < start)
-            return selected && !tested.contains(word.id) && (word.dictationState?.totalFormal ?? 0) == 0
-        }
-        let newPending = words.filter {
-            !complete && !(baseline?.selectedWordIDs.contains($0.id) ?? ($0.createdAt < start))
-                && DictationEligibility.canStartDirectly(word: $0, now: now, calendar: calendar)
-        }
-        let regular = words.filter { word in
-            guard let state = word.dictationState else { return false }
-            return state.englishVersion == DictationAnswerMatcher.normalize(word.english)
-                && (state.initialCopyCompletedAt != nil || state.totalFormal > 0)
-                && (state.nextReviewDate.map { $0 < tomorrow } ?? false)
-                && (state.formalNotBefore ?? .distantPast) <= now
-                && state.lastFormalDay != key
-        }
-        var pendingWordIDs = Set<UUID>()
-        let wordIDs = Set(words.map(\.id))
-        for day in days where day.dayKey <= key && !day.dayKey.hasSuffix("#repair") {
-            let items = try JSONDecoder().decode([DictationItem].self, from: day.tasksData)
-            pendingWordIDs.formUnion(items.filter {
-                !StudyStreak.dictationFinished(phase: DictationPhase.complete.rawValue, items: [$0])
-            }.map(\.wordID).filter { wordIDs.contains($0) })
-        }
-        if let today {
-            let items = try JSONDecoder().decode([DictationItem].self, from: today.tasksData)
-            // A completed queue defers today's excess to tomorrow, just like the module.
-            pendingWordIDs.formUnion(regular.filter {
-                ($0.dictationState?.nextReviewDate ?? .distantFuture) < start
-            }.map(\.id))
-            if items.isEmpty { pendingWordIDs.formUnion(newPending.map(\.id)) }
-        } else {
-            pendingWordIDs.formUnion((baselinePending + newPending + regular).map(\.id))
-        }
-        let pendingCount = pendingWordIDs.count
+        let day = try DictationRepository.previewDay(in: context, limit: dictationLimit,
+            campaign: baseline, masteredTerms: masteredTerms, now: now, calendar: calendar)
+        let pendingCount = Set(day.items.filter {
+            !StudyStreak.dictationFinished(phase: DictationPhase.complete.rawValue, items: [$0])
+        }.map(\.wordID)).count
         if cards == 0 && pendingCount == 0 { return (complete ? "今日已完成" : "暂无到期任务", complete) }
         return ([cards > 0 ? "待复习 \(cards) 张" : nil, pendingCount > 0 ? "待默写 \(pendingCount) 个单词" : nil].compactMap { $0 }.joined(separator: " · "), false)
     }

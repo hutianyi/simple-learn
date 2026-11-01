@@ -60,9 +60,10 @@ public enum SimpleJiBackupTransfer {
         let settings = SettingsStore(defaults: UserDefaults(suiteName: "com.hutianyi.SimpleXue.SimpleJi")!)
         let baseline = settings.baselineCampaign
         let mastered = settings.masteredDictationTerms
+        let dictationLimit = settings.dictationLimit.rawValue
         let context = persistence.newBackgroundContext()
         return try await context.perform {
-            try StudyCompletionRepository.overviewStatus(in: context, now: now, baseline: baseline, masteredTerms: mastered)
+            try StudyCompletionRepository.overviewStatus(in: context, now: now, baseline: baseline, masteredTerms: mastered, dictationLimit: dictationLimit)
         }
     }
     public static func validate(_ data: Data) throws -> String {

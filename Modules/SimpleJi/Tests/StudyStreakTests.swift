@@ -870,12 +870,12 @@ final class StudyStreakTests: XCTestCase {
         XCTAssertFalse(context.hasChanges)
     }
 
-    func testOverviewCountsOverdueWordsOutsideCompletedDailyAllowance() async throws {
+    func testOverviewDoesNotCountOverdueWordsOutsideCompletedDailyAllowance() async throws {
         let (controller, repository, _, campaign) = try limitedOverdueFixture(overdue: 2, dueToday: 1)
         let day = try await repository.loadOrCreateDay(limit: 1, campaign: campaign, now: date(3))
         let item = try XCTUnwrap(day.items.first)
         _ = try await repository.submitFormal(dayID: day.id, wordID: item.wordID, recognized: item.english, now: date(3))
-        XCTAssertEqual(try StudyCompletionRepository.overview(in: controller.container.viewContext, now: date(3), baseline: campaign, masteredTerms: [], calendar: calendar), "待默写 1 个单词")
+        XCTAssertEqual(try StudyCompletionRepository.overview(in: controller.container.viewContext, now: date(3), baseline: campaign, masteredTerms: [], dictationLimit: 1, calendar: calendar), "暂无到期任务")
     }
 
     func testOverviewDoesNotReopenCompletedDailyAllowance() async throws {
@@ -884,9 +884,104 @@ final class StudyStreakTests: XCTestCase {
         let item = try XCTUnwrap(day.items.first)
         _ = try await repository.submitFormal(dayID: day.id, wordID: item.wordID, recognized: item.english, now: date(3))
         XCTAssertTrue(try snapshot(controller, day: 3).isComplete)
-        XCTAssertEqual(try StudyCompletionRepository.overview(in: controller.container.viewContext, now: date(3), baseline: campaign, masteredTerms: [], calendar: calendar), "今日已完成")
-        XCTAssertTrue(try StudyCompletionRepository.overviewStatus(in: controller.container.viewContext, now: date(3), baseline: campaign, masteredTerms: [], calendar: calendar).isComplete)
+        XCTAssertEqual(try StudyCompletionRepository.overview(in: controller.container.viewContext, now: date(3), baseline: campaign, masteredTerms: [], dictationLimit: 1, calendar: calendar), "今日已完成")
+        XCTAssertTrue(try StudyCompletionRepository.overviewStatus(in: controller.container.viewContext, now: date(3), baseline: campaign, masteredTerms: [], dictationLimit: 1, calendar: calendar).isComplete)
     }
+    func testOverviewPreviewsNinetyNineCandidatesAsThirtyFourActualTasks() async throws {
+        let (controller, repository, _, campaign) = try limitedOverdueFixture(overdue: 0, dueToday: 29)
+        for index in 0..<70 {
+            _ = try seedDirectWord(in: controller.container.viewContext, english: "newword\(index)")
+        }
+        let day = try await assertOverviewMatchesQueue(controller, repository: repository,
+            campaign: campaign, limit: 50, expected: 34)
+        XCTAssertEqual(day.items.filter { $0.isNewWord == true }.count, 5)
+    }
+
+    func testOverviewPreviewsOnlyBaselineQueueBeforeRegularReviews() async throws {
+        let (controller, repository, _, _) = try limitedOverdueFixture(overdue: 0, dueToday: 65)
+        var baselineIDs: [UUID] = []
+        for index in 0..<34 {
+            let (word, _) = try seedWord(in: controller.container.viewContext,
+                due: date(10), now: date(1), english: "baseline\(index)")
+            baselineIDs.append(word.id)
+        }
+        let campaign = BaselineCampaignSnapshot(selectedWordIDs: baselineIDs, activatedAt: date(3))
+        let day = try await assertOverviewMatchesQueue(controller, repository: repository,
+            campaign: campaign, limit: 50, expected: 34)
+        XCTAssertTrue(day.items.allSatisfy(\.belongsToBaseline))
+    }
+
+    func testOverviewRespectsDailyLimitAndPreviewsChangedLimitWithoutSaving() async throws {
+        let (controller, repository, _, campaign) = try limitedOverdueFixture(overdue: 0, dueToday: 99)
+        _ = try await assertOverviewMatchesQueue(controller, repository: repository,
+            campaign: campaign, limit: 20, expected: 20)
+        _ = try await assertOverviewMatchesQueue(controller, repository: repository,
+            campaign: campaign, limit: 10, expected: 10)
+        _ = try await assertOverviewMatchesQueue(controller, repository: repository,
+            campaign: campaign, limit: 0, expected: 99)
+    }
+
+    func testOverviewPreviewsYesterdayCleanupWithoutChangingSavedTasks() async throws {
+        let (controller, repository, _, campaign) = try limitedOverdueFixture(overdue: 2, dueToday: 1)
+        let oldDay = try await repository.loadOrCreateDay(limit: 50, campaign: campaign, now: date(2))
+        let wrong = try XCTUnwrap(oldDay.items.first)
+        _ = try await repository.submitFormal(dayID: oldDay.id, wordID: wrong.wordID,
+            recognized: "wrong", now: date(2))
+        let day = try await assertOverviewMatchesQueue(controller, repository: repository,
+            campaign: campaign, limit: 50, expected: 1)
+        XCTAssertEqual(day.id, oldDay.id)
+        XCTAssertEqual(day.items.map(\.wordID), [wrong.wordID])
+    }
+
+    func testOverviewPreviewsAutomaticBaselineAndItsFiftyWordCap() async throws {
+        let controller = PersistenceController(inMemory: true)
+        let context = controller.container.viewContext
+        for index in 0..<60 {
+            _ = try seedWord(in: context, due: date(10), now: date(1), english: "oldword\(index)")
+        }
+        let overview = try StudyCompletionRepository.overview(in: context, now: date(3),
+            baseline: nil, masteredTerms: [], dictationLimit: 0, calendar: calendar)
+        XCTAssertEqual(overview, "待默写 50 个单词")
+        XCTAssertEqual(try context.count(for: DictationDayEntity.fetchRequest()), 0)
+        XCTAssertEqual(try context.count(for: StudyCompletionDayEntity.fetchRequest()), 0)
+        let repository = DictationRepository(container: controller.container, calendar: calendar)
+        let campaign = try await repository.automaticBaselineCampaign(now: date(3))
+        let day = try await repository.loadOrCreateDay(limit: 0, campaign: campaign, now: date(3))
+        XCTAssertEqual(day.items.count, 50)
+        XCTAssertEqual(try StudyCompletionRepository.overview(in: context, now: date(3),
+            baseline: campaign, masteredTerms: [], dictationLimit: 0, calendar: calendar), overview)
+    }
+
+    @discardableResult
+    private func assertOverviewMatchesQueue(_ controller: PersistenceController,
+        repository: DictationRepository, campaign: BaselineCampaignSnapshot,
+        limit: Int, expected: Int) async throws -> DictationDay {
+        let context = controller.container.viewContext
+        let savedDays = try context.fetch(DictationDayEntity.fetchRequest())
+        let tasks = Dictionary(uniqueKeysWithValues: savedDays.map { ($0.id, $0.tasksData) })
+        let phases = Dictionary(uniqueKeysWithValues: savedDays.map { ($0.id, $0.phase) })
+        let snapshots = try context.fetch(StudyCompletionDayEntity.fetchRequest()).map(\.snapshotData)
+        let eventCount = try context.count(for: DictationEventEntity.fetchRequest())
+        let text = "待默写 \(expected) 个单词"
+        // Repeated home refreshes must leave saved queues, events and completion untouched.
+        for _ in 0..<2 {
+            XCTAssertEqual(try StudyCompletionRepository.overview(in: context, now: date(3),
+                baseline: campaign, masteredTerms: [], dictationLimit: limit, calendar: calendar), text)
+        }
+        context.refreshAllObjects()
+        let unchanged = try context.fetch(DictationDayEntity.fetchRequest())
+        XCTAssertEqual(Dictionary(uniqueKeysWithValues: unchanged.map { ($0.id, $0.tasksData) }), tasks)
+        XCTAssertEqual(Dictionary(uniqueKeysWithValues: unchanged.map { ($0.id, $0.phase) }), phases)
+        XCTAssertEqual(try context.fetch(StudyCompletionDayEntity.fetchRequest()).map(\.snapshotData), snapshots)
+        XCTAssertEqual(try context.count(for: DictationEventEntity.fetchRequest()), eventCount)
+        XCTAssertFalse(context.hasChanges)
+        let day = try await repository.loadOrCreateDay(limit: limit, campaign: campaign, now: date(3))
+        XCTAssertEqual(day.items.count, expected)
+        XCTAssertEqual(try StudyCompletionRepository.overview(in: context, now: date(3),
+            baseline: campaign, masteredTerms: [], dictationLimit: limit, calendar: calendar), text)
+        return day
+    }
+
     private func seedDirectWord(in context: NSManagedObjectContext, english: String = "apple", position: Int64 = 0) throws -> WordEntity {
         let (word, cards) = try seedWord(in: context, due: date(10), now: date(1), english: english)
         word.importPosition = position
