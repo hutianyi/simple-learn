@@ -1,5 +1,6 @@
 import SwiftData
 import SwiftUI
+import StudyShell
 
 struct TodayView: View {
     @Environment(\.modelContext) private var context
@@ -24,17 +25,14 @@ struct TodayView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text(greeting).font(.largeTitle.bold())
+                        Text(greeting).font(StudyAppearance.title)
                         Text(statusText).foregroundStyle(.secondary)
                     }
 
                     Button(action: beginOrResume) {
                         Label(active == nil ? "开始今天的练习" : "继续未完成练习", systemImage: active == nil ? "play.fill" : "arrow.forward.circle.fill")
-                            .font(.title3.bold())
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 14)
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(StudyPrimaryButtonStyle())
                     .disabled(active == nil && due.isEmpty)
 
                     if !needsExplanation.isEmpty {
@@ -59,11 +57,13 @@ struct TodayView: View {
                         ContentUnavailableView("还没有题目", systemImage: "tray", description: Text("到“题库”页导入 ChatGPT 生成的题库。"))
                     }
                 }
-                .frame(maxWidth: 760, alignment: .leading)
-                .padding(28)
+                .frame(maxWidth: StudyAppearance.contentWidth, alignment: .leading)
+                .padding(StudyAppearance.pagePadding)
                 .frame(maxWidth: .infinity)
             }
-            .navigationTitle("简单练")
+            .background(StudyAppearance.background)
+            .navigationTitle("今天")
+            .navigationBarTitleDisplayMode(.inline)
             .alert("无法开始", isPresented: .constant(errorMessage != nil), presenting: errorMessage) { _ in
                 Button("好") { errorMessage = nil }
             } message: { Text($0) }

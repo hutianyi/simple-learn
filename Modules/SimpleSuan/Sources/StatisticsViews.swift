@@ -20,7 +20,7 @@ struct SessionResultView: View {
                     }
                     PracticeHeatmapView(activity: activity)
                 } else {
-                    Text("本次练习完成").font(.largeTitle.bold())
+                    Text("本次练习完成").font(StudyAppearance.title)
                     Text("\(statistics.total) 题 · 等待保存").font(.title2).foregroundStyle(.secondary)
                 }
                 Text("本次练习成绩").font(.title2.bold())

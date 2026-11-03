@@ -1,5 +1,6 @@
 import CoreData
 import SwiftUI
+import StudyShell
 
 struct ReviewSessionView: View {
     @StateObject private var viewModel: ReviewSessionViewModel
@@ -91,6 +92,8 @@ struct ReviewSessionView: View {
             if onComplete != nil { ProgressView("正在进入下一项学习…") }
             else { SessionSummaryView(
                 summary: summary,
+                settings: settings,
+                onDictation: { speech.stop(); router.path = [.dictation] },
                 onAgain: { Task { await viewModel.restart() } },
                 onHome: returnHome
             ) }
@@ -349,6 +352,11 @@ struct ReviewSessionView: View {
 
 private struct SessionSummaryView: View {
     let summary: ReviewSessionViewModel.SessionSummary
+    @ObservedObject var settings: SettingsStore
+    let onDictation: () -> Void
+    @Environment(\.managedObjectContext) private var context
+    @State private var hasPendingDictation: Bool?
+    @State private var nextStepError: String?
     let onAgain: () -> Void
     let onHome: () -> Void
 
@@ -358,7 +366,7 @@ private struct SessionSummaryView: View {
                 .font(.system(size: 62))
                 .foregroundStyle(.green)
             Text(summary.mode == .scheduled ? "本轮完成" : "额外加练完成")
-                .font(.largeTitle.bold())
+                .font(StudyAppearance.title)
 
             VStack(spacing: 10) {
                 summaryRow(summary.mode == .scheduled ? "正式复习" : "练习", "\(summary.answered)")
@@ -383,14 +391,57 @@ private struct SessionSummaryView: View {
             }
 
             VStack(spacing: 12) {
-                Button(summary.mode == .scheduled ? "再来一轮" : "再练一轮", action: onAgain)
+                if summary.mode == .extraPractice || summary.remainingDue > 0 {
+                    Button(summary.mode == .scheduled ? "继续复习" : "再练一轮", action: onAgain)
+                        .buttonStyle(LargePrimaryButtonStyle())
+                    Button("返回首页", action: onHome)
+                        .buttonStyle(LargeSecondaryButtonStyle())
+                } else if let hasPendingDictation {
+                    Button(hasPendingDictation ? "继续今天的默写" : "完成，返回", action: hasPendingDictation ? onDictation : onHome)
+                        .buttonStyle(LargePrimaryButtonStyle())
+                        .accessibilityIdentifier("review.nextStep")
+                    if hasPendingDictation {
+                        Button("稍后默写，返回首页", action: onHome)
+                            .buttonStyle(LargeSecondaryButtonStyle())
+                    }
+                } else {
+                    Button(nextStepError == nil ? "正在检查下一项…" : "重新检查下一项") {
+                        Task { await loadNextStep() }
+                    }
                     .buttonStyle(LargePrimaryButtonStyle())
-                Button("返回首页", action: onHome)
-                    .buttonStyle(LargeSecondaryButtonStyle())
+                    .disabled(nextStepError == nil)
+                    if let nextStepError {
+                        Text(nextStepError).font(.footnote).foregroundStyle(.secondary)
+                        Button("返回首页", action: onHome).buttonStyle(LargeSecondaryButtonStyle())
+                    }
+                }
             }
             .frame(maxWidth: 380)
         }
         .padding(30)
+        .task { await loadNextStep() }
+    }
+
+    @MainActor private func loadNextStep() async {
+        guard summary.mode == .scheduled, summary.remainingDue == 0 else { return }
+        nextStepError = nil
+        let campaign = settings.baselineCampaign
+        let mastered = settings.masteredDictationTerms
+        let limit = settings.dictationLimit.rawValue
+        do {
+            let pending = try await context.perform {
+                let day = try DictationRepository.previewDay(in: context, limit: limit,
+                    campaign: campaign, masteredTerms: mastered, now: Date(), calendar: .current)
+                return day.items.contains {
+                    !StudyStreak.dictationFinished(phase: DictationPhase.complete.rawValue, items: [$0])
+                }
+            }
+            guard !Task.isCancelled else { return }
+            hasPendingDictation = pending
+        } catch {
+            guard !Task.isCancelled else { return }
+            nextStepError = "无法读取下一项学习：\(error.localizedDescription)"
+        }
     }
 
     private func summaryRow(_ title: String, _ value: String) -> some View {

@@ -35,19 +35,6 @@ private struct ListenLibraryView: View {
     private var displayedArticle: ListenArticle? { displayedArticleID.flatMap { store.library.article($0) } }
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                Text("简单听").font(.title2.bold())
-                Spacer()
-                Button("导入文章", systemImage: "plus") { presentation = .pasteImport }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(store.loadError != nil || speech.playback.state == .stopping)
-                    .accessibilityIdentifier("listen.import")
-                Button("设置", systemImage: "gearshape") { presentation = .settings }
-                    .buttonStyle(.bordered)
-                    .accessibilityIdentifier("listen.settings")
-            }
-            .padding(.horizontal, 20).padding(.vertical, 12).background(.bar)
-            Divider()
             NavigationSplitView(preferredCompactColumn: $compactColumn) {
                 List {
                     if let loadError = store.loadError { Text(loadError).foregroundStyle(.red) }
@@ -74,20 +61,31 @@ private struct ListenLibraryView: View {
                 }
                 .id(libraryRefreshID)
                 .navigationTitle("文章库")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItemGroup(placement: .primaryAction) {
+                        Button("导入文章", systemImage: "plus") { presentation = .pasteImport }
+                            .disabled(store.loadError != nil || speech.playback.state == .stopping)
+                            .accessibilityIdentifier("listen.import")
+                        Button("设置", systemImage: "gearshape") { presentation = .settings }
+                            .accessibilityIdentifier("listen.settings")
+                    }
+                }
             } detail: {
                 NavigationStack {
                     Group {
                         if let article = displayedArticle {
                             ScrollView {
                                 VStack(alignment: .leading, spacing: 28) {
-                                    Text(article.title).font(.largeTitle.bold())
+                                    Text(article.title).font(StudyAppearance.title)
                                     MarkdownBodyView(markdown: article.rawMarkdown)
-                                }.padding(28).frame(maxWidth: 900).frame(maxWidth: .infinity)
+                                }.padding(StudyAppearance.pagePadding).frame(maxWidth: 900).frame(maxWidth: .infinity)
                             }
                             .toolbar { ToolbarItem(placement: .topBarLeading) { Button("文章库", systemImage: "chevron.left") { compactColumn = .sidebar } } }
                         } else { ContentUnavailableView("还没有文章", systemImage: "headphones", description: Text("点击上方“导入文章”，粘贴一份 Markdown 全文。")) }
                     }
-                    .navigationTitle("简单听")
+                    .navigationTitle("")
+                    .navigationBarTitleDisplayMode(.inline)
                 }
             }
         }

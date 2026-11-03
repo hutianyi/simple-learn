@@ -5,6 +5,7 @@ struct ListenPasteImportView: View {
     let store: LibraryStore
     let speech: SpeechService
     let didImport: (UUID) -> Void
+    @Environment(\.studyTheme) private var theme
     @State private var text = ""
     @State private var saving = false
     @State private var error: String?
@@ -52,11 +53,11 @@ struct ListenPasteImportView: View {
                 }
                 Button(action: importText) {
                     HStack {
-                        if saving { ProgressView().tint(.white) }
+                        if saving { ProgressView().tint(theme.buttonForeground) }
                         Text(saving ? "正在导入……" : "解析并导入").font(.headline)
-                    }.frame(maxWidth: .infinity).padding(.vertical, 8)
+                    }.frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(StudyPrimaryButtonStyle())
                 .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || saving || speech.playback.hasSession)
                 .accessibilityIdentifier("listen.confirmImport")
             }

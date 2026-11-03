@@ -96,6 +96,7 @@ struct PracticeView: View {
 }
 
 struct NumberPadView: View {
+    @Environment(\.studyTheme) private var theme
     let answer: String; let locked: Bool; let append: (Int) -> Void; let delete: () -> Void; let submit: () -> Void
     private let rows: [[String]] = [["1", "2", "3"], ["4", "5", "6"], ["7", "8", "9"], ["⌫", "0", "✓"]]
     var body: some View {
@@ -103,7 +104,7 @@ struct NumberPadView: View {
     }
     @ViewBuilder private func button(for key: String) -> some View {
         Button { if let number = Int(key) { append(number) } else if key == "⌫" { delete() } else { submit() } } label: { Text(key).font(.system(size: 32, weight: .semibold)).frame(maxWidth: .infinity, minHeight: 68) }
-            .buttonStyle(.borderedProminent).tint(key == "✓" ? .accentColor : .gray).disabled(locked || (key == "✓" && answer.isEmpty))
+            .buttonStyle(.borderedProminent).tint(key == "✓" ? theme.accent : .gray).foregroundStyle(key == "✓" ? theme.buttonForeground : Color.white).disabled(locked || (key == "✓" && answer.isEmpty))
             .accessibilityLabel(key == "⌫" ? "删除" : key == "✓" ? "确认答案" : key)
     }
 }

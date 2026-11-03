@@ -1,5 +1,6 @@
 import SwiftData
 import SwiftUI
+import StudyShell
 import UIKit
 
 struct PracticeFlowView: View {
@@ -44,6 +45,7 @@ struct PracticeFlowView: View {
 }
 
 private struct AnsweringView: View {
+    @Environment(\.studyTheme) private var theme
     @Environment(\.modelContext) private var context
     @Bindable var session: PracticeSession
     let attempts: [Attempt]
@@ -71,9 +73,9 @@ private struct AnsweringView: View {
                 Text("\(min(session.currentIndex + 1, attempts.count)) / \(attempts.count)").foregroundStyle(.secondary)
                 Spacer()
                 if session.currentIndex + 1 < attempts.count {
-                    Button("下一题") { session.currentIndex += 1; save() }.buttonStyle(.borderedProminent)
+                    Button("下一题") { session.currentIndex += 1; save() }.buttonStyle(.borderedProminent).foregroundStyle(theme.buttonForeground)
                 } else {
-                    Button("开始核对") { session.phase = .marking; save() }.buttonStyle(.borderedProminent)
+                    Button("开始核对") { session.phase = .marking; save() }.buttonStyle(.borderedProminent).foregroundStyle(theme.buttonForeground)
                 }
             }
             .padding(24).background(.bar)
@@ -84,6 +86,7 @@ private struct AnsweringView: View {
 }
 
 private struct MarkingView: View {
+    @Environment(\.studyTheme) private var theme
     @Environment(\.modelContext) private var context
     @Bindable var session: PracticeSession
     let attempts: [Attempt]
@@ -97,7 +100,7 @@ private struct MarkingView: View {
                     MarkingCard(attempt: attempt) { try? context.save() }
                 }
                 Button("确认判定结果") { confirms = true }
-                    .buttonStyle(.borderedProminent).controlSize(.large)
+                    .buttonStyle(.borderedProminent).foregroundStyle(theme.buttonForeground).controlSize(.large)
                     .disabled(attempts.contains { $0.draftResult == nil })
                     .padding(.vertical, 20)
             }
@@ -162,6 +165,7 @@ private struct MarkingCard: View {
 }
 
 private struct CorrectionView: View {
+    @Environment(\.studyTheme) private var theme
     @Environment(\.modelContext) private var context
     @Bindable var session: PracticeSession
     @State private var errorMessage: String?
@@ -174,7 +178,7 @@ private struct CorrectionView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 if let progress = current, let group = progress.group {
-                    Text(group.title).font(.largeTitle.bold())
+                    Text(group.title).font(StudyAppearance.title)
                     switch progress.stage {
                     case .pendingReview:
                         Text("先看懂刚才的错误").font(.title2.bold())
@@ -189,14 +193,14 @@ private struct CorrectionView: View {
                                 }.padding(18).background(.thinMaterial, in: RoundedRectangle(cornerRadius: 14))
                             }
                         }
-                        Button("我已订正，做一道同类题") { prepare(progress) }.buttonStyle(.borderedProminent).controlSize(.large)
+                        Button("我已订正，做一道同类题") { prepare(progress) }.buttonStyle(.borderedProminent).foregroundStyle(theme.buttonForeground).controlSize(.large)
                     case .pendingFollowup:
                         if let attempt = openCorrectionAttempt(for: group), let question = attempt.question {
                             Text("订正跟进题").font(.title2.bold())
                             MarkdownView(text: question.promptMarkdown).font(.title3)
                             Label("请先在纸上完成，再查看答案。", systemImage: "doc.text") .foregroundStyle(.secondary)
                             Button("查看答案") { progress.stage = .awaitingGrade; PracticeService.markPresented(attempt, context: context); save() }
-                                .buttonStyle(.borderedProminent)
+                                .buttonStyle(.borderedProminent).foregroundStyle(theme.buttonForeground)
                         }
                     case .awaitingGrade:
                         if let attempt = openCorrectionAttempt(for: group), let question = attempt.question {
@@ -206,7 +210,7 @@ private struct CorrectionView: View {
                             MarkdownView(text: question.answerMarkdown)
                             if !question.explanationMarkdown.isEmpty { MarkdownView(text: question.explanationMarkdown).foregroundStyle(.secondary) }
                             HStack {
-                                Button("做对了") { grade(.correct, progress) }.buttonStyle(.borderedProminent)
+                                Button("做对了") { grade(.correct, progress) }.buttonStyle(.borderedProminent).foregroundStyle(theme.buttonForeground)
                                 Button("做错了") { grade(.wrong, progress) }.buttonStyle(.bordered).tint(.orange)
                                 Button("题目有问题") { grade(.excluded, progress) }.buttonStyle(.bordered).tint(.gray)
                             }
@@ -283,12 +287,13 @@ private struct ChatGPTHelpButton: View {
 }
 
 private struct SummaryView: View {
+    @Environment(\.studyTheme) private var theme
     let session: PracticeSession
     let finish: () -> Void
     var body: some View {
         VStack(spacing: 20) {
             Image(systemName: "checkmark.circle.fill").font(.system(size: 72)).foregroundStyle(.green)
-            Text("这次练习完成了").font(.largeTitle.bold())
+            Text("这次练习完成了").font(StudyAppearance.title)
             let correct = session.attempts.filter { $0.result == .correct }.count
             let wrong = session.attempts.filter { $0.result == .wrong }.count
             Text("做对 \(correct) 道，做错 \(wrong) 道。后续题目会按掌握情况自动安排。")
@@ -299,7 +304,7 @@ private struct SummaryView: View {
             if session.groupProgress.contains(where: { $0.stage == .materialShortage }) {
                 Label("有题型缺少可用近似题，请补充题库。", systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange)
             }
-            Button("完成", action: finish).buttonStyle(.borderedProminent).controlSize(.large)
+            Button("完成", action: finish).buttonStyle(.borderedProminent).foregroundStyle(theme.buttonForeground).controlSize(.large)
         }
         .frame(maxWidth: 640).padding(40).navigationTitle("完成")
     }

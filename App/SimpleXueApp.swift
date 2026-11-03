@@ -35,14 +35,21 @@ enum LearningModule: String, CaseIterable, Identifiable {
         switch self { case .ji: "单词卡片与手写默写"; case .lian: "错题练习与订正";
             case .mo: "听语音，在纸上默写"; case .suan: "心算练习与统计"; case .ting: "英文文章连续朗读"; case .bei: "听读、练习与背诵检查" }
     }
-    var color: Color {
-        switch self { case .ji: .blue; case .lian: .orange; case .mo: .purple; case .suan: .green; case .ting: .teal; case .bei: .indigo }
+    var theme: StudyTheme {
+        switch self { case .ji: .ji; case .lian: .lian; case .mo: .mo; case .suan: .suan; case .ting: .ting; case .bei: .bei }
     }
+    var color: Color { theme.accent }
 }
 
 private struct HomeOverviewStatus {
     let text: String
     let isComplete: Bool
+    var badge: String {
+        if isComplete { return "已完成" }
+        if text.hasPrefix("读取失败") { return "读取失败" }
+        if text.hasPrefix("暂无") || text.hasPrefix("还没有") { return "暂无任务" }
+        return "待完成"
+    }
 }
 
 struct LearningHomeView: View {
@@ -64,6 +71,10 @@ struct LearningHomeView: View {
     @State private var dragStartLocation: CGPoint = .zero
     @State private var overview: [LearningModule: HomeOverviewStatus] = [:]
     @State private var overviewReadCount = 0
+    @State private var homeWidth: CGFloat = 0
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorSchemeContrast) private var contrast
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var overviewRevision = UUID()
     @Environment(\.scenePhase) private var scenePhase
 
@@ -114,16 +125,16 @@ struct LearningHomeView: View {
                     .padding(.horizontal, 24).padding(.vertical, 12)
                     .background(.bar)
                     Divider()
-                    moduleView(selected).frame(maxWidth: .infinity, maxHeight: .infinity)
+                    moduleView(selected).environment(\.studyTheme, selected.theme).tint(selected.color).frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
                 .id(selected)
             } else {
                 NavigationStack {
                     ScrollView {
-                        VStack(alignment: .leading, spacing: 18) {
-                            VStack(alignment: .leading, spacing: 10) {
+                        VStack(alignment: .leading, spacing: 20) {
+                            VStack(alignment: .leading, spacing: 8) {
                                 HStack {
-                                    Text("简单学").font(.system(size: 38, weight: .bold, design: .rounded))
+                                    Text("简单学").font(StudyAppearance.title)
                                     Spacer()
                                     Button("备份与恢复", systemImage: "externaldrive") { presentation = .backup }
                                         .buttonStyle(.bordered).accessibilityIdentifier("home.backup")
@@ -132,45 +143,50 @@ struct LearningHomeView: View {
                                 Text("选一个，开始今天的学习。") .font(.title3).foregroundStyle(.secondary)
                             }
                             learningOverview
-                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 280), spacing: 16)], spacing: 16) {
-                                ForEach(orderedModules) { module in
-                                    Button { openModule(module) } label: { moduleCard(module) }
-                                    .buttonStyle(.plain).accessibilityIdentifier("module.\(module.rawValue)")
-                                    .accessibilityAction { openModule(module, accessibility: true) }
-                                    .accessibilityHint("长按并拖动可调整顺序，也可使用向前或向后移动操作")
-                                    .accessibilityValue("第 \((orderedModules.firstIndex(of: module) ?? 0) + 1) 项，共 6 项")
-                                    .accessibilityAction(named: "向前移动") { moveModule(module, by: -1) }
-                                    .accessibilityAction(named: "向后移动") { moveModule(module, by: 1) }
-                                    .opacity(draggedModule == module ? 0 : 1)
-                                    .background {
-                                        GeometryReader { geometry in
-                                            Color.clear.preference(key: ModuleCardFramesKey.self,
-                                                value: [module: geometry.frame(in: .named("moduleGrid"))])
+                            VStack(alignment: .leading, spacing: 12) {
+                                Text("全部功能").font(StudyAppearance.sectionTitle)
+                                LazyVGrid(columns: [GridItem(.adaptive(minimum: 280), spacing: 16)], spacing: 16) {
+                                    ForEach(orderedModules) { module in
+                                        Button { openModule(module) } label: { moduleCard(module) }
+                                        .buttonStyle(.plain).accessibilityIdentifier("module.\(module.rawValue)")
+                                        .accessibilityAction { openModule(module, accessibility: true) }
+                                        .accessibilityHint("长按并拖动可调整顺序，也可使用向前或向后移动操作")
+                                        .accessibilityValue("第 \((orderedModules.firstIndex(of: module) ?? 0) + 1) 项，共 6 项")
+                                        .accessibilityAction(named: "向前移动") { moveModule(module, by: -1) }
+                                        .accessibilityAction(named: "向后移动") { moveModule(module, by: 1) }
+                                        .opacity(draggedModule == module ? 0 : 1)
+                                        .background {
+                                            GeometryReader { geometry in
+                                                Color.clear.preference(key: ModuleCardFramesKey.self,
+                                                    value: [module: geometry.frame(in: .named("moduleGrid"))])
+                                            }
                                         }
                                     }
                                 }
-                            }
-                            .coordinateSpace(name: "moduleGrid")
-                            .onPreferenceChange(ModuleCardFramesKey.self) { cardFrames = $0 }
-                            .overlay(alignment: .topLeading) {
-                                if let draggedModule {
-                                    moduleCard(draggedModule)
-                                        .frame(width: dragOrigin.width, height: dragOrigin.height)
-                                        .background(.background, in: RoundedRectangle(cornerRadius: 24))
-                                        .scaleEffect(reduceMotion ? 1 : 1.04)
-                                        .shadow(color: .black.opacity(0.18), radius: 16, y: 8)
-                                        .position(x: dragOrigin.midX + dragTranslation.width,
-                                                  y: dragOrigin.midY + dragTranslation.height)
-                                        .allowsHitTesting(false)
-                                        .accessibilityHidden(true)
+                                .coordinateSpace(name: "moduleGrid")
+                                .onPreferenceChange(ModuleCardFramesKey.self) { cardFrames = $0 }
+                                .overlay(alignment: .topLeading) {
+                                    if let draggedModule {
+                                        moduleCard(draggedModule)
+                                            .frame(width: dragOrigin.width, height: dragOrigin.height)
+                                            .background(StudyAppearance.surface, in: RoundedRectangle(cornerRadius: StudyAppearance.moduleCornerRadius))
+                                            .scaleEffect(reduceMotion ? 1 : 1.04)
+                                            .shadow(color: .black.opacity(0.18), radius: 16, y: 8)
+                                            .position(x: dragOrigin.midX + dragTranslation.width,
+                                                      y: dragOrigin.midY + dragTranslation.height)
+                                            .allowsHitTesting(false)
+                                            .accessibilityHidden(true)
+                                    }
                                 }
+                                .gesture(ModuleReorderGesture(onTouchBegan: { suppressCardTap = false },
+                                                              onChanged: updateReordering, onEnded: finishReordering))
                             }
-                            .gesture(ModuleReorderGesture(onTouchBegan: { suppressCardTap = false },
-                                                          onChanged: updateReordering, onEnded: finishReordering))
                         }
-                        .padding(24).frame(maxWidth: 1000).frame(maxWidth: .infinity)
+                        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { homeWidth = $0 }
+                        .padding(StudyAppearance.pagePadding).frame(maxWidth: 1000).frame(maxWidth: .infinity)
                     }
                     .scrollDisabled(isReordering)
+                    .background(StudyAppearance.background)
                 }
             }
         }
@@ -197,78 +213,109 @@ struct LearningHomeView: View {
         } message: { Text(leaveError ?? "") }
     }
 
+    private var softOpacity: Double { colorScheme == .dark ? 0.16 : 0.08 }
+
     private func moduleCard(_ module: LearningModule) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Image(systemName: module.symbol).font(.system(size: 30)).foregroundStyle(module.color)
-            Text(module.title).font(.title2.bold()).foregroundStyle(.primary)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 12) {
+                Image(systemName: module.symbol)
+                    .font(.system(size: 24, weight: .semibold))
+                    .foregroundStyle(module.color)
+                    .frame(width: 40, height: 40)
+                    .background(module.color.opacity(softOpacity), in: RoundedRectangle(cornerRadius: 12))
+                    .accessibilityHidden(true)
+                Text(module.title).font(StudyAppearance.moduleTitle).foregroundStyle(.primary)
+            }
             Text(module.detail).font(.subheadline).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
-        .frame(maxWidth: .infinity, minHeight: 112, alignment: .leading).padding(18)
-        .background(module.color.opacity(0.09), in: RoundedRectangle(cornerRadius: 24))
-        .contentShape(RoundedRectangle(cornerRadius: 24))
+        .frame(maxWidth: .infinity, alignment: .leading).padding(16)
+        .frame(minHeight: 124, alignment: .leading)
+        .background(StudyAppearance.surface, in: RoundedRectangle(cornerRadius: StudyAppearance.moduleCornerRadius))
+        .overlay(RoundedRectangle(cornerRadius: StudyAppearance.moduleCornerRadius)
+            .strokeBorder(Color.primary.opacity(contrast == .increased ? 0.35 : 0)))
+        .contentShape(RoundedRectangle(cornerRadius: StudyAppearance.moduleCornerRadius))
     }
 
     private var learningOverview: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("今天的学习").font(.headline).foregroundStyle(.secondary)
+            Text("今天的学习").font(StudyAppearance.sectionTitle)
             if [LearningModule.ji, .suan, .lian].allSatisfy({ overview[$0]?.isComplete == true }) {
                 HStack(spacing: 16) {
                     Image(systemName: "party.popper.fill")
                         .font(.system(size: 38)).foregroundStyle(.orange)
                         .accessibilityHidden(true)
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("今天的学习全部完成！").font(.title2.bold())
+                        Text("今天的学习全部完成！").font(StudyAppearance.moduleTitle)
                         Text("简单记、简单算、简单练都完成啦，真棒！")
                             .font(.subheadline).foregroundStyle(.secondary)
                     }
                     Spacer(minLength: 0)
                 }
-                .frame(maxWidth: .infinity, minHeight: 96, alignment: .leading)
-                .padding(18)
+                .frame(maxWidth: .infinity, alignment: .leading).padding(18)
+                .frame(minHeight: 112)
                 .background(LinearGradient(colors: [.yellow.opacity(0.2), .green.opacity(0.15)],
                                            startPoint: .topLeading, endPoint: .bottomTrailing),
                             in: RoundedRectangle(cornerRadius: 18))
                 .accessibilityElement(children: .combine)
                 .accessibilityIdentifier("home.overview.completed")
             } else {
-                HStack(alignment: .top, spacing: 10) {
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12),
+                    count: homeWidth >= 600 && !dynamicTypeSize.isAccessibilitySize ? 3 : 1), spacing: 12) {
                     ForEach([LearningModule.ji, .suan, .lian]) { module in
-                        let status = overview[module]
-                        let isComplete = status?.isComplete == true
-                        Button { suppressCardTap = false; openModule(module) } label: {
-                            VStack(alignment: .leading, spacing: 9) {
-                                HStack(spacing: 6) {
-                                    Image(systemName: isComplete ? "checkmark.circle.fill" : module.symbol)
-                                    Text(module.title).lineLimit(1)
-                                }
-                                .font(.headline)
-                                .foregroundStyle(isComplete ? Color.secondary : module.color)
-                                Text(status?.text ?? "正在读取…")
-                                    .font(.subheadline)
-                                    .foregroundStyle(isComplete ? Color.secondary : Color.primary)
-                                    .lineLimit(3)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                Text(isComplete ? "已完成" : "待完成")
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(isComplete ? Color.secondary : module.color)
-                            }
-                            .frame(maxWidth: .infinity, minHeight: 92, alignment: .leading)
-                            .padding(12)
-                            .background(isComplete ? Color.gray.opacity(0.08) : module.color.opacity(0.13),
-                                        in: RoundedRectangle(cornerRadius: 16))
-                            .overlay(RoundedRectangle(cornerRadius: 16)
-                                .strokeBorder(isComplete ? Color.gray.opacity(0.12) : module.color.opacity(0.3)))
-                            .contentShape(RoundedRectangle(cornerRadius: 16))
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("\(module.title)，\(status?.text ?? "正在读取")，\(isComplete ? "已完成" : "待完成")")
-                        .accessibilityIdentifier("home.overview.\(module.rawValue)")
+                        overviewCard(module)
                     }
                 }
             }
         }
-        .padding(20)
-        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 20))
+    }
+
+    private func overviewCard(_ module: LearningModule) -> some View {
+        let status = overview[module]
+        let complete = status?.isComplete == true
+        let badge = status?.badge ?? "读取中"
+        return Button { suppressCardTap = false; openModule(module) } label: {
+            VStack(alignment: .leading, spacing: 8) {
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 8) {
+                        overviewHeading(module, complete: complete)
+                        Spacer(minLength: 0)
+                        Text(badge).font(.footnote).foregroundStyle(.secondary).fixedSize()
+                    }
+                    VStack(alignment: .leading, spacing: 4) {
+                        overviewHeading(module, complete: complete)
+                        Text(badge).font(.footnote).foregroundStyle(.secondary)
+                    }
+                }
+                Text(status?.text ?? "正在读取…")
+                    .font(.subheadline).foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading).padding(16)
+            .frame(minHeight: 112, alignment: .topLeading)
+            .background {
+                RoundedRectangle(cornerRadius: 18).fill(StudyAppearance.surface)
+                RoundedRectangle(cornerRadius: 18)
+                    .fill((complete ? Color.gray : module.color).opacity(softOpacity))
+            }
+            .overlay(RoundedRectangle(cornerRadius: 18)
+                .strokeBorder(Color.primary.opacity(contrast == .increased ? 0.35 : 0)))
+            .contentShape(RoundedRectangle(cornerRadius: 18))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(module.title)，\(status?.text ?? "正在读取")，\(badge)")
+        .accessibilityIdentifier("home.overview.\(module.rawValue)")
+    }
+
+    private func overviewHeading(_ module: LearningModule, complete: Bool) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: complete ? "checkmark.circle.fill" : module.symbol)
+                .foregroundStyle(complete ? Color.secondary : module.color)
+                .accessibilityHidden(true)
+            Text(module.title).foregroundStyle(.primary)
+        }
+        .font(.headline).fixedSize(horizontal: true, vertical: false)
     }
 
     @MainActor private func refreshOverview() async {

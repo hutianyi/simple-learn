@@ -1,5 +1,6 @@
 import CoreData
 import SwiftUI
+import StudyShell
 
 struct AddWordsView: View {
     private enum Mode: String, CaseIterable, Identifiable {
@@ -72,7 +73,7 @@ struct AddWordsView: View {
                 Task { await viewModel.addSingle(using: repository) }
             } label: {
                 if viewModel.isWorking {
-                    ProgressView().tint(.white)
+                    ProgressView().tint(StudyTheme.ji.buttonForeground)
                 } else {
                     Text("添加")
                 }
@@ -115,7 +116,7 @@ struct AddWordsView: View {
                 Task { await viewModel.analyzeBatch(using: repository) }
             } label: {
                 if viewModel.isWorking {
-                    ProgressView().tint(.white)
+                    ProgressView().tint(StudyTheme.ji.buttonForeground)
                 } else {
                     Text("分析")
                 }

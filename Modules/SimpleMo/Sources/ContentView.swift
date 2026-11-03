@@ -9,6 +9,7 @@ import SwiftUI
 import StudyShell
 
 struct ContentView: View {
+    @Environment(\.studyTheme) private var theme
     @EnvironmentObject private var moduleSession: ModuleSession
     @StateObject private var session = DictationSession()
     @AppStorage("dictation.input") private var inputText = "苹果\n认真\n美丽\numbrella\nwonderful"
@@ -50,9 +51,9 @@ struct ContentView: View {
                     VStack(spacing: 8) {
                         Image(systemName: "text.book.closed.fill")
                             .font(.system(size: 42))
-                            .foregroundStyle(.blue)
-                        Text("简单默")
-                            .font(.system(.largeTitle, design: .rounded).weight(.bold))
+                            .foregroundStyle(.tint)
+                        Text("准备今天的默写")
+                            .font(StudyAppearance.title)
                         Text("粘贴词语，逐个听写")
                             .font(.headline)
                             .foregroundStyle(.secondary)
@@ -139,11 +140,8 @@ struct ContentView: View {
             session.start(words: words, shuffled: shuffleWords, rate: speechRate, timing: timing, automaticTiming: automaticTiming)
         } label: {
             Label("开始默写", systemImage: "play.fill")
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 8)
         }
-        .buttonStyle(.borderedProminent)
-        .controlSize(.large)
+        .buttonStyle(StudyPrimaryButtonStyle())
         .disabled(words.isEmpty || !timing.isValid)
     }
 
@@ -160,14 +158,14 @@ struct ContentView: View {
                     Text("第 \(session.currentIndex + 1) 个，共 \(session.totalCount) 个")
                         .font(.headline.monospacedDigit())
                 }
-                ProgressView(value: session.progress).tint(.blue)
+                ProgressView(value: session.progress)
                 Spacer()
                 Image(systemName: "speaker.wave.3.fill")
                     .font(.system(size: 86))
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(.tint)
                     .accessibilityHidden(true)
                 Text("正在默写")
-                    .font(.system(.largeTitle, design: .rounded).weight(.bold))
+                    .font(StudyAppearance.title)
                 Text("答案已隐藏，请听语音").foregroundStyle(.secondary)
                 VStack(spacing: 4) {
                     Text("还剩 \(session.secondsRemaining) 秒")
@@ -235,14 +233,14 @@ struct ContentView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 12)
         }
-        .buttonStyle(.borderedProminent)
+        .buttonStyle(.borderedProminent).foregroundStyle(theme.buttonForeground)
         .controlSize(.large)
     }
 
     private var finishedView: some View {
         VStack(spacing: 16) {
             Text("核对默写结果")
-                .font(.system(.largeTitle, design: .rounded).weight(.bold))
+                .font(StudyAppearance.title)
             Text("可以先选全对，再把个别条目改成默错。")
                 .foregroundStyle(.secondary)
             HStack {
@@ -344,7 +342,7 @@ struct ContentView: View {
         Button(session.results.incorrectWords.isEmpty ? "确认结果，结束本轮" : "确认结果，重默错项（\(session.results.incorrectWords.count)）") {
             session.confirmResults()
         }
-        .buttonStyle(.borderedProminent)
+        .buttonStyle(.borderedProminent).foregroundStyle(theme.buttonForeground)
         .disabled(!session.results.canConfirm)
         .accessibilityIdentifier("confirmDictationResultsButton")
     }

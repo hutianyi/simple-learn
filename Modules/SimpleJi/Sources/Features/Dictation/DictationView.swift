@@ -1,6 +1,7 @@
 import CoreData
 import PencilKit
 import SwiftUI
+import StudyShell
 
 struct DictationView: View {
     @StateObject private var viewModel: DictationViewModel
@@ -360,7 +361,7 @@ struct DictationView: View {
 
     private func firstPassSummary(_ day: DictationDay) -> some View {
         VStack(spacing: 20) {
-            Text("今日第一轮完成").font(.largeTitle.bold())
+            Text("今日第一轮完成").font(StudyAppearance.title)
             Text("\(day.items.count) 个单词 · 首次正确 \(day.firstPassCorrect) · 需要强化 \(day.firstPassWrong)")
             if day.items.contains(where: \.belongsToBaseline) {
                 Text("本轮旧词摸底 \(day.items.filter(\.belongsToBaseline).count) 个；首次结果已记录。")

@@ -1,5 +1,6 @@
 import CoreData
 import SwiftUI
+import StudyShell
 
 struct HomeView: View {
     @EnvironmentObject private var router: AppRouter
@@ -56,8 +57,8 @@ struct HomeView: View {
             VStack(spacing: 28) {
                 Spacer(minLength: 30)
 
-                Text("简单记")
-                    .font(.system(.largeTitle, design: .rounded, weight: .bold))
+                Text("今天的单词学习")
+                    .font(StudyAppearance.title)
                     .foregroundStyle(AppPalette.textPrimary)
 
                 VStack(spacing: 8) {

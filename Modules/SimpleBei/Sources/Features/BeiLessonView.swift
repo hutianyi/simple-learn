@@ -1,6 +1,8 @@
 import SwiftUI
+import StudyShell
 
 struct BeiLessonView: View {
+    @Environment(\.studyTheme) private var theme
     let passage: Passage
     let store: BeiLibraryStore
     @Bindable var study: BeiStudySession
@@ -8,6 +10,7 @@ struct BeiLessonView: View {
     @ScaledMetric private var scaledTextSize = 24.0
     @State private var heldSentence: UUID?
     @State private var follow = true
+    @State private var showsPracticeSettings = false
     @State private var practiceSentenceCenters: [UUID: CGFloat] = [:]
     @State private var preferences = BeiPreferences()
     private var audio: BeiLearningAudio { study.audio }
@@ -28,6 +31,7 @@ struct BeiLessonView: View {
             study.select(passage); preferences = store.library.preferences; follow = true
         }
         .onChange(of: study.mode) { _, _ in heldSentence = nil }
+        .onChange(of: learning) { _, active in if active { showsPracticeSettings = false } }
         .onChange(of: store.library.preferences) { _, value in preferences = value }
         .onChange(of: study.first) { _, value in if study.last < value { study.last = value } }
     }
@@ -179,11 +183,11 @@ struct BeiLessonView: View {
                     Button("开始朗读", systemImage: "play.fill") {
                         study.select(passage); study.startListening(preferences)
                         Task { _ = await store.savePreferences(preferences) }
-                    }.buttonStyle(.borderedProminent).disabled(study.active)
+                    }.buttonStyle(StudyPrimaryButtonStyle()).disabled(study.active)
                 } else {
                     Button(audio.state == .paused ? "继续朗读" : "暂停", systemImage: audio.state == .paused ? "play.fill" : "pause.fill") {
                         if audio.state == .paused { audio.resume() } else { audio.pause() }
-                    }.buttonStyle(.borderedProminent)
+                    }.buttonStyle(.borderedProminent).foregroundStyle(theme.buttonForeground)
                     Button("上一句", systemImage: "backward.end") { audio.move(-1) }
                     Button("下一句", systemImage: "forward.end") { audio.move(1) }
                     Button("停止", systemImage: "stop.fill") { Task { await study.end() } }
@@ -203,28 +207,32 @@ struct BeiLessonView: View {
     }
     private var practiceControls: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Picker("朗读顺序", selection: $study.appFirst) {
-                Text("先系统读").tag(true)
-                Text("先自己背").tag(false)
-            }.pickerStyle(.segmented).disabled(study.active)
-            Text(study.appFirst ? "系统读一句，你跟读同一句，再进入下一句。" : "先自己背一句，背完点“听系统读这一句”核对；系统读完后再背下一句。")
-                .font(.subheadline).foregroundStyle(.secondary)
-            Picker("提示程度", selection: $study.hintLevel) { ForEach(BeiHintLevel.allCases) { Text($0.title).tag($0) } }.pickerStyle(.segmented)
-            Text("长按某一句可以临时看原文，松手后恢复提示。练习不录音、不打分。") .font(.caption).foregroundStyle(.secondary)
-            Label("声音设置", systemImage: "gearshape").foregroundStyle(.primary)
-            speechRateControl
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 180))], alignment: .leading, spacing: 12) {
-                Button {
-                    if learning { audio.completeChildTurn() }
-                    else { study.select(passage); study.startPractice(preferences) }
+            if learning {
+                DisclosureGroup(isExpanded: $showsPracticeSettings) {
+                    practiceSetup.padding(.top, 8)
                 } label: {
-                    Text(learning ? (study.appFirst ? "这句读好了，下一句" : "听系统读这一句") : "开始练习")
-                        .lineLimit(1).minimumScaleFactor(0.7).frame(maxWidth: .infinity)
+                    Label("练习设置 · \(study.appFirst ? "先系统读" : "先自己背")", systemImage: "slider.horizontal.3")
+                        .font(.subheadline).foregroundStyle(.secondary)
                 }
-                .buttonStyle(.borderedProminent)
-                .accessibilityIdentifier("bei.practice.primary")
-                .disabled(study.switching || (learning ? audio.state != .waiting : study.active))
+                .accessibilityIdentifier("bei.practice.settings")
+            } else {
+                practiceSetup
+            }
+            Picker("提示程度", selection: $study.hintLevel) {
+                ForEach(BeiHintLevel.allCases) { Text($0.title).tag($0) }
+            }.pickerStyle(.segmented)
+            Button {
+                if learning { audio.completeChildTurn() }
+                else { study.select(passage); study.startPractice(preferences) }
+            } label: {
+                Text(learning ? (study.appFirst ? "这句读好了，下一句" : "听系统读这一句") : "开始练习")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(StudyPrimaryButtonStyle())
+            .accessibilityIdentifier("bei.practice.primary")
+            .disabled(study.switching || (learning ? audio.state != .waiting : study.active))
 
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 120))], alignment: .leading, spacing: 10) {
                 Button(audio.state == .paused ? "继续练习" : "暂停") {
                     if audio.state == .paused { audio.resume() } else { audio.pause() }
                 }.disabled(!learning || study.switching || audio.state == .stopping)
@@ -237,9 +245,24 @@ struct BeiLessonView: View {
                         .disabled(audio.state != .waiting || audio.secondsToWait <= 0 || study.switching)
                 }
             }
+            .buttonStyle(.bordered).controlSize(.large)
             Text(learning ? "当前第 \(audio.current + 1) 句 · \(audio.state == .waiting ? "轮到你背" : (audio.state == .paused ? "已暂停" : "听系统朗读"))\(audio.secondsToWait > 0 && audio.state == .waiting ? " · \(audio.secondsToWait) 秒" : "")" : "尚未开始练习")
-                .font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
+                .font(.headline).foregroundStyle(.primary)
+                .accessibilityIdentifier("bei.practice.status")
+        }
+    }
 
+    private var practiceSetup: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Picker("朗读顺序", selection: $study.appFirst) {
+                Text("先系统读").tag(true)
+                Text("先自己背").tag(false)
+            }.pickerStyle(.segmented).disabled(study.active)
+            Text(study.appFirst ? "系统读一句，你跟读同一句，再进入下一句。" : "先自己背一句，背完点“听系统读这一句”核对；系统读完后再背下一句。")
+                .font(.subheadline).foregroundStyle(.secondary)
+            Text("长按某一句可以临时看原文，松手后恢复提示。练习不录音、不打分。") .font(.caption).foregroundStyle(.secondary)
+            Label("声音设置", systemImage: "gearshape").foregroundStyle(.primary)
+            speechRateControl
         }
     }
     private var testLayout: some View {
@@ -268,7 +291,7 @@ struct BeiLessonView: View {
             Button("开始背诵检查", systemImage: "mic.fill") {
                 study.select(passage)
                 Task { await study.startTest() }
-            }.buttonStyle(.borderedProminent).disabled(study.active)
+            }.buttonStyle(StudyPrimaryButtonStyle()).disabled(study.active)
                 .accessibilityIdentifier("bei.test.start")
         case .preparing: ProgressView("正在准备录音")
         case .recording, .recordingPaused:
@@ -278,7 +301,7 @@ struct BeiLessonView: View {
                     Button("继续录音") { recording.resume() }
                 }
                 Button("背完了", systemImage: "checkmark") { recording.finish() }
-                    .buttonStyle(.borderedProminent).accessibilityIdentifier("bei.test.finish")
+                    .buttonStyle(.borderedProminent).foregroundStyle(theme.buttonForeground).accessibilityIdentifier("bei.test.finish")
             }
         case .finishing: ProgressView("正在结束录音")
         case .review:
@@ -287,7 +310,7 @@ struct BeiLessonView: View {
                     if recording.playing { recording.stopReplay() } else { recording.replay() }
                 }.accessibilityIdentifier("bei.test.replay")
                 Button("再背一次", systemImage: "mic.fill") { Task { await study.startTest() } }
-                    .buttonStyle(.borderedProminent).disabled(study.switching)
+                    .buttonStyle(.borderedProminent).foregroundStyle(theme.buttonForeground).disabled(study.switching)
                     .accessibilityIdentifier("bei.test.retry")
                 Button("结束本次") { Task { await study.end() } }
                     .accessibilityIdentifier("bei.test.end")
@@ -308,7 +331,7 @@ struct BeiLessonView: View {
                 Text(shown).accessibilityLabel(level == .hidden && heldSentence != unit.id ? "第 \(index + 1) 句，原文已隐藏" : shown)
             }.font(.system(size: textSize)).frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(14).background(audio.active && index == audio.current ? Color.accentColor.opacity(0.16) : Color.accentColor.opacity(0.04), in: RoundedRectangle(cornerRadius: 12))
+        .padding(14).background(audio.active && index == audio.current ? theme.accent.opacity(0.16) : theme.accent.opacity(0.04), in: RoundedRectangle(cornerRadius: 12))
         .contentShape(Rectangle())
         .onLongPressGesture(minimumDuration: 0.05, pressing: { pressed in
             if study.mode == .practice { heldSentence = pressed ? unit.id : nil }

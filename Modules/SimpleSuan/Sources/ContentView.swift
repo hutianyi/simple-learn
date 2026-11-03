@@ -14,6 +14,7 @@ struct ContentView: View {
 }
 
 struct StartPracticeView: View {
+    @Environment(\.studyTheme) private var theme
     @EnvironmentObject private var store: AppDataStore
     @Environment(\.scenePhase) private var scenePhase
     @State private var mode: PracticeMode = .mixed
@@ -26,7 +27,7 @@ struct StartPracticeView: View {
     var body: some View {
         VStack(spacing: 28) {
             Spacer()
-            Text("简单算").font(.system(size: 48, weight: .bold))
+            Text("今天的心算练习").font(StudyAppearance.title)
             Text("选择题型和题目数量，开始心算练习。")
                 .font(.title3).foregroundStyle(.secondary)
             VStack(alignment: .leading, spacing: 12) {
@@ -44,21 +45,24 @@ struct StartPracticeView: View {
                         ForEach(OperationType.allCases) { operation in
                             Button(operation.title) { toggle(operation) }
                                 .buttonStyle(.borderedProminent)
-                                .tint(mixedOperations.contains(operation) ? .accentColor : .gray)
+                                .tint(mixedOperations.contains(operation) ? theme.accent : .gray)
+                                .foregroundStyle(mixedOperations.contains(operation) ? theme.buttonForeground : Color.white)
                         }
                     }
                 }.frame(maxWidth: 600, alignment: .leading)
             }
             VStack(alignment: .leading, spacing: 12) {
                 Text("题目数量").font(.headline)
-                HStack { ForEach([10, 20, 30, 40], id: \.self) { count in Button("\(count)题") { questionCount = count }.buttonStyle(.borderedProminent).tint(questionCount == count ? .accentColor : .gray) }
+                HStack { ForEach([10, 20, 30, 40], id: \.self) { count in Button("\(count)题") { questionCount = count }.buttonStyle(.borderedProminent).tint(questionCount == count ? theme.accent : .gray).foregroundStyle(questionCount == count ? theme.buttonForeground : Color.white) }
                     Stepper("\(questionCount) 题", value: $questionCount, in: 1...100).font(.title3).padding(.leading, 12) }
             }.frame(maxWidth: 600)
-            Button { practice = PracticeViewModel(mode: mode, questionCount: questionCount, selectedOperations: mixedOperations) } label: { Text("开始练习").font(.title2.bold()).frame(maxWidth: 600).padding() }
-                .buttonStyle(.borderedProminent).controlSize(.large)
+            Button { practice = PracticeViewModel(mode: mode, questionCount: questionCount, selectedOperations: mixedOperations) } label: { Text("开始练习") }
+                .buttonStyle(StudyPrimaryButtonStyle()).frame(maxWidth: 600)
                 .disabled(mode == .mixed && mixedOperations.count < 2)
             Spacer()
-        }.padding()
+        }.padding(StudyAppearance.pagePadding)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(StudyAppearance.background)
         .navigationBarTitleDisplayMode(.inline)
         .fullScreenCover(item: $practice) { PracticeFlowView(viewModel: $0).interactiveDismissDisabled() }
         .onAppear(perform: checkRepair)
