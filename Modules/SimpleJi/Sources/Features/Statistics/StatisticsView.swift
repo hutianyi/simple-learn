@@ -370,6 +370,7 @@ private struct TrendPoint: Identifiable {
 }
 
 private struct StudyHeatmapView: View {
+    private let freeDayKeys = FreeDayStore.creditedKeys()
     let completedKeys: Set<String>
     let activityKeys: Set<String>
     let repairedKeys: Set<String>
@@ -480,6 +481,7 @@ private struct StudyHeatmapView: View {
     }
 
     private func status(_ date: Date) -> String {
+        if freeDayKeys.contains(key(date)) { return "免做卡" }
         if repairedKeys.contains(key(date)) { return "补学完成（作答记在补学当天）" }
         if completedKeys.contains(key(date)) { return "全部完成" }
         return activityKeys.contains(key(date)) ? "有学习记录" : "暂无学习记录"

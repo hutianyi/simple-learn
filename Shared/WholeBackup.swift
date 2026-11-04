@@ -11,6 +11,7 @@ public struct WholeBackupEnvelope: Codable {
     public let exportedAt: Date
     public let appVersion: String
     public let modules: [String: Data]
+    public var freeDayLedger: Data? = nil
 
     public init(exportedAt: Date = Date(), appVersion: String, modules: [String: Data]) {
         self.exportedAt = exportedAt; self.appVersion = appVersion; self.modules = modules
@@ -137,10 +138,11 @@ public final class WholeBackupCoordinator {
         var rawModules: [String]? = nil
     }
     private let endpoints: [WholeBackupEndpoint]
+    private let freeDayStore: FreeDayStore?
     private let directory: URL
     private var journalURL: URL { directory.appendingPathComponent("RestoreJournal.json") }
-    public init(endpoints: [WholeBackupEndpoint], directory: URL) {
-        self.endpoints = endpoints; self.directory = directory
+    public init(endpoints: [WholeBackupEndpoint], directory: URL, freeDayStore: FreeDayStore? = nil) {
+        self.endpoints = endpoints; self.directory = directory; self.freeDayStore = freeDayStore
     }
     public func preview(_ backup: WholeBackupEnvelope) throws -> [String] {
         guard backup.app == "SimpleXue", backup.formatVersion == 1 else {
@@ -149,6 +151,7 @@ public final class WholeBackupCoordinator {
         guard Set(backup.modules.keys) == Set(endpoints.map(\.id)), endpoints.count == backup.modules.count else {
             throw WholeBackupError.message("整体备份必须完整包含六个模块，文件缺少模块或包含不支持的模块。")
         }
+        if let data = backup.freeDayLedger { _ = try FreeDayStore.decode(data) }
         return try endpoints.map { endpoint in
             do { return "\(endpoint.title)：\(try endpoint.validate(backup.modules[endpoint.id]!))" }
             catch { throw WholeBackupError.message("\(endpoint.title)备份校验失败：\(error.localizedDescription)") }
@@ -164,7 +167,9 @@ public final class WholeBackupCoordinator {
                 modules[endpoint.id] = data
             } catch { throw WholeBackupError.message("\(endpoint.title)导出失败：\(error.localizedDescription)") }
         }
-        return WholeBackupEnvelope(appVersion: appVersion, modules: modules)
+        var backup = WholeBackupEnvelope(appVersion: appVersion, modules: modules)
+        backup.freeDayLedger = try freeDayStore?.export()
+        return backup
     }
     public func hasPendingRecovery() throws -> Bool {
         try readJournal()?.pending ?? false
@@ -198,7 +203,8 @@ public final class WholeBackupCoordinator {
                 rawModules.append(endpoint.id)
             }
         }
-        let previous = WholeBackupEnvelope(appVersion: appVersion, modules: modules)
+        var previous = WholeBackupEnvelope(appVersion: appVersion, modules: modules)
+        previous.freeDayLedger = try freeDayStore?.export()
         let journal = Journal(safetyFilename: filename, pending: true, rawModules: rawModules)
         try validateSafety(previous, journal: journal)
         try previous.encoded().write(to: directory.appendingPathComponent(filename), options: .atomic)
@@ -213,6 +219,7 @@ public final class WholeBackupCoordinator {
                 }
                 catch { throw WholeBackupError.message("\(endpoint.title)恢复失败：\(error.localizedDescription)") }
             }
+            if let data = backup.freeDayLedger { try freeDayStore?.restore(data) }
             try writeJournal(Journal(safetyFilename: filename, pending: false, rawModules: rawModules))
         } catch {
             let failure = error.localizedDescription
@@ -236,12 +243,17 @@ public final class WholeBackupCoordinator {
             }
             catch { failures.append("\(endpoint.title)：\(error.localizedDescription)") }
         }
+        if let data = backup.freeDayLedger {
+            do { try freeDayStore?.restore(data) }
+            catch { failures.append("免做卡：\(error.localizedDescription)") }
+        }
         if !failures.isEmpty { throw WholeBackupError.message(failures.joined(separator: "\n")) }
     }
     private func rawDirectory(filename: String, module: String) -> URL {
         directory.appendingPathComponent(filename + ".raw", isDirectory: true).appendingPathComponent(module, isDirectory: true)
     }
     private func validateSafety(_ backup: WholeBackupEnvelope, journal: Journal) throws {
+        if let data = backup.freeDayLedger { _ = try FreeDayStore.decode(data) }
         let raw = journal.rawModules ?? []
         guard raw.count == Set(raw).count, Set(raw).isDisjoint(with: Set(backup.modules.keys)),
               Set(raw).union(backup.modules.keys) == Set(endpoints.map(\.id)) else {

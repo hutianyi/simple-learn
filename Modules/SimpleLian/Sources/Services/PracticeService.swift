@@ -1,5 +1,6 @@
 import Foundation
 import SwiftData
+import StudyShell
 
 enum PracticeService {
     static func activeSession(context: ModelContext) throws -> PracticeSession? {
@@ -34,6 +35,7 @@ enum PracticeService {
     }
 
     static func overviewStatus(context: ModelContext, day: String = DayKey.make(from: .now)) throws -> (text: String, isComplete: Bool) {
+        if FreeDayStore.creditedKeys().contains(day) { return ("免做卡 · 今日免练，未完成内容留待之后练习", true) }
         let groups = try context.fetch(FetchDescriptor<ProblemGroup>())
         guard !groups.isEmpty else { return ("还没有题目", false) }
         if let active = try activeSession(context: context), !active.attempts.isEmpty || !active.groupProgress.isEmpty { return ("有练习待继续", false) }

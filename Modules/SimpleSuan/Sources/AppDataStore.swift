@@ -20,7 +20,7 @@ final class AppDataStore: ObservableObject {
 
     var sessions: [SessionRecord] { appData.sessions.sorted { $0.completedAt > $1.completedAt } }
     func repairOffer(now: Date = Date(), calendar: Calendar = .current) -> OneDayStreakRepair.Offer? {
-        guard loadError == nil else { return nil }
+        guard loadError == nil, !FreeDayStore.isUsedToday(now: now) else { return nil }
         return OneDayStreakRepair.offer(completedKeys: PracticeActivity(sessions: sessions, now: now, calendar: calendar).completedKeys,
             handledKeys: appData.handledRepairDays ?? [], now: now, calendar: calendar)
     }

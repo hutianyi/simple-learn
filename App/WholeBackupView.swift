@@ -28,7 +28,7 @@ enum WholeBackupService {
             WholeBackupEndpoint(id: "SimpleMo", title: "简单默", export: { try SimpleMoBackupTransfer.exportData() },
                 validate: SimpleMoBackupTransfer.validate, restore: { try SimpleMoBackupTransfer.restore($0) },
                 rawStorage: try rawStorage("SimpleMo", domains: ["com.hutianyi.SimpleXue.SimpleMo"]))
-        ], directory: try ModuleStorage.directory("WholeBackup"))
+        ], directory: try ModuleStorage.directory("WholeBackup"), freeDayStore: try FreeDayStore.live())
     }
     private static func rawStorage(_ module: String, domains: [String] = [], standardKeys: [String] = []) throws -> WholeBackupRawStorage {
         WholeBackupRawStorage(directory: try ModuleStorage.directory(module), defaultsDomains: domains, standardKeys: standardKeys)
@@ -69,7 +69,7 @@ struct WholeBackupView: View {
                     Button("一键备份全部数据") { Task { await exportAll() } }
                         .buttonStyle(.borderedProminent).accessibilityIdentifier("backup.exportAll")
                         .disabled(needsRecovery)
-                    Text("包含六个模块已保存的数据、学习记录、进度和设置。不含简单背录音、临时缓存及系统语音资源。")
+                    Text("包含六个模块已保存的数据、学习记录、进度和设置，以及免做卡使用记录。不含简单背录音、临时缓存及系统语音资源。")
                         .font(.footnote).foregroundStyle(.secondary)
                     if lastExport > 0 {
                         Text("上次成功导出：\(Date(timeIntervalSince1970: lastExport).formatted(date: .abbreviated, time: .shortened))")
@@ -82,7 +82,7 @@ struct WholeBackupView: View {
                 Section("整体恢复") {
                     Button("从整体备份恢复", systemImage: "square.and.arrow.down") { importing = true }
                         .disabled(needsRecovery).accessibilityIdentifier("backup.restoreAll")
-                    Text("恢复将替换全部六个模块的数据和设置，包括简单背课文库。恢复前保存安全副本；无法读取的模块会原样保留文件和设置，再从备份恢复。失败时回退到恢复前状态。")
+                    Text("恢复将替换全部六个模块的数据和设置，包括简单背课文库及免做卡记录。旧备份没有免做卡记录时保留当前免做卡记录。恢复前保存安全副本；无法读取的模块会原样保留文件和设置，再从备份恢复。失败时回退到恢复前状态。")
                         .font(.footnote).foregroundStyle(.secondary)
                     if needsRecovery {
                         Button("重试回退到恢复前数据") { Task { await recover() } }

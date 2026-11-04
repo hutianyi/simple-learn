@@ -28,7 +28,7 @@ struct StartPracticeView: View {
         VStack(spacing: 28) {
             Spacer()
             Text("今天的心算练习").font(StudyAppearance.title)
-            Text("选择题型和题目数量，开始心算练习。")
+            Text(FreeDayStore.isUsedToday() ? "免做卡 · 今天已打卡，也可以自愿练习。" : "选择题型和题目数量，开始心算练习。")
                 .font(.title3).foregroundStyle(.secondary)
             VStack(alignment: .leading, spacing: 12) {
                 Text("题型").font(.headline)

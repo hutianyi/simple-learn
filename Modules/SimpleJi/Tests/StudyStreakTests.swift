@@ -1,6 +1,7 @@
 import CoreData
 import Foundation
 import XCTest
+import StudyShell
 @testable import WordMemoryCards
 
 @MainActor
@@ -1015,5 +1016,24 @@ final class StudyStreakTests: XCTestCase {
         }
         try context.save()
         return (word, cards)
+    }
+}
+
+
+extension StudyStreakTests {
+    func testFreeDayCreditsAttendanceAndRewardsWithoutCompletingTasksOrRepairingYesterday() {
+        let now = date(9)
+        let days = [1, 2, 3, 4, 5, 6].map(completed)
+        let credit = Set(["2026-10-09"])
+        let keys = StudyStreak.completionKeys(completedDays: days, historicalKeys: [], now: now,
+            calendar: calendar, freeDayKeys: credit)
+        XCTAssertTrue(keys.contains("2026-10-09"))
+        XCTAssertFalse(keys.contains("2026-10-08"))
+        let empty = StudyCompletionDay(dayKey: "2026-10-09", timeZoneID: calendar.timeZone.identifier)
+        XCTAssertFalse(empty.isComplete)
+        let streak = StudyStreak.count(completedDays: [1, 2, 3, 4, 5, 6].map(completed), now: date(7),
+            calendar: calendar, freeDayKeys: ["2026-10-07"])
+        XCTAssertEqual(streak, 7)
+        XCTAssertTrue(StreakRewardProgress(streak: streak).isRewardDay)
     }
 }

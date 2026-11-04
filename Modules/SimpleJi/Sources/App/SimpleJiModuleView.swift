@@ -66,6 +66,18 @@ public enum SimpleJiBackupTransfer {
             try StudyCompletionRepository.overviewStatus(in: context, now: now, baseline: baseline, masteredTerms: mastered, dictationLimit: dictationLimit)
         }
     }
+    public static func checkFreeDayEligibility(now: Date = Date()) async throws {
+        let persistence = try await open()
+        let context = persistence.newBackgroundContext()
+        try await context.perform {
+            let key = DictationEligibility.dayKey(for: now, calendar: .current)
+            let records = try context.fetch(StudyCompletionDayEntity.fetchRequest())
+            if let entity = records.first(where: { $0.dayKey == key }),
+               try JSONDecoder().decode(StudyCompletionDay.self, from: entity.snapshotData).repair?.status == .accepted {
+                throw WholeBackupError.message("请先完成或结束简单记当前的补学，再使用免做卡。")
+            }
+        }
+    }
     public static func validate(_ data: Data) throws -> String {
         let backup = try BackupService.decodeAndValidate(data)
         return "单词 \(backup.data.words.count) 个 · 学习会话 \(backup.data.studySessions.count) 次"

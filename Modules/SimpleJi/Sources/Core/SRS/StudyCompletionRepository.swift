@@ -1,5 +1,6 @@
 import CoreData
 import Foundation
+import StudyShell
 
 final class StudyCompletionRepository {
     private let container: NSPersistentContainer
@@ -17,6 +18,7 @@ final class StudyCompletionRepository {
 
     static func overviewStatus(in context: NSManagedObjectContext, now: Date, baseline: BaselineCampaignSnapshot?,
                                masteredTerms: Set<String>, dictationLimit: Int = 20, calendar: Calendar = .current) throws -> (text: String, isComplete: Bool) {
+        if FreeDayStore.isUsedToday(now: now) { return ("免做卡 · 今日已完成，未完成内容留待之后学习", true) }
         let tomorrow = DictationEligibility.nextDay(after: now, calendar: calendar)
         let key = DictationEligibility.dayKey(for: now, calendar: calendar)
         let allWords = try context.fetch(WordEntity.fetchRequest())

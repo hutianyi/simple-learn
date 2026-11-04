@@ -328,3 +328,20 @@ extension SimpleSuanTests {
         XCTAssertEqual(session.questions[0].durationSeconds, 8, accuracy: 0.001)
     }
 }
+
+
+extension SimpleSuanTests {
+    func testFreeDayCreditsAttendanceWithoutFabricatingQuestionsAndTomorrowIsNormal() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        let friday = calendar.date(from: DateComponents(year: 2026, month: 11, day: 6, hour: 12))!
+        let activity = PracticeActivity(sessions: [], now: friday, calendar: calendar, freeDayKeys: ["2026-11-06"])
+        XCTAssertEqual(activity.todayCount, 0)
+        XCTAssertTrue(activity.isComplete(friday))
+        XCTAssertEqual(activity.streak, 1)
+        let saturday = calendar.date(byAdding: .day, value: 1, to: friday)!
+        let next = PracticeActivity(sessions: [], now: saturday, calendar: calendar, freeDayKeys: ["2026-11-06"])
+        XCTAssertEqual(next.todayCount, 0)
+        XCTAssertFalse(next.isComplete(saturday))
+    }
+}

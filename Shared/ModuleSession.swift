@@ -119,3 +119,90 @@ public enum OneDayStreakRepair {
         return key == dayKey(friday, calendar: calendar)
     }
 }
+
+public enum FreeDayError: LocalizedError {
+    case message(String)
+    public var errorDescription: String? { if case .message(let text) = self { return text }; return nil }
+}
+
+// A separate ledger credits attendance without changing answers or review schedules.
+public struct FreeDayLedger: Codable, Equatable, Sendable {
+    public var usedAt: [Date] = []
+    public init(usedAt: [Date] = []) { self.usedAt = usedAt }
+    public static var calendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        calendar.firstWeekday = 2
+        calendar.minimumDaysInFirstWeek = 4
+        return calendar
+    }
+    public static func dayKey(_ date: Date) -> String {
+        OneDayStreakRepair.dayKey(date, calendar: calendar)
+    }
+    private static func weekStart(_ date: Date) -> Date {
+        calendar.dateInterval(of: .weekOfYear, for: date)!.start
+    }
+    public func isUsed(on date: Date) -> Bool {
+        usedAt.contains { $0 <= date && Self.dayKey($0) == Self.dayKey(date) }
+    }
+    public func canUse(on date: Date) -> Bool {
+        let weekday = Self.calendar.component(.weekday, from: date)
+        return (2...6).contains(weekday)
+            && !usedAt.contains { Self.weekStart($0) == Self.weekStart(date) }
+    }
+    public func completionKeys(now: Date) -> Set<String> {
+        Set(usedAt.filter { $0 <= now }.map(Self.dayKey))
+    }
+    public func validated() throws -> Self {
+        guard usedAt.allSatisfy({ $0.timeIntervalSince1970.isFinite
+            && (2000...9999).contains(Self.calendar.component(.year, from: $0)) }) else {
+            throw FreeDayError.message("免做卡日期无效，请保留数据。")
+        }
+        let weeks = usedAt.map(Self.weekStart)
+        guard weeks.count == Set(weeks).count,
+              usedAt.allSatisfy({ (2...6).contains(Self.calendar.component(.weekday, from: $0)) }) else {
+            throw FreeDayError.message("免做卡记录无效，请保留数据。")
+        }
+        return self
+    }
+}
+
+public struct FreeDayStore: Sendable {
+    public let fileURL: URL
+    public init(fileURL: URL) { self.fileURL = fileURL }
+    public static func live() throws -> Self {
+        Self(fileURL: try ModuleStorage.directory("FreeDay").appendingPathComponent("Ledger.json"))
+    }
+    public func load() throws -> FreeDayLedger {
+        guard FileManager.default.fileExists(atPath: fileURL.path) else { return FreeDayLedger() }
+        return try Self.decode(Data(contentsOf: fileURL))
+    }
+    public static func decode(_ data: Data) throws -> FreeDayLedger {
+        try JSONDecoder().decode(FreeDayLedger.self, from: data).validated()
+    }
+    public func export() throws -> Data { try JSONEncoder().encode(load()) }
+    public func restore(_ data: Data) throws {
+        let ledger = try Self.decode(data)
+        try JSONEncoder().encode(ledger).write(to: fileURL, options: .atomic)
+    }
+    // Called from the home screen on the main actor, after all eligibility checks.
+    public func use(now: Date) throws {
+        var ledger = try load()
+        guard ledger.canUse(on: now) else {
+            throw FreeDayError.message("本周免做卡已使用，或今天不是周一至周五。")
+        }
+        ledger.usedAt.append(now)
+        try restore(JSONEncoder().encode(ledger))
+    }
+    public static func creditedKeys(now: Date = Date()) -> Set<String> {
+        do { return try live().load().completionKeys(now: now) }
+        catch {
+            // Never grant attendance or another card when storage cannot be read.
+            NSLog("[FreeDay] 免做卡记录读取失败：%@", error.localizedDescription)
+            return []
+        }
+    }
+    public static func isUsedToday(now: Date = Date()) -> Bool {
+        creditedKeys(now: now).contains(FreeDayLedger.dayKey(now))
+    }
+}

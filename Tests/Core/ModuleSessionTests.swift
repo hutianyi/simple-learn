@@ -122,3 +122,60 @@ final class ModuleSessionTests: XCTestCase {
     }
 
 }
+
+
+final class FreeDayTests: XCTestCase {
+    private func date(_ year: Int = 2026, _ month: Int = 11, _ day: Int, _ hour: Int = 12, _ minute: Int = 0) -> Date {
+        FreeDayLedger.calendar.date(from: DateComponents(year: year, month: month, day: day, hour: hour, minute: minute))!
+    }
+    func testWeeklyAvailabilityExpiresAndNeverAccumulates() {
+        let empty = FreeDayLedger()
+        XCTAssertTrue(empty.canUse(on: date(2026, 11, 2))) // Monday
+        XCTAssertTrue(empty.canUse(on: date(2026, 11, 6, 23, 59)))
+        XCTAssertFalse(empty.canUse(on: date(2026, 11, 7, 0)))
+        XCTAssertFalse(empty.canUse(on: date(2026, 11, 8)))
+        let used = FreeDayLedger(usedAt: [date(2026, 11, 4)])
+        XCTAssertFalse(used.canUse(on: date(2026, 11, 6)))
+        XCTAssertTrue(used.canUse(on: date(2026, 11, 9, 0)))
+        XCTAssertTrue(empty.canUse(on: date(2026, 11, 9))) // Skipping a week still grants one only.
+        XCTAssertTrue(used.isUsed(on: date(2026, 11, 4, 23)))
+    }
+    func testBeijingBoundaryAndNewYearWeek() throws {
+        let friday = date(2027, 1, 1, 23, 59)
+        let ledger = FreeDayLedger(usedAt: [friday])
+        XCTAssertNoThrow(try ledger.validated())
+        XCTAssertEqual(FreeDayLedger.dayKey(friday), "2027-01-01")
+        XCTAssertFalse(ledger.canUse(on: date(2026, 12, 28)))
+        XCTAssertFalse(ledger.canUse(on: date(2027, 1, 2, 0)))
+        XCTAssertTrue(ledger.canUse(on: date(2027, 1, 4, 0)))
+        XCTAssertTrue(ledger.completionKeys(now: friday.addingTimeInterval(-1)).isEmpty)
+    }
+    func testStorageSurvivesReopeningAndRejectsDuplicateUse() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let store = FreeDayStore(fileURL: folder.appendingPathComponent("Ledger.json"))
+        try store.use(now: date(2026, 11, 6))
+        let reopened = FreeDayStore(fileURL: store.fileURL)
+        XCTAssertEqual(try reopened.load().completionKeys(now: date(2026, 11, 7)), ["2026-11-06"])
+        XCTAssertThrowsError(try reopened.use(now: date(2026, 11, 6, 20)))
+        XCTAssertThrowsError(try reopened.use(now: date(2026, 11, 7)))
+        try reopened.use(now: date(2026, 11, 9))
+        XCTAssertEqual(try reopened.load().usedAt.count, 2)
+    }
+    func testCorruptOrDuplicateWeekBackupIsRejectedWithoutReplacingLedger() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let store = FreeDayStore(fileURL: folder.appendingPathComponent("Ledger.json"))
+        try store.use(now: date(2026, 11, 4))
+        let before = try store.export()
+        for ledger in [FreeDayLedger(usedAt: [date(2026, 11, 4), date(2026, 11, 6)]),
+                       FreeDayLedger(usedAt: [date(2026, 11, 7)])] {
+            XCTAssertThrowsError(try store.restore(JSONEncoder().encode(ledger)))
+            XCTAssertEqual(try store.export(), before)
+        }
+        try Data("broken".utf8).write(to: store.fileURL)
+        XCTAssertThrowsError(try store.use(now: date(2026, 11, 9)))
+    }
+}

@@ -27,6 +27,10 @@ struct TodayView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Text(greeting).font(StudyAppearance.title)
                         Text(statusText).foregroundStyle(.secondary)
+                        if FreeDayStore.isUsedToday() {
+                            Text("免做卡 · 今天免练，未完成任务留待之后练习，也可以自愿继续。")
+                                .font(.subheadline).foregroundStyle(.secondary)
+                        }
                     }
 
                     Button(action: beginOrResume) {

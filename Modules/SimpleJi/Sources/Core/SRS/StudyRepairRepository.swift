@@ -32,6 +32,7 @@ final class StudyRepairRepository {
     }
 
     func prepare(now: Date = Date()) async throws -> StudyRepairOffer? {
+        guard !FreeDayStore.isUsedToday(now: now) else { return nil }
         let states = try await ReviewRepository(container: container, calendar: calendar).allStates()
         let context = container.newBackgroundContext()
         let calendar = self.calendar

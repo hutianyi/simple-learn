@@ -227,6 +227,7 @@ struct SessionDetailView: View {
 }
 
 private struct PracticeHeatmapView: View {
+    private let freeDayKeys = FreeDayStore.creditedKeys()
     let activity: PracticeActivity
     @State private var selectedDate: Date?
     private let purple = Color(red: 0.48, green: 0.25, blue: 0.82)
@@ -319,6 +320,7 @@ private struct PracticeHeatmapView: View {
     }
 
     private func status(_ date: Date) -> String {
+        if freeDayKeys.contains(OneDayStreakRepair.dayKey(date)) { return "免做卡 · 实际完成 \(activity.count(on: date)) 题" }
         if activity.isRepaired(date) { return "补学完成（实际作答记在补学当天）" }
         if activity.isComplete(date) && activity.count(on: date) == 0 { return "已完成" }
         return "完成 \(activity.count(on: date)) 题"

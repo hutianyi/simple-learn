@@ -14,7 +14,7 @@ final class WholeBackupTests: XCTestCase {
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         return url
     }
-    private func coordinator(_ store: Store, directory: URL) -> WholeBackupCoordinator {
+    private func coordinator(_ store: Store, directory: URL, freeDayStore: FreeDayStore? = nil) -> WholeBackupCoordinator {
         WholeBackupCoordinator(endpoints: ["a", "b"].map { id in
             WholeBackupEndpoint(id: id, title: id, export: { store.values[id]! }, validate: { data in
                 guard String(data: data, encoding: .utf8) != "invalid" else { throw WholeBackupError.message("invalid") }
@@ -25,10 +25,36 @@ final class WholeBackupTests: XCTestCase {
                 if id == "a", store.failRollback, data == Data("old-a".utf8) { throw WholeBackupError.message("rollback failed") }
                 store.values[id] = data
             })
-        }, directory: directory)
+        }, directory: directory, freeDayStore: freeDayStore)
     }
     private var incoming: WholeBackupEnvelope {
         WholeBackupEnvelope(appVersion: "1", modules: ["a": Data("new-a".utf8), "b": Data("new-b".utf8)])
+    }
+    func testFreeDayBackupRestoreLegacyAndFailedRestore() async throws {
+        let folder = try directory(); defer { try? FileManager.default.removeItem(at: folder) }
+        let cards = FreeDayStore(fileURL: folder.appendingPathComponent("Ledger.json"))
+        let monday = FreeDayLedger.calendar.date(from: DateComponents(year: 2026, month: 11, day: 2, hour: 12))!
+        try cards.use(now: monday)
+        let store = Store()
+        let service = coordinator(store, directory: folder, freeDayStore: cards)
+        let snapshot = try await service.snapshot(appVersion: "1")
+        XCTAssertEqual(try WholeBackupEnvelope.decode(snapshot.encoded()).freeDayLedger, try cards.export())
+        try await service.restore(incoming, appVersion: "1") // An older backup must not issue a second card.
+        XCTAssertFalse(try cards.load().canUse(on: monday))
+        var replacement = incoming
+        replacement.freeDayLedger = try JSONEncoder().encode(FreeDayLedger())
+        store.values = ["a": Data("old-a".utf8), "b": Data("old-b".utf8)]
+        store.failImport = true
+        do { try await service.restore(replacement, appVersion: "1"); XCTFail("Expected failure") } catch {}
+        XCTAssertFalse(try cards.load().canUse(on: monday))
+        store.failImport = false
+        try await service.restore(replacement, appVersion: "1")
+        XCTAssertTrue(try cards.load().canUse(on: monday))
+        var invalid = incoming
+        invalid.freeDayLedger = Data("invalid".utf8)
+        store.writes = []
+        do { try await service.restore(invalid, appVersion: "1"); XCTFail("Expected rejection") } catch {}
+        XCTAssertTrue(store.writes.isEmpty)
     }
     func testRoundTripIncludesEmptyModulesAndDate() async throws {
         let folder = try directory(); defer { try? FileManager.default.removeItem(at: folder) }

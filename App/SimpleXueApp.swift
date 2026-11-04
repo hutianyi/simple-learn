@@ -53,6 +53,13 @@ private struct HomeOverviewStatus {
 }
 
 struct LearningHomeView: View {
+    @ScaledMetric(relativeTo: .body) private var homeActionWidth: CGFloat = 148
+    @ScaledMetric(relativeTo: .body) private var homeActionIconWidth: CGFloat = 22
+    @State private var freeDayLedger: FreeDayLedger?
+    @State private var freeDayConfirmation = false
+    @State private var freeDayBusy = false
+    @State private var freeDayMessage: String?
+    @State private var overviewDayKey = ""
     @State private var selected: LearningModule?
     @StateObject private var session = ModuleSession()
     @State private var backupReady = false
@@ -132,15 +139,24 @@ struct LearningHomeView: View {
                 NavigationStack {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 20) {
-                            VStack(alignment: .leading, spacing: 8) {
-                                HStack {
+                            HStack(alignment: .center, spacing: 24) {
+                                VStack(alignment: .leading, spacing: 8) {
                                     Text("简单学").font(StudyAppearance.title)
-                                    Spacer()
-                                    Button("备份与恢复", systemImage: "externaldrive") { presentation = .backup }
-                                        .buttonStyle(.bordered).accessibilityIdentifier("home.backup")
-                                        .disabled(overviewReadCount > 0)
+                                    Text("选一个，开始今天的学习。")
+                                        .font(.title3).foregroundStyle(.secondary)
                                 }
-                                Text("选一个，开始今天的学习。") .font(.title3).foregroundStyle(.secondary)
+                                Spacer(minLength: 0)
+                                VStack(alignment: .trailing, spacing: 20) {
+                                    Button { presentation = .backup } label: {
+                                        homeActionLabel("备份与恢复", symbol: "externaldrive")
+                                    }
+                                    .buttonStyle(.bordered)
+                                    .frame(width: homeActionWidth)
+                                    .accessibilityIdentifier("home.backup")
+                                    .disabled(overviewReadCount > 0 || freeDayBusy)
+                                    freeDayButton.frame(width: homeActionWidth)
+                                }
+                                .font(.body)
                             }
                             learningOverview
                             VStack(alignment: .leading, spacing: 12) {
@@ -197,6 +213,18 @@ struct LearningHomeView: View {
             guard backupReady, selected == nil, presentation == nil else { return }
             await refreshOverview()
         }
+        .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) { now in
+            if selected == nil, FreeDayLedger.dayKey(now) != overviewDayKey, !freeDayBusy {
+                overviewRevision = UUID()
+            }
+        }
+        .alert("确认使用本周的免做卡？", isPresented: $freeDayConfirmation) {
+            Button("取消", role: .cancel) {}
+            Button("确认使用") { Task { await useFreeDay() } }
+        }
+        .alert("免做卡", isPresented: Binding(get: { freeDayMessage != nil }, set: { if !$0 { freeDayMessage = nil } })) {
+            Button("好", role: .cancel) {}
+        } message: { Text(freeDayMessage ?? "") }
         .task { await prepareBackupRecovery() }
         .sheet(item: $presentation, onDismiss: { overviewRevision = UUID() }) { _ in
             WholeBackupView { pending in
@@ -270,6 +298,59 @@ struct LearningHomeView: View {
         }
     }
 
+    private func homeActionLabel(_ title: String, symbol: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: symbol)
+                .frame(width: homeActionIconWidth)
+                .accessibilityHidden(true)
+            Text(title)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
+    }
+
+    private var freeDayButton: some View {
+        TimelineView(.periodic(from: .now, by: 30)) { timeline in
+            let available = freeDayLedger?.canUse(on: timeline.date) == true
+            let alreadyComplete = overview[.ji]?.isComplete == true && overview[.suan]?.isComplete == true
+            let enabled = available && !alreadyComplete && !freeDayBusy && overviewReadCount == 0 && overview.count == 3
+            Button { freeDayConfirmation = true } label: {
+                homeActionLabel("免做卡", symbol: "ticket.fill")
+                    .foregroundStyle(enabled ? Color(red: 0.78, green: 0.55, blue: 0.08) : Color.secondary)
+            }
+            .buttonStyle(.bordered)
+            .disabled(!enabled)
+            .accessibilityValue(freeDayLedger?.isUsed(on: timeline.date) == true ? "今天已使用" : enabled ? "可使用" : "暂不可用")
+            .accessibilityIdentifier("home.freeDay.use")
+        }
+    }
+
+    @MainActor private func useFreeDay() async {
+        guard !freeDayBusy, session.canLeave else { return }
+        freeDayBusy = true
+        defer { freeDayBusy = false }
+        do {
+            let now = Date()
+            // Recheck after confirmation; the day or saved tasks may have changed.
+            guard try FreeDayStore.live().load().canUse(on: now) else {
+                throw WholeBackupError.message("本周免做卡已使用，或今天不是周一至周五。")
+            }
+            try await SimpleJiBackupTransfer.checkFreeDayEligibility(now: now)
+            let ji = try await SimpleJiBackupTransfer.learningOverviewStatus(now: now)
+            let suan = try SimpleSuanBackupTransfer.learningOverviewStatus(now: now)
+            _ = try SimpleLianBackupTransfer.learningOverviewStatus(now: now)
+            guard !(ji.isComplete && suan.isComplete) else {
+                throw WholeBackupError.message("今天简单记和简单算均已完成，无需消耗免做卡。")
+            }
+            guard FreeDayLedger.dayKey(now) == FreeDayLedger.dayKey(Date()) else {
+                throw WholeBackupError.message("日期已变化，请重新使用今天的免做卡。")
+            }
+            try FreeDayStore.live().use(now: Date())
+            await refreshOverview()
+            freeDayMessage = "已使用本周免做卡，今天已打卡。"
+        } catch { freeDayMessage = error.localizedDescription }
+    }
+
     private func overviewCard(_ module: LearningModule) -> some View {
         let status = overview[module]
         let complete = status?.isComplete == true
@@ -323,6 +404,9 @@ struct LearningHomeView: View {
         defer { overviewReadCount -= 1 }
         overview = [:]
         let now = Date()
+        overviewDayKey = FreeDayLedger.dayKey(now)
+        do { freeDayLedger = try FreeDayStore.live().load() }
+        catch { freeDayLedger = nil; freeDayMessage = "无法读取免做卡记录：\(error.localizedDescription)" }
         var updated: [LearningModule: HomeOverviewStatus] = [:]
         do {
             let status = try await SimpleJiBackupTransfer.learningOverviewStatus(now: now)
@@ -344,7 +428,7 @@ struct LearningHomeView: View {
     }
 
     private func openModule(_ module: LearningModule, accessibility: Bool = false) {
-        guard !isReordering, draggedModule == nil, accessibility || !suppressCardTap else { return }
+        guard !freeDayBusy, !isReordering, draggedModule == nil, accessibility || !suppressCardTap else { return }
         AudioPlaybackCoordinator.shared.selectOwner(module.rawValue)
         selected = module
     }

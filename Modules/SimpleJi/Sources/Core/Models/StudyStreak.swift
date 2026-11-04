@@ -35,20 +35,22 @@ struct StudyCompletionDay: Codable, Equatable {
 }
 
 enum StudyStreak {
-    static func count(completedDays: [StudyCompletionDay], now: Date = Date(), calendar: Calendar = .current, historicalKeys: Set<String> = []) -> Int {
-        let keys = completionKeys(completedDays: completedDays, historicalKeys: historicalKeys, now: now, calendar: calendar)
+    static func count(completedDays: [StudyCompletionDay], now: Date = Date(), calendar: Calendar = .current, historicalKeys: Set<String> = [], freeDayKeys: Set<String>? = nil) -> Int {
+        let keys = completionKeys(completedDays: completedDays, historicalKeys: historicalKeys, now: now, calendar: calendar, freeDayKeys: freeDayKeys)
         return WeekendStreak.count(completedKeys: keys, now: now, calendar: calendar)
     }
 
     // Historical sessions predate the complete daily task snapshots. Never let this
     // compatibility rule replace an incomplete day recorded under the new rule.
     static func completionKeys(completedDays: [StudyCompletionDay], historicalKeys: Set<String>,
-                               now: Date = Date(), calendar: Calendar = .current) -> Set<String> {
+                               now: Date = Date(), calendar: Calendar = .current,
+                               freeDayKeys: Set<String>? = nil) -> Set<String> {
         let cutoff = completedDays.map(\.dayKey).min()
             ?? DictationEligibility.dayKey(for: now, calendar: calendar)
         let keys = Set(completedDays.filter { $0.isComplete && ($0.completedAt.map { $0 <= now } ?? false) }.map(\.dayKey))
             .union(historicalKeys.filter { $0 < cutoff })
             .union(repairedKeys(completedDays: completedDays, now: now))
+            .union(freeDayKeys ?? FreeDayStore.creditedKeys(now: now))
         return WeekendStreak.completionKeys(keys, now: now, calendar: calendar)
     }
 

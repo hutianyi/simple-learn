@@ -25,7 +25,7 @@ struct PracticeActivity {
     let repairedKeys: Set<String>
     let completedKeys: Set<String>
 
-    init(sessions: [SessionRecord], now: Date = Date(), calendar: Calendar = .current) {
+    init(sessions: [SessionRecord], now: Date = Date(), calendar: Calendar = .current, freeDayKeys: Set<String>? = nil) {
         self.calendar = calendar
         today = calendar.startOfDay(for: now)
         // Only saved, completed batches contribute; midnight follows each answer's date.
@@ -35,7 +35,7 @@ struct PracticeActivity {
         }
         repairedKeys = Set(sessions.filter { $0.completedAt <= now }.compactMap { $0.validRepairKey(calendar: calendar) })
         completedKeys = WeekendStreak.completionKeys(
-            Set(questionCounts.keys.map { OneDayStreakRepair.dayKey($0, calendar: calendar) }).union(repairedKeys),
+            Set(questionCounts.keys.map { OneDayStreakRepair.dayKey($0, calendar: calendar) }).union(repairedKeys).union(freeDayKeys ?? FreeDayStore.creditedKeys(now: now)),
             now: now, calendar: calendar)
     }
 

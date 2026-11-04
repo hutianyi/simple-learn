@@ -22,6 +22,7 @@ public enum SimpleSuanBackupTransfer {
     }
     public static func learningOverviewStatus(now: Date = Date()) throws -> (text: String, isComplete: Bool) {
         let data = try PersistenceService.shared.load()
+        if FreeDayStore.isUsedToday(now: now) { return ("免做卡 · 今日已完成", true) }
         let count = PracticeActivity(sessions: data.sessions, now: now).todayCount
         return count > 0 ? ("今日已完成", true) : ("今日待做40题", false)
     }

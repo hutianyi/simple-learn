@@ -61,6 +61,11 @@ struct HomeView: View {
                     .font(StudyAppearance.title)
                     .foregroundStyle(AppPalette.textPrimary)
 
+                if FreeDayStore.isUsedToday(now: now) {
+                    Text("免做卡 · 今天已打卡，以下学习可自愿进行。未完成内容留待之后学习。")
+                        .font(.subheadline).foregroundStyle(.secondary)
+                }
+
                 VStack(spacing: 8) {
                     Text("今天待复习卡片")
                         .font(.title3.weight(.medium))
