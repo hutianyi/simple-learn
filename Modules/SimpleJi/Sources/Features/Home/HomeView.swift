@@ -4,6 +4,7 @@ import StudyShell
 
 struct HomeView: View {
     @EnvironmentObject private var router: AppRouter
+    @Environment(\.managedObjectContext) private var context
     @ObservedObject var settings: SettingsStore
 
     @FetchRequest private var dueStates: FetchedResults<ReviewStateEntity>
@@ -46,11 +47,17 @@ struct HomeView: View {
         _dictationEvents = FetchRequest(fetchRequest: eventRequest)
         let completionRequest = StudyCompletionDayEntity.fetchRequest()
         completionRequest.sortDescriptors = []
-        completionRequest.predicate = NSPredicate(format: "dayKey == %@", today)
+        var visibleCompletionKeys = [today]
+        if calendar.component(.weekday, from: now) == 1,
+           let saturday = calendar.date(byAdding: .day, value: -1, to: start) {
+            visibleCompletionKeys.append(DictationEligibility.dayKey(for: saturday, calendar: calendar))
+        }
+        completionRequest.predicate = NSPredicate(format: "dayKey IN %@", visibleCompletionKeys)
         _completionDays = FetchRequest(fetchRequest: completionRequest)
     }
 
     var body: some View {
+        let weekend = weekendStatus
         ZStack {
             AppPalette.background.ignoresSafeArea()
 
@@ -65,29 +72,40 @@ struct HomeView: View {
                     Text("免做卡 · 今天已打卡，以下学习可自愿进行。未完成内容留待之后学习。")
                         .font(.subheadline).foregroundStyle(.secondary)
                 }
-
-                VStack(spacing: 8) {
-                    Text("今天待复习卡片")
-                        .font(.title3.weight(.medium))
-                        .foregroundStyle(AppPalette.textSecondary)
-                    Text("\(dueStates.count) 张")
-                        .font(.system(size: 54, weight: .bold, design: .rounded))
-                        .monospacedDigit()
-                        .foregroundStyle(AppPalette.accent)
+                if let error = weekend.error {
+                    Text("无法读取周末打卡记录：\(error)")
+                        .font(.footnote).foregroundStyle(.red)
                 }
-                .accessibilityElement(children: .combine)
+
+                if weekend.isComplete {
+                    Label("周末已完成", systemImage: "checkmark.circle.fill")
+                        .font(.title2.bold()).foregroundStyle(AppPalette.accent)
+                } else {
+                    VStack(spacing: 8) {
+                        Text("今天待复习卡片")
+                            .font(.title3.weight(.medium))
+                            .foregroundStyle(AppPalette.textSecondary)
+                        Text("\(dueStates.count) 张")
+                            .font(.system(size: 54, weight: .bold, design: .rounded))
+                            .monospacedDigit()
+                            .foregroundStyle(AppPalette.accent)
+                    }
+                    .accessibilityElement(children: .combine)
+                }
 
                 VStack(spacing: 14) {
-                    if dueStates.isEmpty {
-                        reviewButton.buttonStyle(LargeSecondaryButtonStyle())
-                    } else {
-                        reviewButton.buttonStyle(LargePrimaryButtonStyle())
-                    }
+                    if !weekend.isComplete {
+                        if dueStates.isEmpty {
+                            reviewButton.buttonStyle(LargeSecondaryButtonStyle())
+                        } else {
+                            reviewButton.buttonStyle(LargePrimaryButtonStyle())
+                        }
 
-                    if hasPendingDictation && dueStates.isEmpty {
-                        dictationButton.buttonStyle(LargePrimaryButtonStyle())
-                    } else {
-                        dictationButton.buttonStyle(LargeSecondaryButtonStyle())
+                        if hasPendingDictation && dueStates.isEmpty {
+                            dictationButton.buttonStyle(LargePrimaryButtonStyle())
+                        } else {
+                            dictationButton.buttonStyle(LargeSecondaryButtonStyle())
+                        }
                     }
 
                     Button {
@@ -124,6 +142,11 @@ struct HomeView: View {
         }
         .navigationBarBackButtonHidden()
         .toolbar(.hidden, for: .navigationBar)
+    }
+
+    private var weekendStatus: (isComplete: Bool, error: String?) {
+        do { return (try StudyCompletionRepository.isWeekendComplete(in: context, now: now, calendar: calendar), nil) }
+        catch { return (false, error.localizedDescription) }
     }
 
     private var dictationButton: some View {
@@ -176,7 +199,7 @@ struct HomeView: View {
     }
 
     private var completedToday: Bool {
-        completionDays.first.flatMap {
+        completionDays.first(where: { $0.dayKey == today }).flatMap {
             try? JSONDecoder().decode(StudyCompletionDay.self, from: $0.snapshotData)
         }?.isComplete == true
     }

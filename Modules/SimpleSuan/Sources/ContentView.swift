@@ -24,41 +24,50 @@ struct StartPracticeView: View {
     @State private var repairOffer: OneDayStreakRepair.Offer?
     @State private var repairError: String?
     @State private var checkedDayKey = ""
+    @State private var now = Date()
+    private var weekendComplete: Bool { PracticeActivity(sessions: store.sessions, now: now).isWeekendComplete }
     var body: some View {
         VStack(spacing: 28) {
             Spacer()
             Text("今天的心算练习").font(StudyAppearance.title)
-            Text(FreeDayStore.isUsedToday() ? "免做卡 · 今天已打卡，也可以自愿练习。" : "选择题型和题目数量，开始心算练习。")
-                .font(.title3).foregroundStyle(.secondary)
-            VStack(alignment: .leading, spacing: 12) {
-                Text("题型").font(.headline)
-                Picker("题型", selection: $mode) { ForEach(PracticeMode.allCases) { Text($0.title).tag($0) } }
-                    .pickerStyle(.segmented)
-            }
-            .frame(maxWidth: 600)
-            if mode == .mixed {
+            if weekendComplete {
+                Label("周末已完成", systemImage: "checkmark.circle.fill")
+                    .font(.title2.bold()).foregroundStyle(theme.accent)
+            } else {
+                Text(FreeDayStore.isUsedToday(now: now) ? "免做卡 · 今天已打卡，也可以自愿练习。"
+                    : "选择题型和题目数量，开始心算练习。")
+                    .font(.title3).foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("混合题型").font(.headline)
-                    Text("至少选择两种题型；题目会在已选类型间尽量均衡。")
-                        .font(.subheadline).foregroundStyle(.secondary)
-                    HStack(spacing: 10) {
-                        ForEach(OperationType.allCases) { operation in
-                            Button(operation.title) { toggle(operation) }
-                                .buttonStyle(.borderedProminent)
-                                .tint(mixedOperations.contains(operation) ? theme.accent : .gray)
-                                .foregroundStyle(mixedOperations.contains(operation) ? theme.buttonForeground : Color.white)
+                    Text("题型").font(.headline)
+                    Picker("题型", selection: $mode) { ForEach(PracticeMode.allCases) { Text($0.title).tag($0) } }
+                        .pickerStyle(.segmented)
+                }
+                .frame(maxWidth: 600)
+                if mode == .mixed {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("混合题型").font(.headline)
+                        Text("至少选择两种题型；题目会在已选类型间尽量均衡。")
+                            .font(.subheadline).foregroundStyle(.secondary)
+                        HStack(spacing: 10) {
+                            ForEach(OperationType.allCases) { operation in
+                                Button(operation.title) { toggle(operation) }
+                                    .buttonStyle(.borderedProminent)
+                                    .tint(mixedOperations.contains(operation) ? theme.accent : .gray)
+                                    .foregroundStyle(mixedOperations.contains(operation) ? theme.buttonForeground : Color.white)
+                            }
                         }
-                    }
-                }.frame(maxWidth: 600, alignment: .leading)
+                    }.frame(maxWidth: 600, alignment: .leading)
+                }
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("题目数量").font(.headline)
+                    HStack { ForEach([10, 20, 30, 40], id: \.self) { count in Button("\(count)题") { questionCount = count }.buttonStyle(.borderedProminent).tint(questionCount == count ? theme.accent : .gray).foregroundStyle(questionCount == count ? theme.buttonForeground : Color.white) }
+                        Stepper("\(questionCount) 题", value: $questionCount, in: 1...100).font(.title3).padding(.leading, 12) }
+                }.frame(maxWidth: 600)
+                Button { practice = PracticeViewModel(mode: mode, questionCount: questionCount, selectedOperations: mixedOperations) } label: { Text("开始练习") }
+                    .buttonStyle(StudyPrimaryButtonStyle()).frame(maxWidth: 600)
+                    .disabled(mode == .mixed && mixedOperations.count < 2)
             }
-            VStack(alignment: .leading, spacing: 12) {
-                Text("题目数量").font(.headline)
-                HStack { ForEach([10, 20, 30, 40], id: \.self) { count in Button("\(count)题") { questionCount = count }.buttonStyle(.borderedProminent).tint(questionCount == count ? theme.accent : .gray).foregroundStyle(questionCount == count ? theme.buttonForeground : Color.white) }
-                    Stepper("\(questionCount) 题", value: $questionCount, in: 1...100).font(.title3).padding(.leading, 12) }
-            }.frame(maxWidth: 600)
-            Button { practice = PracticeViewModel(mode: mode, questionCount: questionCount, selectedOperations: mixedOperations) } label: { Text("开始练习") }
-                .buttonStyle(StudyPrimaryButtonStyle()).frame(maxWidth: 600)
-                .disabled(mode == .mixed && mixedOperations.count < 2)
             Spacer()
         }.padding(StudyAppearance.pagePadding)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -66,6 +75,7 @@ struct StartPracticeView: View {
         .navigationBarTitleDisplayMode(.inline)
         .fullScreenCover(item: $practice) { PracticeFlowView(viewModel: $0).interactiveDismissDisabled() }
         .onAppear(perform: checkRepair)
+        .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) { now = $0 }
         .onChange(of: scenePhase) { _, phase in if phase == .active { checkRepair() } }
         .alert("补上打卡，接回连续记录？", isPresented: Binding(
             get: { repairOffer != nil }, set: { if !$0 { repairOffer = nil } }), presenting: repairOffer) { offer in
@@ -80,6 +90,7 @@ struct StartPracticeView: View {
     }
 
     private func checkRepair() {
+        now = Date()
         let key = OneDayStreakRepair.dayKey(Date())
         guard practice == nil, key != checkedDayKey else { return }
         checkedDayKey = key

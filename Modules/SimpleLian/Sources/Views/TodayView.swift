@@ -8,13 +8,15 @@ struct TodayView: View {
     @Query(sort: \PracticeSession.createdAt, order: .reverse) private var sessions: [PracticeSession]
     let openSession: (PracticeSession) -> Void
     @State private var errorMessage: String?
+    @State private var now = Date()
+    private var day: String { DayKey.make(from: now) }
+    private var weekendComplete: Bool { PracticeService.isWeekendComplete(groups: groups, sessions: sessions, day: day) }
 
     private var active: PracticeSession? { sessions.first { $0.completedAt == nil } }
     private var due: [ProblemGroup] {
-        PracticeService.dailyGroups(in: groups)
+        PracticeService.dailyGroups(in: groups, day: day)
     }
     private var unavailable: [ProblemGroup] {
-        let day = DayKey.make(from: .now)
         return groups.filter { PracticeService.isDue($0, day: day) && !PracticeService.hasUsableQuestion($0) }
     }
     private var needsExplanation: [ProblemGroup] { groups.filter { !$0.isArchived && $0.reviewState?.status == .needsExplanation } }
@@ -33,32 +35,34 @@ struct TodayView: View {
                         }
                     }
 
-                    Button(action: beginOrResume) {
-                        Label(active == nil ? "开始今天的练习" : "继续未完成练习", systemImage: active == nil ? "play.fill" : "arrow.forward.circle.fill")
-                    }
-                    .buttonStyle(StudyPrimaryButtonStyle())
-                    .disabled(active == nil && due.isEmpty)
+                    if !weekendComplete {
+                        Button(action: beginOrResume) {
+                            Label(active == nil ? "开始今天的练习" : "继续未完成练习", systemImage: active == nil ? "play.fill" : "arrow.forward.circle.fill")
+                        }
+                        .buttonStyle(StudyPrimaryButtonStyle())
+                        .disabled(active == nil && due.isEmpty)
 
-                    if !needsExplanation.isEmpty {
-                        StatusSection(title: "需要讲解", icon: "person.wave.2", groups: needsExplanation) { startCorrection($0) }
-                    }
-                    if !pendingCorrection.isEmpty && active == nil {
-                        StatusSection(title: "等待订正", icon: "arrow.trianglehead.2.clockwise.rotate.90", groups: pendingCorrection) { startCorrection($0) }
-                    }
-                    if !unavailable.isEmpty {
-                        VStack(alignment: .leading, spacing: 12) {
-                            Label("缺少可用题目", systemImage: "exclamationmark.triangle").font(.headline)
-                            Text("以下题型的扩展题已全部停用或缺失。请启用题目，或导入补充题库后再练习。")
-                                .foregroundStyle(.secondary)
-                            ForEach(unavailable) { group in
-                                NavigationLink { GroupDetailView(group: group) } label: {
-                                    HStack { Text(group.title); Spacer(); Text("查看题目") }
-                                }.padding(12).background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
+                        if !needsExplanation.isEmpty {
+                            StatusSection(title: "需要讲解", icon: "person.wave.2", groups: needsExplanation) { startCorrection($0) }
+                        }
+                        if !pendingCorrection.isEmpty && active == nil {
+                            StatusSection(title: "等待订正", icon: "arrow.trianglehead.2.clockwise.rotate.90", groups: pendingCorrection) { startCorrection($0) }
+                        }
+                        if !unavailable.isEmpty {
+                            VStack(alignment: .leading, spacing: 12) {
+                                Label("缺少可用题目", systemImage: "exclamationmark.triangle").font(.headline)
+                                Text("以下题型的扩展题已全部停用或缺失。请启用题目，或导入补充题库后再练习。")
+                                    .foregroundStyle(.secondary)
+                                ForEach(unavailable) { group in
+                                    NavigationLink { GroupDetailView(group: group) } label: {
+                                        HStack { Text(group.title); Spacer(); Text("查看题目") }
+                                    }.padding(12).background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
+                                }
                             }
                         }
-                    }
-                    if groups.isEmpty {
-                        ContentUnavailableView("还没有题目", systemImage: "tray", description: Text("到“题库”页导入 ChatGPT 生成的题库。"))
+                        if groups.isEmpty {
+                            ContentUnavailableView("还没有题目", systemImage: "tray", description: Text("到“题库”页导入 ChatGPT 生成的题库。"))
+                        }
                     }
                 }
                 .frame(maxWidth: StudyAppearance.contentWidth, alignment: .leading)
@@ -68,6 +72,8 @@ struct TodayView: View {
             .background(StudyAppearance.background)
             .navigationTitle("今天")
             .navigationBarTitleDisplayMode(.inline)
+            .onAppear { now = Date() }
+            .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) { now = $0 }
             .alert("无法开始", isPresented: .constant(errorMessage != nil), presenting: errorMessage) { _ in
                 Button("好") { errorMessage = nil }
             } message: { Text($0) }
@@ -75,10 +81,12 @@ struct TodayView: View {
     }
 
     private var greeting: String {
+        if weekendComplete { return "今天已完成" }
         if active != nil || !due.isEmpty { return "今天练一点" }
         return unavailable.isEmpty ? "今天已完成" : "需要补充题目"
     }
     private var statusText: String {
+        if weekendComplete { return "周末已完成。" }
         if active != nil { return "有一组练习还没有完成。" }
         if due.isEmpty && !unavailable.isEmpty { return "有 \(unavailable.count) 个到期题型缺少可用题目，请先处理下方提示。" }
         if due.isEmpty { return "目前没有到期题目，不需要额外练习。" }

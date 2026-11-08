@@ -240,6 +240,31 @@ final class SimpleSuanTests: XCTestCase {
         XCTAssertEqual(both.todayCount, 40)
     }
 
+    func testWeekendOverviewUsesSavedCreditWithoutInventingSundayAnswers() throws {
+        let session = activitySession(count: 40, at: activityDate(2026, 10, 3))
+        let data = try SuanBackup.decode(SuanBackup.encode(AppData(sessions: [session])))
+        let sunday = PracticeActivity(sessions: data.sessions, now: activityDate(2026, 10, 4),
+            calendar: activityCalendar, freeDayKeys: [])
+        XCTAssertEqual(sunday.todayCount, 0)
+        XCTAssertTrue(sunday.isWeekendComplete)
+        XCTAssertTrue(sunday.overviewStatus.isComplete)
+        XCTAssertEqual(sunday.overviewStatus.text, "今日已完成")
+        let monday = PracticeActivity(sessions: data.sessions, now: activityDate(2026, 10, 5),
+            calendar: activityCalendar, freeDayKeys: [])
+        XCTAssertFalse(monday.isWeekendComplete)
+        XCTAssertFalse(monday.overviewStatus.isComplete)
+        XCTAssertEqual(monday.overviewStatus.text, "今日待做40题")
+        var partial = session
+        partial.isPartial = true
+        for sessions in [[], [partial]] {
+            let pending = PracticeActivity(sessions: sessions, now: activityDate(2026, 10, 4),
+                calendar: activityCalendar, freeDayKeys: [])
+            XCTAssertFalse(pending.isWeekendComplete)
+            XCTAssertFalse(pending.overviewStatus.isComplete)
+            XCTAssertEqual(pending.overviewStatus.text, "今日待做40题")
+        }
+    }
+
     func testPartialWeekendDoesNotEarnCreditAndSundayWorkReachesSevenDays() {
         let sunday = activityDate(2026, 10, 11, hour: 12)
         var partial = activitySession(count: 10, at: sunday)

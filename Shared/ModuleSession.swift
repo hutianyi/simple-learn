@@ -31,6 +31,13 @@ public enum ModuleStorage {
 }
 
 public enum WeekendStreak {
+    public static func isWeekendComplete(completedKeys: Set<String>, now: Date = Date(),
+                                         calendar: Calendar = .current) -> Bool {
+        guard [1, 7].contains(calendar.component(.weekday, from: now)) else { return false }
+        return completionKeys(completedKeys, now: now, calendar: calendar)
+            .contains(OneDayStreakRepair.dayKey(now, calendar: calendar))
+    }
+
     public static func completionKeys(_ keys: Set<String>, now: Date = Date(),
                                       calendar: Calendar = .current) -> Set<String> {
         let today = calendar.startOfDay(for: now)

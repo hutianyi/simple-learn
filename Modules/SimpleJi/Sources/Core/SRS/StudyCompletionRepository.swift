@@ -19,6 +19,9 @@ final class StudyCompletionRepository {
     static func overviewStatus(in context: NSManagedObjectContext, now: Date, baseline: BaselineCampaignSnapshot?,
                                masteredTerms: Set<String>, dictationLimit: Int = 20, calendar: Calendar = .current) throws -> (text: String, isComplete: Bool) {
         if FreeDayStore.isUsedToday(now: now) { return ("免做卡 · 今日已完成，未完成内容留待之后学习", true) }
+        if try isWeekendComplete(in: context, now: now, calendar: calendar) {
+            return ("今日已完成", true)
+        }
         let tomorrow = DictationEligibility.nextDay(after: now, calendar: calendar)
         let key = DictationEligibility.dayKey(for: now, calendar: calendar)
         let allWords = try context.fetch(WordEntity.fetchRequest())
@@ -33,6 +36,16 @@ final class StudyCompletionRepository {
         }.map(\.wordID)).count
         if cards == 0 && pendingCount == 0 { return (complete ? "今日已完成" : "暂无到期任务", complete) }
         return ([cards > 0 ? "待复习 \(cards) 张" : nil, pendingCount > 0 ? "待默写 \(pendingCount) 个单词" : nil].compactMap { $0 }.joined(separator: " · "), false)
+    }
+
+    static func isWeekendComplete(in context: NSManagedObjectContext, now: Date,
+                                  calendar: Calendar = .current) throws -> Bool {
+        guard [1, 7].contains(calendar.component(.weekday, from: now)) else { return false }
+        let records = try context.fetch(StudyCompletionDayEntity.fetchRequest()).map {
+            try JSONDecoder().decode(StudyCompletionDay.self, from: $0.snapshotData)
+        }
+        let keys = try StudyRepairRepository.completedKeys(in: context, records: records, now: now, calendar: calendar)
+        return WeekendStreak.isWeekendComplete(completedKeys: keys, now: now, calendar: calendar)
     }
 
     func refresh(scope: StudyCompletionScope, now: Date = Date()) async throws {

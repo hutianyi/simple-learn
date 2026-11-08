@@ -36,6 +36,59 @@ private func practiceFixture() throws -> (ModelContainer, ModelContext, ImportBa
 }
 
 @MainActor
+@Test func saturdayCompletionCoversSundayWithoutMovingLianReviewsAndSurvivesBackup() throws {
+    let (container, context, batch) = try practiceFixture()
+    _ = container
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+    let saturday = calendar.date(from: DateComponents(year: 2026, month: 11, day: 7, hour: 12))!
+    let group = try #require(batch.groups.first)
+    group.createdAt = saturday.addingTimeInterval(-86_400)
+    let made = try PracticeService.makeDailySession(context: context, day: "2026-11-07")
+    let session = try #require(made)
+    session.attempts.first?.draftResult = .correct
+    try PracticeService.commitMarking(session: session, context: context, now: saturday)
+    try PracticeService.complete(session, context: context)
+    session.createdAt = saturday
+    session.completedAt = saturday
+    group.reviewState?.nextReviewDay = "2026-11-08"
+    try context.save()
+    #expect(try PracticeService.dueGroups(context: context, day: "2026-11-08").count == 1)
+    #expect(try PracticeService.overviewStatus(context: context, day: "2026-11-08").isComplete)
+    #expect(try PracticeService.overview(context: context, day: "2026-11-08") == "今日已完成")
+    #expect(group.reviewState?.nextReviewDay == "2026-11-08")
+    #expect(group.reviewState?.creditedCorrectCount == 1)
+    #expect(try !PracticeService.overviewStatus(context: context, day: "2026-11-09").isComplete)
+    let restored = try ModelContainer(for: AppSchema.schema, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+    try BackupService.restore(BackupService.validate(BackupService.exportData(context: context)), context: restored.mainContext)
+    #expect(try PracticeService.overviewStatus(context: restored.mainContext, day: "2026-11-08").isComplete)
+    try PracticeService.deleteBatch(try #require(restored.mainContext.fetch(FetchDescriptor<ImportBatch>()).first), context: restored.mainContext)
+    #expect(try !PracticeService.overviewStatus(context: restored.mainContext, day: "2026-11-08").isComplete)
+    group.reviewState?.status = .pendingCorrection
+    try context.save()
+    #expect(try !PracticeService.overviewStatus(context: context, day: "2026-11-08").isComplete)
+    #expect(try PracticeService.overview(context: context, day: "2026-11-08").contains("待订正"))
+}
+
+@MainActor
+@Test func unfinishedOrPreviousWeekendLianPracticeDoesNotCompleteThisWeekend() throws {
+    let (container, context, batch) = try practiceFixture()
+    _ = container
+    let made = try PracticeService.makeDailySession(context: context, day: "2026-11-07")
+    let session = try #require(made)
+    #expect(try !PracticeService.overviewStatus(context: context, day: "2026-11-08").isComplete)
+    try PracticeService.complete(session, context: context)
+    session.completedAt = Calendar.current.date(from: DateComponents(year: 2026, month: 11, day: 7, hour: 12))!
+    #expect(try !PracticeService.overviewStatus(context: context, day: "2026-11-08").isComplete)
+    session.attempts.first?.draftResult = .correct
+    try PracticeService.commitMarking(session: session, context: context)
+    session.phase = .completed
+    session.completedAt = Calendar.current.date(from: DateComponents(year: 2026, month: 10, day: 31, hour: 12))!
+    try context.save()
+    #expect(!PracticeService.isWeekendComplete(groups: batch.groups, sessions: [session], day: "2026-11-08"))
+}
+
+@MainActor
 @Test func deletingBatchUsedByUnfinishedSessionKeepsPracticeResumable() throws {
     let (container, context, batch) = try practiceFixture()
     _ = container

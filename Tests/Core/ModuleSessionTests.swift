@@ -2,6 +2,20 @@ import XCTest
 @testable import StudyShell
 
 final class ModuleSessionTests: XCTestCase {
+    func testWeekendRestCreditIsLimitedToTheCurrentWeekendAcrossMonthAndDST() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "America/Los_Angeles")!
+        func date(_ month: Int, _ day: Int) -> Date {
+            calendar.date(from: DateComponents(year: 2026, month: month, day: day, hour: 12))!
+        }
+        XCTAssertTrue(WeekendStreak.isWeekendComplete(completedKeys: ["2026-10-31"], now: date(11, 1), calendar: calendar))
+        XCTAssertTrue(WeekendStreak.isWeekendComplete(completedKeys: ["2026-11-01"], now: date(11, 1), calendar: calendar))
+        XCTAssertFalse(WeekendStreak.isWeekendComplete(completedKeys: ["2026-11-01"], now: date(10, 31), calendar: calendar))
+        XCTAssertFalse(WeekendStreak.isWeekendComplete(completedKeys: ["2026-10-31"], now: date(11, 2), calendar: calendar))
+        XCTAssertFalse(WeekendStreak.isWeekendComplete(completedKeys: ["2026-10-31"], now: date(11, 8), calendar: calendar))
+        XCTAssertFalse(WeekendStreak.isWeekendComplete(completedKeys: [], now: date(11, 1), calendar: calendar))
+    }
+
     func testRepairCrossesRewardMilestonesWithoutTreatingEarlierRewardsAsNew() {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!

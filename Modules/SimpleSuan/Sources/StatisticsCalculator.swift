@@ -46,6 +46,12 @@ struct PracticeActivity {
 
     var firstDay: Date { calendar.date(byAdding: .day, value: -364, to: today) ?? today }
     var todayCount: Int { count(on: today) }
+    var isWeekendComplete: Bool {
+        WeekendStreak.isWeekendComplete(completedKeys: completedKeys, now: today, calendar: calendar)
+    }
+    var overviewStatus: (text: String, isComplete: Bool) {
+        return isComplete(today) ? ("今日已完成", true) : ("今日待做40题", false)
+    }
     var annualPracticeDays: Int {
         completedKeys.filter { $0 >= OneDayStreakRepair.dayKey(firstDay, calendar: calendar)
             && $0 <= OneDayStreakRepair.dayKey(today, calendar: calendar) }.count

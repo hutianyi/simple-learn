@@ -38,6 +38,8 @@ enum PracticeService {
         if FreeDayStore.creditedKeys().contains(day) { return ("免做卡 · 今日免练，未完成内容留待之后练习", true) }
         let groups = try context.fetch(FetchDescriptor<ProblemGroup>())
         guard !groups.isEmpty else { return ("还没有题目", false) }
+        let sessions = try context.fetch(FetchDescriptor<PracticeSession>())
+        if isWeekendComplete(groups: groups, sessions: sessions, day: day) { return ("今日已完成", true) }
         if let active = try activeSession(context: context), !active.attempts.isEmpty || !active.groupProgress.isEmpty { return ("有练习待继续", false) }
         let due = dailyGroups(in: groups, day: day).count
         let correction = groups.filter { !$0.isArchived && [.pendingCorrection, .needsExplanation].contains($0.reviewState?.status) }.count
@@ -45,6 +47,28 @@ enum PracticeService {
         let text = [due > 0 ? "待练 \(due) 类" : nil, correction > 0 ? "待订正 \(correction) 类" : nil,
                     unavailable > 0 ? "缺题 \(unavailable) 类" : nil].compactMap { $0 }.joined(separator: " · ")
         return text.isEmpty ? ("暂无到期任务", true) : (text, false)
+    }
+
+    static func isWeekendComplete(groups: [ProblemGroup], sessions: [PracticeSession],
+                                  day: String, calendar: Calendar = .current) -> Bool {
+        let parts = day.split(separator: "-").compactMap { Int($0) }
+        guard parts.count == 3,
+              let date = calendar.date(from: DateComponents(year: parts[0], month: parts[1], day: parts[2], hour: 12)),
+              DayKey.make(from: date, calendar: calendar) == day,
+              [1, 7].contains(calendar.component(.weekday, from: date)) else { return false }
+        guard !sessions.contains(where: { $0.completedAt == nil && (!$0.attempts.isEmpty || !$0.groupProgress.isEmpty) }) else { return false }
+        let saturday = calendar.component(.weekday, from: date) == 1 ? DayKey.adding(days: -1, to: day, calendar: calendar) : day
+        return sessions.contains { session in
+            guard session.phase == .completed, let finished = session.completedAt,
+                  !session.attempts.isEmpty, session.attempts.allSatisfy({ $0.result != nil }) else { return false }
+            let completedDay = DayKey.make(from: finished, calendar: calendar)
+            guard completedDay >= (saturday ?? day), completedDay <= day else { return false }
+            // Preserve the completed weekend without changing review dates or
+            // counting unfinished practice and corrections as completed.
+            return groups.filter { !$0.isArchived && DayKey.make(from: $0.createdAt, calendar: calendar) <= completedDay }.allSatisfy {
+                !isDue($0, day: completedDay) && ![.pendingCorrection, .needsExplanation].contains($0.reviewState?.status)
+            }
+        }
     }
 
     static func discardEmptySessions(context: ModelContext) throws {

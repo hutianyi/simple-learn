@@ -840,6 +840,62 @@ final class StudyStreakTests: XCTestCase {
     }
 
 
+    func testWeekendOverviewCreditsSaturdayWithoutChangingSundayTasks() throws {
+        let controller = PersistenceController(inMemory: true)
+        let context = controller.container.viewContext
+        let (_, cards) = try seedWord(in: context, due: date(4), now: date(1))
+        let saturday = StudyCompletionDayEntity(context: context)
+        saturday.dayKey = completed(3).dayKey
+        let saturdayData = try JSONEncoder().encode(completed(3))
+        saturday.snapshotData = saturdayData
+        var unfinished = completed(4)
+        unfinished.requiredCardIDs = Set(cards.map(\.id))
+        unfinished.completedAt = nil
+        let sunday = StudyCompletionDayEntity(context: context)
+        sunday.dayKey = unfinished.dayKey
+        sunday.snapshotData = try JSONEncoder().encode(unfinished)
+        let sundayData = sunday.snapshotData
+        try context.save()
+        let campaign = BaselineCampaignSnapshot(selectedWordIDs: [], activatedAt: date(1))
+        let status = try StudyCompletionRepository.overviewStatus(in: context, now: date(4),
+            baseline: campaign, masteredTerms: [], calendar: calendar)
+        XCTAssertTrue(status.isComplete)
+        XCTAssertEqual(status.text, "今日已完成")
+        XCTAssertTrue(try StudyCompletionRepository.isWeekendComplete(in: context, now: date(4), calendar: calendar))
+        XCTAssertFalse(context.hasChanges)
+        XCTAssertEqual(saturday.snapshotData, saturdayData)
+        XCTAssertEqual(sunday.snapshotData, sundayData)
+        XCTAssertEqual(cards.map(\.nextReviewDate), [date(4), date(4)])
+        XCTAssertEqual(try context.count(for: DictationDayEntity.fetchRequest()), 0)
+        let monday = try StudyCompletionRepository.overviewStatus(in: context, now: date(5),
+            baseline: campaign, masteredTerms: [], calendar: calendar)
+        XCTAssertFalse(monday.isComplete)
+        XCTAssertTrue(monday.text.contains("待复习 2 张"))
+        XCTAssertFalse(try StudyCompletionRepository.isWeekendComplete(in: context, now: date(5), calendar: calendar))
+        var incompleteSaturday = completed(3)
+        incompleteSaturday.dictationComplete = false
+        saturday.snapshotData = try JSONEncoder().encode(incompleteSaturday)
+        try context.save()
+        XCTAssertFalse(try StudyCompletionRepository.overviewStatus(in: context, now: date(4),
+            baseline: campaign, masteredTerms: [], calendar: calendar).isComplete)
+        saturday.snapshotData = saturdayData
+        try context.save()
+        XCTAssertTrue(try StudyCompletionRepository.isWeekendComplete(in: context, now: date(4), calendar: calendar))
+        context.delete(saturday)
+        try context.save()
+        XCTAssertFalse(try StudyCompletionRepository.isWeekendComplete(in: context, now: date(4), calendar: calendar))
+    }
+
+    func testWeekendOverviewReportsCorruptCompletionInsteadOfGrantingRest() throws {
+        let controller = PersistenceController(inMemory: true)
+        let context = controller.container.viewContext
+        let record = StudyCompletionDayEntity(context: context)
+        record.dayKey = "2026-10-03"
+        record.snapshotData = Data("invalid".utf8)
+        try context.save()
+        XCTAssertThrowsError(try StudyCompletionRepository.isWeekendComplete(in: context, now: date(4), calendar: calendar))
+    }
+
     func testOverviewIsReadOnlyAndCountsDueCardsAndEligibleDictation() throws {
         let controller = PersistenceController(inMemory: true)
         let context = controller.container.viewContext
