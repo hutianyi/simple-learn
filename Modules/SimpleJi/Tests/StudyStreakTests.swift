@@ -21,6 +21,26 @@ final class StudyStreakTests: XCTestCase {
         return result
     }
 
+    func testFridayRepairShowsSkippedSevenDayRewardOnSaturdayAndSunday() throws {
+        for day in [10, 11] {
+            var repaired = completed(day)
+            repaired.repair = StudyRepairPlan(yesterdayKey: "2026-10-09", previousStreak: 6,
+                extraCardIDs: [], cardsComplete: true, dictationComplete: true,
+                status: .completed, restoredAt: date(day))
+            let records = (3...8).map(completed) + [repaired]
+            let progress = StudyStreak.rewardProgress(completedDays: records, now: date(day),
+                calendar: calendar, freeDayKeys: [])
+            XCTAssertEqual(progress.streak, day == 10 ? 8 : 9)
+            XCTAssertEqual(progress.streak, StudyStreak.count(completedDays: records, now: date(day),
+                calendar: calendar, freeDayKeys: []))
+            XCTAssertTrue(progress.isRewardDay)
+            XCTAssertEqual(progress.rewardMilestone, 7)
+            let restored = try JSONDecoder().decode([StudyCompletionDay].self, from: JSONEncoder().encode(records))
+            XCTAssertEqual(StudyStreak.rewardProgress(completedDays: restored, now: date(day),
+                calendar: calendar, freeDayKeys: []), progress)
+        }
+    }
+
     func testCelebrationRequiresStrictCurrentDayCompletionAndOnlyRunsOnce() {
         var day = completed(2)
         XCTAssertTrue(StudyStreak.shouldCelebrate(day: day, todayKey: "2026-10-02", lastCelebratedKey: "2026-10-01"))

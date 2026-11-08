@@ -45,13 +45,30 @@ enum StudyStreak {
     static func completionKeys(completedDays: [StudyCompletionDay], historicalKeys: Set<String>,
                                now: Date = Date(), calendar: Calendar = .current,
                                freeDayKeys: Set<String>? = nil) -> Set<String> {
+        WeekendStreak.completionKeys(recordedCompletionKeys(completedDays: completedDays,
+            historicalKeys: historicalKeys, now: now, calendar: calendar, freeDayKeys: freeDayKeys),
+            now: now, calendar: calendar)
+    }
+
+    private static func recordedCompletionKeys(completedDays: [StudyCompletionDay], historicalKeys: Set<String>,
+                                              now: Date, calendar: Calendar, freeDayKeys: Set<String>?) -> Set<String> {
         let cutoff = completedDays.map(\.dayKey).min()
             ?? DictationEligibility.dayKey(for: now, calendar: calendar)
         let keys = Set(completedDays.filter { $0.isComplete && ($0.completedAt.map { $0 <= now } ?? false) }.map(\.dayKey))
             .union(historicalKeys.filter { $0 < cutoff })
             .union(repairedKeys(completedDays: completedDays, now: now))
             .union(freeDayKeys ?? FreeDayStore.creditedKeys(now: now))
-        return WeekendStreak.completionKeys(keys, now: now, calendar: calendar)
+        return keys
+    }
+
+    static func rewardProgress(completedDays: [StudyCompletionDay], historicalKeys: Set<String> = [],
+                               now: Date = Date(), calendar: Calendar = .current,
+                               freeDayKeys: Set<String>? = nil) -> StreakRewardProgress {
+        let todayKey = DictationEligibility.dayKey(for: now, calendar: calendar)
+        return StreakRewardProgress(completionKeys: recordedCompletionKeys(completedDays: completedDays,
+            historicalKeys: historicalKeys, now: now, calendar: calendar, freeDayKeys: freeDayKeys),
+            newlyRepairedKeys: repairedKeys(completedDays: completedDays.filter { $0.dayKey == todayKey }, now: now),
+            now: now, calendar: calendar)
     }
 
     static func repairedKeys(completedDays: [StudyCompletionDay], now: Date = Date()) -> Set<String> {

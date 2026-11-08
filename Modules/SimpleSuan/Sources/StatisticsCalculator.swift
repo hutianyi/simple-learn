@@ -24,6 +24,7 @@ struct PracticeActivity {
     let questionCounts: [Date: Int]
     let repairedKeys: Set<String>
     let completedKeys: Set<String>
+    let rewardProgress: StreakRewardProgress
 
     init(sessions: [SessionRecord], now: Date = Date(), calendar: Calendar = .current, freeDayKeys: Set<String>? = nil) {
         self.calendar = calendar
@@ -34,8 +35,12 @@ struct PracticeActivity {
             counts[calendar.startOfDay(for: question.answeredAt), default: 0] += 1
         }
         repairedKeys = Set(sessions.filter { $0.completedAt <= now }.compactMap { $0.validRepairKey(calendar: calendar) })
-        completedKeys = WeekendStreak.completionKeys(
-            Set(questionCounts.keys.map { OneDayStreakRepair.dayKey($0, calendar: calendar) }).union(repairedKeys).union(freeDayKeys ?? FreeDayStore.creditedKeys(now: now)),
+        let recordedKeys = Set(questionCounts.keys.map { OneDayStreakRepair.dayKey($0, calendar: calendar) })
+            .union(repairedKeys).union(freeDayKeys ?? FreeDayStore.creditedKeys(now: now))
+        completedKeys = WeekendStreak.completionKeys(recordedKeys, now: now, calendar: calendar)
+        let todayRepairs = Set(sessions.filter { $0.completedAt <= now && calendar.isDate($0.completedAt, inSameDayAs: now) }
+            .compactMap { $0.validRepairKey(calendar: calendar) })
+        rewardProgress = StreakRewardProgress(completionKeys: recordedKeys, newlyRepairedKeys: todayRepairs,
             now: now, calendar: calendar)
     }
 

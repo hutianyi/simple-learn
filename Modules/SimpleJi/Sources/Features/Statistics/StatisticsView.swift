@@ -51,7 +51,7 @@ struct StatisticsView: View {
             VStack(alignment: .leading, spacing: 24) {
                 if celebration {
                     if completionError == nil && completionHistory.error == nil {
-                        StreakRewardCard(moduleName: "简单记", streak: completionHistory.streak)
+                        StreakRewardCard(moduleName: "简单记", progress: completionHistory.reward)
                     }
                     celebrationHeader
                     if completionError == nil && completionHistory.error == nil
@@ -295,7 +295,7 @@ struct StatisticsView: View {
             }), streak: history.streak, error: completionError ?? history.error, calendar: calendar)
     }
 
-    private var completionHistory: (keys: Set<String>, streak: Int, error: String?) {
+    private var completionHistory: (keys: Set<String>, streak: Int, reward: StreakRewardProgress, error: String?) {
         do {
             let records = try completionDays.map {
                 try JSONDecoder().decode(StudyCompletionDay.self, from: $0.snapshotData)
@@ -322,8 +322,9 @@ struct StatisticsView: View {
                 }
             }
             return (StudyStreak.completionKeys(completedDays: records, historicalKeys: historicalKeys, calendar: calendar),
-                StudyStreak.count(completedDays: records, calendar: calendar, historicalKeys: historicalKeys), nil)
-        } catch { return ([], 0, "无法读取完成记录：\(error.localizedDescription)") }
+                StudyStreak.count(completedDays: records, calendar: calendar, historicalKeys: historicalKeys),
+                StudyStreak.rewardProgress(completedDays: records, historicalKeys: historicalKeys, calendar: calendar), nil)
+        } catch { return ([], 0, StreakRewardProgress(streak: 0), "无法读取完成记录：\(error.localizedDescription)") }
     }
 
     private var weakStates: [ReviewStateEntity] {

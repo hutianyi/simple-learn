@@ -2,6 +2,59 @@ import XCTest
 @testable import StudyShell
 
 final class ModuleSessionTests: XCTestCase {
+    func testRepairCrossesRewardMilestonesWithoutTreatingEarlierRewardsAsNew() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        func date(_ day: Int) -> Date {
+            calendar.date(from: DateComponents(year: 2026, month: 10, day: day, hour: 12))!
+        }
+        func key(_ day: Int) -> String { OneDayStreakRepair.dayKey(date(day), calendar: calendar) }
+        for (start, friday, previous) in [(3, 9, 6), (3, 16, 13), (1, 9, 8)] {
+            for day in [friday + 1, friday + 2] {
+                let keys = Set((start..<friday).map(key)).union([key(friday), key(day)])
+                let progress = StreakRewardProgress(completionKeys: keys, newlyRepairedKeys: [key(friday)],
+                    now: date(day), calendar: calendar)
+                XCTAssertEqual(progress.streak, previous + day - friday + 1)
+                XCTAssertEqual(progress.isRewardDay, previous != 8)
+                if progress.isRewardDay {
+                    XCTAssertEqual(progress.rewardMilestone, previous == 6 ? 7 : 14)
+                    XCTAssertEqual(progress.cycleDays, 7)
+                    XCTAssertEqual(progress.daysRemaining, 7 - progress.streak % 7)
+                }
+            }
+        }
+        let repairedSaturday = Set((3...10).map(key))
+        let sunday = StreakRewardProgress(completionKeys: repairedSaturday.union([key(11)]),
+            now: date(11), calendar: calendar)
+        XCTAssertEqual(sunday.streak, 9)
+        XCTAssertFalse(sunday.isRewardDay)
+    }
+
+    func testWeekendJumpAndAutomaticSundayCreditDoNotSkipRewards() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        func date(_ day: Int) -> Date {
+            calendar.date(from: DateComponents(year: 2026, month: 10, day: day, hour: 12))!
+        }
+        func key(_ day: Int) -> String { OneDayStreakRepair.dayKey(date(day), calendar: calendar) }
+        let sunday = StreakRewardProgress(completionKeys: Set((5...9).map(key)).union([key(11)]),
+            now: date(11), calendar: calendar)
+        XCTAssertEqual(sunday.streak, 7)
+        XCTAssertTrue(sunday.isRewardDay)
+        let monday = StreakRewardProgress(completionKeys: Set((5...10).map(key)).union([key(12)]),
+            now: date(12), calendar: calendar)
+        XCTAssertEqual(monday.streak, 8)
+        XCTAssertTrue(monday.isRewardDay)
+        let alreadyReached = StreakRewardProgress(completionKeys: Set((4...11).map(key)),
+            now: date(11), calendar: calendar)
+        XCTAssertEqual(alreadyReached.streak, 9)
+        XCTAssertFalse(alreadyReached.isRewardDay)
+        let broken = StreakRewardProgress(completionKeys: Set((1...8).map(key)).union([key(12)]),
+            now: date(12), calendar: calendar)
+        XCTAssertEqual(broken.streak, 1)
+        XCTAssertFalse(broken.isRewardDay)
+    }
+
     func testRewardRepeatsEverySevenCompletedDaysAndResetsAfterABreak() {
         for streak in 1...28 {
             let progress = StreakRewardProgress(streak: streak)

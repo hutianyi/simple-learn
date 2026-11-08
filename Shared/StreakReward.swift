@@ -4,11 +4,38 @@ public struct StreakRewardProgress: Equatable {
     public static let daysPerReward = 7
     public static let rewardYuan = 3
     public let streak: Int
+    private let previousStreak: Int
 
-    public init(streak: Int) { self.streak = max(0, streak) }
+    public init(streak: Int, previousStreak: Int? = nil) {
+        self.streak = max(0, streak)
+        self.previousStreak = min(self.streak, max(0, previousStreak ?? (self.streak - 1)))
+    }
 
-    public var isRewardDay: Bool { streak > 0 && streak % Self.daysPerReward == 0 }
-    public var daysRemaining: Int { isRewardDay ? 0 : Self.daysPerReward - streak % Self.daysPerReward }
+    // Use actual completion dates before weekend expansion. Today's repair must
+    // not look like an earlier celebration that already showed the reward.
+    public init(completionKeys: Set<String>, newlyRepairedKeys: Set<String> = [],
+                now: Date = Date(), calendar: Calendar = .current) {
+        let keys = WeekendStreak.completionKeys(completionKeys, now: now, calendar: calendar)
+        let streak = WeekendStreak.count(completedKeys: keys, now: now, calendar: calendar)
+        var cursor = calendar.startOfDay(for: now)
+        let todayKey = OneDayStreakRepair.dayKey(cursor, calendar: calendar)
+        guard completionKeys.contains(todayKey) else { self.init(streak: streak); return }
+        let previousKey = completionKeys.subtracting(newlyRepairedKeys).filter { $0 < todayKey }.max()
+        var previousStreak = streak
+        while previousStreak > 0 && OneDayStreakRepair.dayKey(cursor, calendar: calendar) != previousKey {
+            previousStreak -= 1
+            guard let previous = calendar.date(byAdding: .day, value: -1, to: cursor) else { break }
+            cursor = previous
+        }
+        self.init(streak: streak, previousStreak: previousStreak)
+    }
+
+    public var rewardMilestone: Int { streak / Self.daysPerReward * Self.daysPerReward }
+    public var isRewardDay: Bool {
+        streak > 0 && (streak % Self.daysPerReward == 0
+            || streak / Self.daysPerReward > previousStreak / Self.daysPerReward)
+    }
+    public var daysRemaining: Int { streak > 0 && streak % Self.daysPerReward == 0 ? 0 : Self.daysPerReward - streak % Self.daysPerReward }
     public var cycleDays: Int { isRewardDay ? Self.daysPerReward : streak % Self.daysPerReward }
 
     public var countdown: String {
@@ -55,8 +82,12 @@ public struct StreakRewardCard: View {
     private var accent: Color { progress.isRewardDay ? .orange : .purple }
 
     public init(moduleName: String, streak: Int) {
+        self.init(moduleName: moduleName, progress: StreakRewardProgress(streak: streak))
+    }
+
+    public init(moduleName: String, progress: StreakRewardProgress) {
         self.moduleName = moduleName
-        self.progress = StreakRewardProgress(streak: streak)
+        self.progress = progress
     }
 
     public var body: some View {
@@ -74,10 +105,17 @@ public struct StreakRewardCard: View {
                     }
                 }.accessibilityHidden(true)
                 if progress.isRewardDay {
+                    if progress.streak != progress.rewardMilestone {
+                        Text("已达成连续 \(progress.rewardMilestone) 天挑战！")
+                            .font(.title2.bold())
+                    }
                     Text("你可以兑换 \(StreakRewardProgress.rewardYuan) 元零花钱啦！")
                         .font(.system(.largeTitle, design: .rounded, weight: .heavy))
                     Text("把这个页面给爸爸看，领取你的奖励吧！")
                         .font(.title2.bold())
+                    if progress.streak != progress.rewardMilestone {
+                        Text(progress.countdown).font(.title3)
+                    }
                 } else {
                     Text(progress.countdown).font(.title2.weight(.semibold))
                 }
@@ -110,5 +148,9 @@ public struct StreakRewardCard: View {
 
 #Preview("下一轮提醒") {
     StreakRewardCard(moduleName: "简单记", streak: 8).padding()
+}
+
+#Preview("补做跨过第七天") {
+    StreakRewardCard(moduleName: "简单算", progress: StreakRewardProgress(streak: 9, previousStreak: 6)).padding()
 }
 #endif

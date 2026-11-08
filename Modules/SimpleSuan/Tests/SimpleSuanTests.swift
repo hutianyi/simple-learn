@@ -131,6 +131,26 @@ final class SimpleSuanTests: XCTestCase {
     }
 
 
+    func testFridayRepairShowsSkippedRewardAfterSavingAndRestoring() throws {
+        for day in [10, 11] {
+            let now = activityDate(2026, 10, day)
+            let previous = (3...8).map { activitySession(count: 1, at: activityDate(2026, 10, $0)) }
+            var repair = activitySession(count: 80, at: now)
+            repair.repairedDayKey = "2026-10-09"
+            let data = try SuanBackup.decode(SuanBackup.encode(AppData(sessions: previous + [repair])))
+            let activity = PracticeActivity(sessions: data.sessions, now: now, calendar: activityCalendar, freeDayKeys: [])
+            XCTAssertEqual(activity.streak, day == 10 ? 8 : 9)
+            XCTAssertEqual(activity.rewardProgress.streak, activity.streak)
+            XCTAssertTrue(activity.rewardProgress.isRewardDay)
+            XCTAssertEqual(activity.rewardProgress.rewardMilestone, 7)
+            let repeated = PracticeActivity(sessions: data.sessions + [activitySession(count: 1, at: now)],
+                now: now, calendar: activityCalendar, freeDayKeys: [])
+            XCTAssertEqual(repeated.rewardProgress, activity.rewardProgress)
+            let deleted = PracticeActivity(sessions: previous, now: now, calendar: activityCalendar, freeDayKeys: [])
+            XCTAssertFalse(deleted.rewardProgress.isRewardDay)
+        }
+    }
+
     func testRepairRestoresOnlyYesterdayWithoutMovingActualAnswers() throws {
         let now = activityDate(2026, 10, 8, hour: 12)
         let old = activitySession(count: 40, at: activityDate(2026, 10, 6, hour: 12))

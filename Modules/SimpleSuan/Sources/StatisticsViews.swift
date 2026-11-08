@@ -13,7 +13,7 @@ struct SessionResultView: View {
         NavigationStack {
             ScrollView { VStack(spacing: 20) {
                 if saved {
-                    StreakRewardCard(moduleName: "简单算", streak: activity.streak)
+                    StreakRewardCard(moduleName: "简单算", progress: activity.rewardProgress)
                     celebrationHeader(activity: activity)
                     if activity.isComplete(activity.today) {
                         WeekendCompletionNotice(date: activity.today, calendar: activity.calendar)
