@@ -8,6 +8,56 @@ final class DictationRepositoryTests: XCTestCase {
     private let timezone = TimeZone(secondsFromGMT: 0)!
     private let now = Date(timeIntervalSince1970: 1_788_192_000)
 
+    func testKeyboardDurationCountsEnglishLettersWithAMinimumOfSixtySeconds() {
+        for answer in ["", "gas", "lamp", "don't"] {
+            XCTAssertEqual(DictationKeyboardClock.duration(for: answer), 60, answer)
+        }
+        XCTAssertEqual(DictationKeyboardClock.duration(for: "apple"), 75)
+        XCTAssertEqual(DictationKeyboardClock.duration(for: "STRAWBERRY"), 150)
+        XCTAssertEqual(DictationKeyboardClock.duration(for: "well-known"), 135)
+        XCTAssertEqual(DictationKeyboardClock.duration(for: "ice cream"), 120)
+        let deadline = now.addingTimeInterval(150)
+        XCTAssertEqual(DictationKeyboardClock.remaining(until: deadline, now: now), 150)
+        XCTAssertEqual(DictationKeyboardClock.remaining(until: deadline, now: now.addingTimeInterval(70)), 80)
+        XCTAssertEqual(DictationKeyboardClock.remaining(until: deadline, now: deadline), 0)
+        XCTAssertEqual(DictationKeyboardClock.remaining(until: deadline, now: deadline.addingTimeInterval(1)), 0)
+    }
+
+    func testLongWordKeyboardVerificationKeepsDeadlineAndAcceptsAnswerAfterOneMinute() async throws {
+        let (controller, repo, day, ids, campaign) = try await verificationFixture(firstWord: "strawberry")
+        _ = try await repo.stageVerification(dayID: day.id, wordID: ids[0], recognized: "wrong", now: now)
+        let started = try await repo.beginKeyboardVerification(dayID: day.id, wordID: ids[0], now: now)
+        XCTAssertEqual(started.items.first?.keyboardDeadline, now.addingTimeInterval(150))
+        let restarted = DictationRepository(container: controller.container,
+            calendar: DictationEligibility.calendar(timeZone: timezone))
+        _ = try await restarted.loadOrCreateDay(limit: 20, campaign: campaign, now: now.addingTimeInterval(70))
+        let reopened = try await restarted.beginKeyboardVerification(dayID: day.id, wordID: ids[0], now: now.addingTimeInterval(70))
+        XCTAssertEqual(reopened.items.first?.keyboardDeadline, now.addingTimeInterval(150))
+        let result = try await restarted.submitFormal(dayID: day.id, wordID: ids[0], recognized: "strawberry",
+            resolvingVerification: true, viaKeyboard: true, now: now.addingTimeInterval(70))
+        guard case .result(_, let correct, _) = result else { return XCTFail("Expected final grade") }
+        XCTAssertTrue(correct)
+        let events = try controller.container.viewContext.fetch(DictationEventEntity.fetchRequest())
+        XCTAssertEqual(events.first { $0.kind == "keyboardVerification" }?.remainingSeconds, 80)
+    }
+
+    func testLongWordRetestKeyboardTimesOutAtItsCalculatedDeadline() async throws {
+        let (_, repo, day, ids, _) = try await verificationFixture(firstWord: "strawberry")
+        _ = try await repo.submitFormal(dayID: day.id, wordID: ids[0], recognized: "wrong", now: now)
+        _ = try await repo.beginRemediation(dayID: day.id, now: now)
+        for _ in 0..<3 {
+            _ = try await repo.recordRemediationCopy(dayID: day.id, wordID: ids[0], recognized: "strawberry", now: now)
+        }
+        _ = try await repo.stageVerification(dayID: day.id, wordID: ids[0], recognized: "wrong", now: now)
+        let started = try await repo.beginKeyboardVerification(dayID: day.id, wordID: ids[0], now: now)
+        XCTAssertEqual(started.items.first?.keyboardDeadline, now.addingTimeInterval(150))
+        let result = try await repo.submitRetest(dayID: day.id, wordID: ids[0], recognized: "strawberry",
+            resolvingVerification: true, viaKeyboard: true, now: now.addingTimeInterval(150))
+        guard case .result(_, let correct, let reason) = result else { return XCTFail("Expected timeout") }
+        XCTAssertFalse(correct)
+        XCTAssertEqual(reason, .timeout)
+    }
+
     func testAnswerComparisonPreservesWordBoundariesAndPunctuation() {
         XCTAssertTrue(DictationAnswerMatcher.matches("  APPLE  ", answer: "apple"))
         XCTAssertTrue(DictationAnswerMatcher.matches("a   part", answer: "a part"))
@@ -972,13 +1022,13 @@ final class DictationRepositoryTests: XCTestCase {
             calendar: DictationEligibility.calendar(timeZone: timezone)), ids)
     }
 
-    private func verificationFixture(wordCount: Int = 1) async throws
+    private func verificationFixture(wordCount: Int = 1, firstWord: String = "gas") async throws
         -> (PersistenceController, DictationRepository, DictationDay, [UUID], BaselineCampaignSnapshot) {
         let controller = PersistenceController(inMemory: true)
         let context = controller.container.viewContext
         var ids: [UUID] = []
         for index in 0..<wordCount {
-            ids.append(try seedBareWord(index == 0 ? "gas" : "lamp", chinese: index == 0 ? "气体" : "灯",
+            ids.append(try seedBareWord(index == 0 ? firstWord : "lamp", chinese: index == 0 ? "气体" : "灯",
                 at: now.addingTimeInterval(-86_400 + Double(index)), in: context))
         }
         try context.save()

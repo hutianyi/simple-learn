@@ -87,6 +87,12 @@ final class DictationViewModel: ObservableObject {
         return activeItem?.allowsKeyboard == true
     }
 
+    var offersCopyKeyboard: Bool {
+        guard recognitionNotice != nil, keyboardAllowed else { return false }
+        if let copy = activeCopy { return copy.consecutiveFailures >= 3 }
+        return (activeItem?.consecutiveCopyFailures ?? 0) >= 3
+    }
+
     var canDefer: Bool {
         !isRepairFlow && (activeCopy != nil || (activeItem != nil && (day?.phase == .remediationCopy || day?.phase == .retest)))
     }
@@ -325,7 +331,7 @@ final class DictationViewModel: ObservableObject {
         _ = await submit(drawing: PKDrawing(), explicitReason: reason, keyboardText: text)
         guard errorMessage == nil else { return false }
         if reason == .timeout {
-            notice = "键盘抄写的60秒已到，当前抄写尚未完成。可以重新手写或再试一次。"
+            notice = "键盘抄写时间已到，当前抄写尚未完成。可以重新手写或再试一次。"
             return true
         }
         return DictationAnswerMatcher.matches(text, answer: answer)

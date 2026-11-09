@@ -93,10 +93,13 @@ struct DictationDay: Codable, Equatable {
 }
 
 enum DictationKeyboardClock {
-    static let duration: TimeInterval = 60
+    static func duration(for answer: String) -> TimeInterval {
+        let letterCount = answer.filter { $0.isASCII && $0.isLetter }.count
+        return max(60, TimeInterval(letterCount) * 15)
+    }
 
     static func remaining(until deadline: Date, now: Date = Date()) -> TimeInterval {
-        max(0, min(duration, deadline.timeIntervalSince(now)))
+        max(0, deadline.timeIntervalSince(now))
     }
 }
 

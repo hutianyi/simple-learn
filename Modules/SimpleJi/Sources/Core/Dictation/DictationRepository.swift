@@ -496,7 +496,9 @@ final class DictationRepository {
             guard let index = Self.activeTimedIndex(in: day), day.items[index].wordID == wordID,
                   day.items[index].awaitsVerification else { throw DictationError.invalidPhase }
             if day.items[index].keyboardDeadline == nil {
-                day.items[index].keyboardDeadline = now.addingTimeInterval(DictationKeyboardClock.duration)
+                day.items[index].keyboardDeadline = now.addingTimeInterval(
+                    DictationKeyboardClock.duration(for: day.items[index].english)
+                )
                 try Self.save(day, to: entity, now: now, in: context, calendar: calendar)
             }
             return day
