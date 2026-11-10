@@ -2,13 +2,36 @@ import SwiftUI
 import StudyShell
 
 struct ContentView: View {
+    private enum Page: Hashable { case practice, statistics }
+    @State private var selectedPage: Page = .practice
+
     var body: some View {
-        TabView {
+        TabView(selection: $selectedPage) {
             NavigationStack { StartPracticeView() }
+                .toolbarVisibility(.hidden, for: .tabBar)
                 .tabItem { Label("练习", systemImage: "plus.forwardslash.minus") }
-            NavigationStack { SuanDataView() }.tabItem { Label("数据", systemImage: "externaldrive") }
+                .tag(Page.practice)
             NavigationStack { StatisticsView() }
+                .toolbarVisibility(.hidden, for: .tabBar)
                 .tabItem { Label("统计", systemImage: "chart.line.uptrend.xyaxis") }
+                .tag(Page.statistics)
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            HStack(spacing: 30) {
+                StudyNavigationButton("练习", symbol: "plus.forwardslash.minus", isSelected: selectedPage == .practice) {
+                    selectedPage = .practice
+                }
+                .accessibilityIdentifier("suan.page.practice")
+                StudyNavigationButton("统计", symbol: "chart.line.uptrend.xyaxis", isSelected: selectedPage == .statistics) {
+                    selectedPage = .statistics
+                }
+                .accessibilityIdentifier("suan.page.statistics")
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 28)
+            .padding(.top, 12)
+            .padding(.bottom, 24)
+            .background(StudyAppearance.background)
         }
     }
 }

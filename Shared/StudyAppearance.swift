@@ -59,6 +59,35 @@ public enum StudyAppearance {
     public static let surface = Color(uiColor: .secondarySystemGroupedBackground)
 }
 
+public struct StudyNavigationButton: View {
+    @Environment(\.studyTheme) private var theme
+    private let title: String
+    private let symbol: String
+    private let isSelected: Bool
+    private let action: () -> Void
+
+    public init(_ title: String, symbol: String, isSelected: Bool = false, action: @escaping () -> Void) {
+        self.title = title
+        self.symbol = symbol
+        self.isSelected = isSelected
+        self.action = action
+    }
+
+    public var body: some View {
+        Button(action: action) {
+            VStack(spacing: 6) {
+                Image(systemName: symbol).font(.title2)
+                Text(title).font(.caption.weight(.semibold))
+            }
+            .frame(minWidth: 64, minHeight: 54)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(isSelected ? theme.accent : Color.secondary)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+}
+
 public struct StudyPrimaryButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
     @Environment(\.studyTheme) private var theme

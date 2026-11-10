@@ -1,5 +1,6 @@
 import CoreData
 import SwiftUI
+import StudyShell
 
 struct RootView: View {
     @ObservedObject var settings: SettingsStore
@@ -16,12 +17,54 @@ struct RootView: View {
     var body: some View {
         Group {
             if persistence.isReady {
-                NavigationStack(path: $router.path) {
-                    HomeView(settings: settings, now: homeDate)
-                        .id(DictationEligibility.dayKey(for: homeDate))
-                        .navigationDestination(for: AppRoute.self) { route in
-                            destination(for: route)
+                TabView(selection: $router.selectedPage) {
+                    NavigationStack(path: $router.path) {
+                        HomeView(settings: settings, now: homeDate)
+                            .id(DictationEligibility.dayKey(for: homeDate))
+                            .navigationDestination(for: AppRoute.self) { route in
+                                destination(for: route)
+                            }
+                    }
+                    .toolbarVisibility(.hidden, for: .tabBar)
+                    .tabItem { Label(AppPage.study.title, systemImage: AppPage.study.symbol) }
+                    .tag(AppPage.study)
+
+                    NavigationStack { WordLibraryView() }
+                        .toolbarVisibility(.hidden, for: .tabBar)
+                        .tabItem { Label(AppPage.wordLibrary.title, systemImage: AppPage.wordLibrary.symbol) }
+                        .tag(AppPage.wordLibrary)
+
+                    NavigationStack { StatisticsView(settings: settings) }
+                        .toolbarVisibility(.hidden, for: .tabBar)
+                        .tabItem { Label(AppPage.statistics.title, systemImage: AppPage.statistics.symbol) }
+                        .tag(AppPage.statistics)
+
+                    NavigationStack {
+                        SettingsView(settings: settings, speech: speech, container: persistence.container)
+                    }
+                    .toolbarVisibility(.hidden, for: .tabBar)
+                    .tabItem { Label(AppPage.settings.title, systemImage: AppPage.settings.symbol) }
+                    .tag(AppPage.settings)
+                }
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    if !router.isStudying {
+                        HStack(spacing: 0) {
+                            ForEach(AppPage.allCases, id: \.self) { page in
+                                StudyNavigationButton(page.title, symbol: page.symbol, isSelected: router.selectedPage == page) {
+                                    router.selectedPage = page
+                                }
+                                .frame(maxWidth: .infinity)
+                                .accessibilityIdentifier("ji.page.\(page.rawValue)")
+                            }
                         }
+                        .frame(maxWidth: 440)
+                        .frame(maxWidth: .infinity)
+                        .padding(.horizontal, 28)
+                        .padding(.top, 12)
+                        .padding(.bottom, 24)
+                        .background(StudyAppearance.background)
+                        .accessibilityIdentifier("ji.pageNavigation")
+                    }
                 }
                 .onPreferenceChange(StudyCelebrationReadyKey.self) { celebrationReady = $0 }
                 .background {
@@ -108,16 +151,6 @@ struct RootView: View {
                 sessionLimit: extraPracticeLimit,
                 extraPracticeScope: settings.extraPracticeScope
             )
-        case .settings:
-            SettingsView(
-                settings: settings,
-                speech: speech,
-                container: persistence.container
-            )
-        case .statistics:
-            StatisticsView(settings: settings)
-        case .wordLibrary:
-            WordLibraryView()
         }
     }
 

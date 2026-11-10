@@ -49,6 +49,54 @@ final class SimpleSuanTests: XCTestCase {
         let stats = StatisticsCalculator.statistics(for: records)
         XCTAssertEqual(stats.correct, 1); XCTAssertEqual(stats.incorrect, 1); XCTAssertEqual(stats.accuracy, 0.5); XCTAssertEqual(stats.totalDuration, 8); XCTAssertEqual(stats.averageDuration, 4); XCTAssertEqual(stats.fastest, 2); XCTAssertEqual(stats.slowest, 6)
     }
+
+    func testRecentAverageUsesLatestThreeMatchingBatchesAndWeightsByQuestionCount() throws {
+        for mode in PracticeMode.allCases {
+            let operations = OperationType.allCases
+            func session(day: Int, count: Int, duration: Double) -> SessionRecord {
+                let date = activityDate(2026, 10, day)
+                let questions = (0..<count).map { index in
+                    QuestionRecord(id: UUID(), sequenceNumber: index + 1,
+                        operationType: operations[index % operations.count], leftOperand: 20, rightOperand: 2,
+                        correctAnswer: 22, userAnswer: 22, isCorrect: true,
+                        durationSeconds: mode.operation == nil || operations[index % operations.count] == mode.operation ? duration : 100,
+                        presentedAt: date, answeredAt: date)
+                }
+                return SessionRecord(id: UUID(), startedAt: date, completedAt: date, practiceMode: .mixed,
+                    targetQuestionCount: count, questions: questions)
+            }
+            let oldest = session(day: 1, count: 4, duration: 100)
+            let first = session(day: 2, count: 4, duration: 2)
+            let second = session(day: 3, count: 8, duration: 4)
+            let third = session(day: 4, count: 4, duration: 8)
+            var partial = session(day: 5, count: 4, duration: 100)
+            partial.isPartial = true
+            var sessions = [second, partial, oldest, third, first]
+            if let operation = mode.operation {
+                let other = OperationType.allCases.first { $0 != operation }!
+                sessions.append(activitySession(count: 40, at: activityDate(2026, 10, 6), operation: other))
+            }
+            let average = try XCTUnwrap(StatisticsCalculator.recentAverageDuration(sessions: sessions, operation: mode.operation))
+            XCTAssertEqual(average, 4.5, accuracy: 0.001, "\(mode)")
+            let remaining = sessions.filter { $0.id != third.id }
+            let afterDeletion = try XCTUnwrap(StatisticsCalculator.recentAverageDuration(sessions: remaining, operation: mode.operation))
+            XCTAssertEqual(afterDeletion, 27.5, accuracy: 0.001, "\(mode)")
+        }
+    }
+
+    func testRecentAverageHandlesFewerThanThreeBatchesAndNoMatchingData() throws {
+        let first = SessionRecord(id: UUID(), startedAt: Date(), completedAt: Date(), practiceMode: .addition,
+            targetQuestionCount: 1, questions: [record(correct: true, duration: 2)])
+        let second = SessionRecord(id: UUID(), startedAt: Date(), completedAt: Date(), practiceMode: .addition,
+            targetQuestionCount: 1, questions: [record(correct: false, duration: 6)])
+        XCTAssertEqual(StatisticsCalculator.recentAverageDuration(sessions: [first], operation: nil), 2)
+        XCTAssertEqual(StatisticsCalculator.recentAverageDuration(sessions: [first, second], operation: .addition), 4)
+        XCTAssertNil(StatisticsCalculator.recentAverageDuration(sessions: [], operation: nil))
+        XCTAssertNil(StatisticsCalculator.recentAverageDuration(sessions: [first, second], operation: .division))
+        var partial = first
+        partial.isPartial = true
+        XCTAssertNil(StatisticsCalculator.recentAverageDuration(sessions: [partial], operation: nil))
+    }
     func testAppDataJSONRoundTrip() throws {
         let session = SessionRecord(id: UUID(), startedAt: Date(), completedAt: Date(), practiceMode: .addition, targetQuestionCount: 1, questions: [record(correct: true, duration: 2)])
         let original = AppData(schemaVersion: 1, sessions: [session])

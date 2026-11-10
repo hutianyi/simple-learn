@@ -10,6 +10,9 @@ struct StatisticsView: View {
     @Environment(\.dismiss) private var dismiss
     private let celebration: Bool
     @State private var completionError: String?
+    @State private var selectedReview: Int?
+    @GestureState private var isInspectingReview = false
+    @ScaledMetric(relativeTo: .subheadline) private var tooltipTopSpace = 52
     @FetchRequest private var completionDays: FetchedResults<StudyCompletionDayEntity>
     @FetchRequest private var words: FetchedResults<WordEntity>
     @FetchRequest private var states: FetchedResults<ReviewStateEntity>
@@ -93,8 +96,36 @@ struct StatisticsView: View {
                                 )
                                 .foregroundStyle(AppPalette.accent.gradient)
                                 .cornerRadius(5)
+                                .annotation(position: .top, spacing: 6,
+                                    overflowResolution: .init(x: .fit(to: .chart), y: .disabled)) {
+                                    if isInspectingReview && selectedReview == point.index {
+                                        VStack(spacing: 2) {
+                                            Text(point.date.formatted(.dateTime.month().day().hour().minute()))
+                                                .font(.caption2)
+                                            Text(String(format: "%.1f%%", point.accuracy))
+                                                .font(.subheadline.weight(.semibold)).monospacedDigit()
+                                        }
+                                        .foregroundStyle(StudyTheme.ji.buttonForeground)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 6)
+                                        .background(StudyTheme.ji.accent, in: RoundedRectangle(cornerRadius: 6))
+                                        .allowsHitTesting(false)
+                                    }
+                                }
+                                .accessibilityLabel("第\(point.index)次复习，\(point.date.formatted(date: .abbreviated, time: .shortened))")
+                                .accessibilityValue(String(format: "%.1f%%", point.accuracy))
                             }
                             .chartYScale(domain: 0...100)
+                            .chartXSelection(value: $selectedReview)
+                            .chartGesture { proxy in
+                                DragGesture(minimumDistance: 0)
+                                    .updating($isInspectingReview) { _, inspecting, _ in inspecting = true }
+                                    .onChanged { proxy.selectXValue(at: $0.location.x) }
+                                    .onEnded { _ in selectedReview = nil }
+                            }
+                            .onChange(of: isInspectingReview) { _, inspecting in
+                                if !inspecting { selectedReview = nil }
+                            }
                             .chartYAxis {
                                 AxisMarks(values: [0, 50, 100]) { value in
                                     AxisGridLine()
@@ -106,6 +137,7 @@ struct StatisticsView: View {
                                 }
                             }
                             .frame(height: 210)
+                            .padding(.top, tooltipTopSpace)
                         }
                         .padding(20)
                         .background(AppPalette.surface)
@@ -354,6 +386,7 @@ struct StatisticsView: View {
         return recent.enumerated().map { offset, session in
             TrendPoint(
                 index: offset + 1,
+                date: session.startedAt,
                 accuracy: Double(session.formalKnown) / Double(session.formalAnswered) * 100
             )
         }
@@ -366,6 +399,7 @@ struct StatisticsView: View {
 
 private struct TrendPoint: Identifiable {
     let index: Int
+    let date: Date
     let accuracy: Double
     var id: Int { index }
 }

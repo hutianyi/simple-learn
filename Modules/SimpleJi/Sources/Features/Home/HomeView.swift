@@ -131,11 +131,6 @@ struct HomeView: View {
 
                 Spacer()
 
-                HStack(spacing: 30) {
-                    utilityButton("词库", symbol: "books.vertical", route: .wordLibrary)
-                    utilityButton("统计", symbol: "chart.bar.xaxis", route: .statistics)
-                    utilityButton("设置", symbol: "gearshape", route: .settings)
-                }
             }
             .padding(.horizontal, 28)
             .padding(.bottom, 24)
@@ -215,19 +210,4 @@ struct HomeView: View {
         settings.masteredDictationTerms.contains(EnglishNormalizer.normalize(word.english))
     }
 
-    private func utilityButton(_ title: String, symbol: String, route: AppRoute) -> some View {
-        Button {
-            router.push(route)
-        } label: {
-            VStack(spacing: 6) {
-                Image(systemName: symbol)
-                    .font(.title2)
-                Text(title)
-                    .font(.caption.weight(.semibold))
-            }
-            .frame(minWidth: 64, minHeight: 54)
-        }
-        .buttonStyle(.plain)
-        .foregroundStyle(AppPalette.textSecondary)
-    }
 }

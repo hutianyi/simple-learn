@@ -100,6 +100,14 @@ enum StatisticsCalculator {
         return questions.isEmpty ? nil : statistics(for: questions)
     }
 
+    static func recentAverageDuration(sessions: [SessionRecord], operation: OperationType?) -> Double? {
+        let recent = sessions.filter { session in
+            session.isPartial != true && statistics(for: session, operation: operation) != nil
+        }.sorted { $0.completedAt > $1.completedAt }.prefix(3)
+        let questions = recent.flatMap(\.questions).filter { operation == nil || $0.operationType == operation }
+        return questions.isEmpty ? nil : statistics(for: questions).averageDuration
+    }
+
     static func trend(sessions: [SessionRecord], operation: OperationType?) -> [TrendPoint] {
         sessions.sorted { $0.completedAt < $1.completedAt }.compactMap { session in
             statistics(for: session, operation: operation).map { TrendPoint(session: session, statistics: $0) }

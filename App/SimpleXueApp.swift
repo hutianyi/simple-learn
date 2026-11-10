@@ -122,8 +122,9 @@ struct LearningHomeView: View {
                                     AudioPlaybackCoordinator.shared.selectOwner(nil)
                                     self.selected = nil
                                 } catch { leaveError = error.localizedDescription }
-                            } label: { Label("切换功能", systemImage: "square.grid.2x2") }
+                            } label: { Label("简单学", systemImage: "square.grid.2x2") }
                                 .disabled(!session.canLeave)
+                                .accessibilityLabel("返回简单学首页")
                                 .accessibilityIdentifier("shell.switch")
                             Spacer()
                             if !session.canLeave { Text(session.reasons.contains("ting.playback") ? "请先停止播放" : "请先结束本轮").font(.caption).foregroundStyle(.secondary) }
@@ -202,6 +203,21 @@ struct LearningHomeView: View {
                         .padding(StudyAppearance.pagePadding).frame(maxWidth: 1000).frame(maxWidth: .infinity)
                     }
                     .scrollDisabled(isReordering)
+                    .safeAreaInset(edge: .bottom, spacing: 0) {
+                        HStack {
+                            Spacer()
+                            Text("v\(appVersion)")
+                                .font(.caption2)
+                                .monospacedDigit()
+                                .foregroundStyle(.tertiary)
+                                .accessibilityLabel("简单学版本 \(appVersion)")
+                                .accessibilityIdentifier("home.version")
+                        }
+                        .padding(.horizontal, StudyAppearance.pagePadding)
+                        .padding(.top, 4)
+                        .padding(.bottom, 8)
+                        .background(StudyAppearance.background)
+                    }
                     .background(StudyAppearance.background)
                 }
             }
@@ -239,6 +255,10 @@ struct LearningHomeView: View {
         .alert("进度保存失败，暂未退出", isPresented: Binding(get: { leaveError != nil }, set: { if !$0 { leaveError = nil } })) {
             Button("好", role: .cancel) {}
         } message: { Text(leaveError ?? "") }
+    }
+
+    private var appVersion: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—"
     }
 
     private var softOpacity: Double { colorScheme == .dark ? 0.16 : 0.08 }

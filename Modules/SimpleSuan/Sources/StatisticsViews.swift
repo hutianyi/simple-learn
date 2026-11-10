@@ -69,11 +69,17 @@ struct SessionResultView: View {
 
 struct MetricsGrid: View {
     let statistics: SessionStatistics
+    var showsRecentAverage = false
+    var recentAverageDuration: Double?
     var body: some View {
         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 14) {
             Metric("正确", "\(statistics.correct)"); Metric("错误", "\(statistics.incorrect)")
             Metric("正确率", String(format: "%.0f%%", statistics.accuracy * 100)); Metric("总用时", totalTime(statistics.totalDuration))
-            Metric("平均用时", seconds(statistics.averageDuration)); Metric("最快", seconds(statistics.fastest)); Metric("最慢", seconds(statistics.slowest))
+            Metric("平均用时", seconds(statistics.averageDuration))
+            if showsRecentAverage {
+                Metric("最近三次的平均用时", recentAverageDuration.map { seconds($0) } ?? "暂无")
+            }
+            Metric("最快", seconds(statistics.fastest)); Metric("最慢", seconds(statistics.slowest))
         }.frame(maxWidth: 620)
     }
 }
@@ -128,9 +134,13 @@ struct StatisticsView: View {
                 }.pickerStyle(.segmented)
             }
             if let total {
-                Section("累计数据") { MetricsGrid(statistics: total) }
+                Section("累计数据") {
+                    MetricsGrid(statistics: total, showsRecentAverage: true,
+                        recentAverageDuration: StatisticsCalculator.recentAverageDuration(sessions: store.sessions, operation: operation))
+                }
                 Section {
                     TrendCharts(points: points)
+                        .id(selected)
                 }
                 Section("历史练习") {
                     ForEach(visibleHistorySessions) { session in
@@ -196,9 +206,82 @@ struct TrendCharts: View {
     var body: some View {
         Group {
             Text("正确率趋势").font(.title2.bold())
-            Chart(points) { point in LineMark(x: .value("日期", point.session.completedAt), y: .value("正确率", point.statistics.accuracy * 100)).foregroundStyle(.blue); PointMark(x: .value("日期", point.session.completedAt), y: .value("正确率", point.statistics.accuracy * 100)) }.chartYScale(domain: 0...100).frame(height: 180)
+            SessionTrendChart(points: points, showsAccuracy: true)
             Text("平均用时趋势").font(.title2.bold())
-            Chart(points) { point in LineMark(x: .value("日期", point.session.completedAt), y: .value("秒", point.statistics.averageDuration)).foregroundStyle(.orange); PointMark(x: .value("日期", point.session.completedAt), y: .value("秒", point.statistics.averageDuration)) }.frame(height: 180)
+            SessionTrendChart(points: points, showsAccuracy: false)
+        }
+    }
+}
+
+private struct SessionTrendChart: View {
+    let points: [TrendPoint]
+    let showsAccuracy: Bool
+    @State private var selectedDate: Date?
+    @GestureState private var isInspecting = false
+    @ScaledMetric(relativeTo: .subheadline) private var tooltipTopSpace = 52
+
+    private var selectedPoint: TrendPoint? {
+        guard isInspecting, let selectedDate else { return nil }
+        return points.min {
+            abs($0.session.completedAt.timeIntervalSince(selectedDate))
+                < abs($1.session.completedAt.timeIntervalSince(selectedDate))
+        }
+    }
+
+    private func value(_ point: TrendPoint) -> Double {
+        showsAccuracy ? point.statistics.accuracy * 100 : point.statistics.averageDuration
+    }
+
+    private func valueText(_ point: TrendPoint) -> String {
+        showsAccuracy ? String(format: "%.1f%%", value(point)) : seconds(value(point))
+    }
+
+    var body: some View {
+        Group {
+            if showsAccuracy {
+                chart.chartYScale(domain: 0...100)
+            } else {
+                chart
+            }
+        }
+        .chartXSelection(value: $selectedDate)
+        .chartGesture { proxy in
+            DragGesture(minimumDistance: 0)
+                .updating($isInspecting) { _, inspecting, _ in inspecting = true }
+                .onChanged { proxy.selectXValue(at: $0.location.x) }
+                .onEnded { _ in selectedDate = nil }
+        }
+        .onChange(of: isInspecting) { _, inspecting in
+            if !inspecting { selectedDate = nil }
+        }
+        .frame(height: 180)
+        .padding(.top, tooltipTopSpace)
+    }
+
+    private var chart: some View {
+        Chart(points) { point in
+            LineMark(x: .value("日期", point.session.completedAt), y: .value(showsAccuracy ? "正确率" : "秒", value(point)))
+                .foregroundStyle(showsAccuracy ? .blue : .orange)
+            PointMark(x: .value("日期", point.session.completedAt), y: .value(showsAccuracy ? "正确率" : "秒", value(point)))
+                .foregroundStyle(showsAccuracy ? .blue : .orange)
+                .symbolSize(selectedPoint?.id == point.id ? 90 : 30)
+                .annotation(position: .top, spacing: 6,
+                    overflowResolution: .init(x: .fit(to: .chart), y: .disabled)) {
+                    if selectedPoint?.id == point.id {
+                        VStack(spacing: 2) {
+                            Text(point.session.completedAt.formatted(.dateTime.month().day().hour().minute()))
+                                .font(.caption2)
+                            Text(valueText(point)).font(.subheadline.weight(.semibold)).monospacedDigit()
+                        }
+                        .foregroundStyle(StudyTheme.suan.buttonForeground)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 6)
+                        .background(StudyTheme.suan.accent, in: RoundedRectangle(cornerRadius: 6))
+                        .allowsHitTesting(false)
+                    }
+                }
+                .accessibilityLabel(point.session.completedAt.formatted(date: .abbreviated, time: .shortened))
+                .accessibilityValue(valueText(point))
         }
     }
 }

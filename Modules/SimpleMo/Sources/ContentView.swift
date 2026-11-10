@@ -12,6 +12,7 @@ struct ContentView: View {
     @Environment(\.studyTheme) private var theme
     @EnvironmentObject private var moduleSession: ModuleSession
     @StateObject private var session = DictationSession()
+    @State private var showsSettings = false
     @AppStorage("dictation.input") private var inputText = "苹果\n认真\n美丽\numbrella\nwonderful"
     @AppStorage("dictation.shuffle") private var shuffleWords = false
     @AppStorage("dictation.rate") private var speechRate = 0.42
@@ -98,11 +99,11 @@ struct ContentView: View {
                 // 使 ultraThinMaterial 背景横向铺满窗口而不是只覆盖中央内容。
                 ViewThatFits(in: .horizontal) {
                     HStack(spacing: 12) {
-                        settingsLink()
+                        settingsButton()
                         startButton
                     }
                     VStack(spacing: 12) {
-                        settingsLink(fillWidth: true)
+                        settingsButton(fillWidth: true)
                         startButton
                     }
                 }
@@ -114,25 +115,29 @@ struct ContentView: View {
             }
             .background(Color(uiColor: .systemGroupedBackground).ignoresSafeArea())
         }
+        .sheet(isPresented: $showsSettings) {
+            NavigationStack {
+                DictationSettingsView(
+                    session: session,
+                    shuffleWords: $shuffleWords,
+                    automaticTiming: $automaticTiming,
+                    repeatAfterSeconds: $repeatAfterSeconds,
+                    advanceAfterSeconds: $advanceAfterSeconds,
+                    speechRate: $speechRate
+                )
+            }
+        }
     }
 
-    private func settingsLink(fillWidth: Bool = false) -> some View {
-        NavigationLink {
-            DictationSettingsView(
-                session: session,
-                shuffleWords: $shuffleWords,
-                automaticTiming: $automaticTiming,
-                repeatAfterSeconds: $repeatAfterSeconds,
-                advanceAfterSeconds: $advanceAfterSeconds,
-                speechRate: $speechRate
-            )
-        } label: {
+    private func settingsButton(fillWidth: Bool = false) -> some View {
+        Button { showsSettings = true } label: {
             Label("设置", systemImage: "gearshape")
                 .frame(maxWidth: fillWidth ? .infinity : nil)
                 .padding(.vertical, 8)
         }
         .buttonStyle(.bordered)
         .controlSize(.large)
+        .accessibilityIdentifier("mo.settings")
     }
 
     private var startButton: some View {
@@ -365,6 +370,7 @@ struct ContentView: View {
 }
 
 private struct DictationSettingsView: View {
+    @Environment(\.dismiss) private var dismiss
     @ObservedObject var session: DictationSession
     @Binding var shuffleWords: Bool
     @Binding var automaticTiming: Bool
@@ -423,6 +429,12 @@ private struct DictationSettingsView: View {
         }
         .navigationTitle("设置")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                Button("完成") { dismiss() }
+                    .accessibilityIdentifier("mo.settings.done")
+            }
+        }
     }
 
     private func settingRow(title: String, seconds: Int) -> some View {

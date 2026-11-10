@@ -48,7 +48,7 @@ struct BeiLessonView: View {
                 VStack(alignment: .leading, spacing: 24) {
                     modePicker
                     rangePicker
-                    listeningControls
+                    listeningSettings
                     messages
                     ForEach(Array(passage.units.enumerated()).filter { (rangeFirst...rangeLast).contains($0.offset) }, id: \.element.id) { index, unit in
                         sentenceRow(index, unit).id(index)
@@ -59,6 +59,9 @@ struct BeiLessonView: View {
             .onChange(of: audio.current) { _, index in
                 if follow, audio.active { withAnimation { proxy.scrollTo(index, anchor: .center) } }
             }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            listeningPlaybackBar
         }
     }
 
@@ -165,7 +168,7 @@ struct BeiLessonView: View {
             Text(preferences.speechRate < 0.4 ? "慢" : (preferences.speechRate > 0.5 ? "快" : "正常"))
         }.disabled(study.active)
     }
-    private var listeningControls: some View {
+    private var listeningSettings: some View {
         VStack(alignment: .leading, spacing: 14) {
             speechRateControl
             HStack(spacing: 24) {
@@ -178,32 +181,54 @@ struct BeiLessonView: View {
                     ForEach([5, 10, 15, 30, 60], id: \.self) { Text("\($0) 分钟后停止").tag($0) }
                 }
             }.disabled(study.active)
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 120))], alignment: .leading, spacing: 12) {
-                if !learning {
-                    Button("开始朗读", systemImage: "play.fill") {
-                        study.select(passage); study.startListening(preferences)
-                        Task { _ = await store.savePreferences(preferences) }
-                    }.buttonStyle(StudyPrimaryButtonStyle()).disabled(study.active)
-                } else {
+            Text("每句、每段和每遍的停顿可在声音设置中调整。听读支持锁屏继续播放。")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+    }
+
+    private var listeningPlaybackBar: some View {
+        VStack(spacing: 12) {
+            if !learning {
+                Button("开始朗读", systemImage: "play.fill") {
+                    study.select(passage); study.startListening(preferences)
+                    Task { _ = await store.savePreferences(preferences) }
+                }
+                .buttonStyle(StudyPrimaryButtonStyle())
+                .disabled(study.active)
+                .accessibilityIdentifier("bei.listen.start")
+            } else {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 120))], spacing: 12) {
                     Button(audio.state == .paused ? "继续朗读" : "暂停", systemImage: audio.state == .paused ? "play.fill" : "pause.fill") {
                         if audio.state == .paused { audio.resume() } else { audio.pause() }
                     }.buttonStyle(.borderedProminent).foregroundStyle(theme.buttonForeground)
+                        .accessibilityIdentifier("bei.listen.pause")
                     Button("上一句", systemImage: "backward.end") { audio.move(-1) }
+                        .accessibilityIdentifier("bei.listen.previous")
                     Button("下一句", systemImage: "forward.end") { audio.move(1) }
+                        .accessibilityIdentifier("bei.listen.next")
                     Button("停止", systemImage: "stop.fill") { Task { await study.end() } }
+                        .accessibilityIdentifier("bei.listen.stop")
                 }
-            }.disabled(study.switching || audio.state == .stopping)
-            if learning {
+                .buttonStyle(.bordered)
+                .controlSize(.large)
                 Text("第 \(audio.current + 1) 句 · 已完整听完 \(audio.completedPasses) 遍\(preferences.totalPasses.map { " / 共 \($0) 遍" } ?? " · 无限循环")")
+                    .font(.subheadline)
+                    .multilineTextAlignment(.center)
                 if let deadline = audio.timerDeadline {
                     TimelineView(.periodic(from: .now, by: 1)) { context in
                         Text("定时剩余 \(max(0, Int(deadline.timeIntervalSince(context.date)))) 秒（暂停时也计时）").font(.caption).foregroundStyle(.secondary)
                     }
                 }
             }
-            Text("每句、每段和每遍的停顿可在声音设置中调整。听读支持锁屏继续播放。")
-                .font(.caption).foregroundStyle(.secondary)
         }
+        .disabled(study.switching || audio.state == .stopping)
+        .padding(.horizontal, 24)
+        .padding(.vertical, 14)
+        .frame(maxWidth: 900)
+        .frame(maxWidth: .infinity)
+        .background(StudyAppearance.background)
+        .overlay(alignment: .top) { Divider() }
+        .accessibilityIdentifier("bei.listen.playbackBar")
     }
     private var practiceControls: some View {
         VStack(alignment: .leading, spacing: 14) {

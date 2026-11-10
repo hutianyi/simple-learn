@@ -1,6 +1,34 @@
 import XCTest
 
 final class ModuleNavigationTests: XCTestCase {
+    func testSimpleJiPagesKeepBottomNavigationWhenSwitchingDirectly() {
+        let app = XCUIApplication()
+        app.launch()
+        defer { XCUIDevice.shared.orientation = .portrait }
+        let entry = app.buttons["module.ji"]
+        XCTAssertTrue(entry.waitForExistence(timeout: 10))
+        entry.tap()
+
+        let pages = ["study", "wordLibrary", "statistics", "settings"]
+        for orientation in [UIDeviceOrientation.portrait, .landscapeLeft] {
+            XCUIDevice.shared.orientation = orientation
+            for selected in pages + pages.reversed() {
+                let button = app.buttons["ji.page.\(selected)"]
+                XCTAssertTrue(button.waitForExistence(timeout: 10))
+                button.tap()
+                XCTAssertTrue(expectation(for: NSPredicate(format: "selected == true"),
+                    evaluatedWith: button).fulfillWithin(timeout: 5))
+                let viewport = app.windows.firstMatch.frame
+                for page in pages {
+                    let destination = app.buttons["ji.page.\(page)"]
+                    XCTAssertTrue(destination.isHittable, "Every main page must allow direct switching")
+                    XCTAssertGreaterThan(destination.frame.minY, viewport.midY)
+                    XCTAssertLessThanOrEqual(destination.frame.maxY, viewport.maxY)
+                }
+            }
+        }
+    }
+
     func testHomeOverviewAndAllSixCardsFitPortraitAndLandscape() {
         let app = XCUIApplication()
         app.launch()
