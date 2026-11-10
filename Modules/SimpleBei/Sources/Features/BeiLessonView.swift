@@ -160,14 +160,11 @@ struct BeiLessonView: View {
         }.disabled(study.active)
     }
     private var speechRateControl: some View {
-        HStack {
-            Text("语速")
-            Slider(value: $preferences.speechRate, in: 0.1...0.65, step: 0.01) { editing in
-                if !editing { Task { _ = await store.savePreferences(preferences) } }
-            }
-            Text(preferences.speechRate < 0.4 ? "慢" : (preferences.speechRate > 0.5 ? "快" : "正常"))
+        BeiSpeechRateControl(rate: $preferences.speechRate) {
+            Task { _ = await store.savePreferences(preferences) }
         }.disabled(study.active)
     }
+
     private var listeningSettings: some View {
         VStack(alignment: .leading, spacing: 14) {
             speechRateControl
@@ -257,24 +254,37 @@ struct BeiLessonView: View {
             .accessibilityIdentifier("bei.practice.primary")
             .disabled(study.switching || (learning ? audio.state != .waiting : study.active))
 
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 120))], alignment: .leading, spacing: 10) {
-                Button(audio.state == .paused ? "继续练习" : "暂停") {
+            HStack(spacing: 8) {
+                Button {
                     if audio.state == .paused { audio.resume() } else { audio.pause() }
+                } label: {
+                    practiceButtonTitle(audio.state == .paused ? "继续练习" : "暂停")
                 }.disabled(!learning || study.switching || audio.state == .stopping)
-                Button("再听当前句") { audio.repeatPracticeSentence() }
-                    .disabled(audio.state != .waiting || study.switching)
-                Button("结束练习") { Task { await study.end() } }
-                    .disabled(!learning || study.switching || audio.state == .stopping)
+                Button { audio.repeatPracticeSentence() } label: {
+                    practiceButtonTitle("再听当前句")
+                }.disabled(audio.state != .waiting || study.switching)
                 if study.appFirst {
-                    Button("再给我 5 秒") { audio.extendWait() }
-                        .disabled(audio.state != .waiting || audio.secondsToWait <= 0 || study.switching)
+                    Button { audio.extendWait() } label: {
+                        practiceButtonTitle("再给我5秒")
+                    }.disabled(audio.state != .waiting || audio.secondsToWait <= 0 || study.switching)
                 }
+                Button { Task { await study.end() } } label: {
+                    practiceButtonTitle("结束练习")
+                }.disabled(!learning || study.switching || audio.state == .stopping)
             }
-            .buttonStyle(.bordered).controlSize(.large)
+            .buttonStyle(.bordered).controlSize(.regular)
             Text(learning ? "当前第 \(audio.current + 1) 句 · \(audio.state == .waiting ? "轮到你背" : (audio.state == .paused ? "已暂停" : "听系统朗读"))\(audio.secondsToWait > 0 && audio.state == .waiting ? " · \(audio.secondsToWait) 秒" : "")" : "尚未开始练习")
                 .font(.headline).foregroundStyle(.primary)
                 .accessibilityIdentifier("bei.practice.status")
         }
+    }
+
+    private func practiceButtonTitle(_ title: String) -> some View {
+        Text(title)
+            .font(.subheadline)
+            .lineLimit(1)
+            .minimumScaleFactor(0.65)
+            .frame(maxWidth: .infinity, minHeight: 32)
     }
 
     private var practiceSetup: some View {

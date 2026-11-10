@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 import Testing
 @testable import SimpleBei
 
@@ -52,4 +53,51 @@ struct BeiLibraryStoreTests {
         let reopened = BeiLibraryStore(directory: root); await reopened.load()
         #expect(reopened.library == store.library)
     }
+    @MainActor @Test func preferenceSaveKeepsLessonEnabledAndPersistsRate() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = BeiLibraryStore(directory: root); await store.load()
+        var preferences = store.library.preferences
+        preferences.speechRate = 0.55
+        var observedSave = false
+        withObservationTracking {
+            _ = store.library
+        } onChange: {
+            MainActor.assumeIsolated {
+                observedSave = true
+                #expect(store.busy)
+                #expect(store.savingPreferences)
+                #expect(!store.blocksInteraction)
+            }
+        }
+        #expect(await store.savePreferences(preferences))
+        #expect(observedSave)
+        #expect(!store.busy)
+        #expect(!store.savingPreferences)
+        let reopened = BeiLibraryStore(directory: root); await reopened.load()
+        #expect(reopened.library.preferences == preferences)
+    }
+
+    @MainActor @Test func unchangedPreferencesSkipWriteAndFailedSaveClearsFlags() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let file = BeiLibraryFile(url: root.appendingPathComponent("Library.json"))
+        try file.save(BeiLibrary())
+        let store = BeiLibraryStore(directory: root); await store.load()
+        let bytes = try Data(contentsOf: root.appendingPathComponent("Library.json"))
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: root.path)
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: root.path)
+            try? FileManager.default.removeItem(at: root)
+        }
+        #expect(await store.savePreferences(store.library.preferences))
+        var preferences = store.library.preferences
+        preferences.speechRate = 0.55
+        #expect(await store.savePreferences(preferences) == false)
+        #expect(!store.busy)
+        #expect(!store.savingPreferences)
+        #expect(!store.blocksInteraction)
+        #expect(store.library.preferences.speechRate == 0.45)
+        #expect(try Data(contentsOf: root.appendingPathComponent("Library.json")) == bytes)
+    }
+
 }

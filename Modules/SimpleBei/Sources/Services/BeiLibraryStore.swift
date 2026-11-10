@@ -33,6 +33,8 @@ final class BeiLibraryStore {
     private(set) var library = BeiLibrary()
     private(set) var isReady = false
     private(set) var busy = false
+    private(set) var savingPreferences = false
+    var blocksInteraction: Bool { busy && !savingPreferences }
     private(set) var loadError: String?
     var error: String?
     private let repository: BeiRepository
@@ -72,6 +74,11 @@ final class BeiLibraryStore {
         _ = await write(candidate)
     }
     func savePreferences(_ preferences: BeiPreferences) async -> Bool {
+        guard isReady, !busy else { return false }
+        guard preferences != library.preferences else { return true }
+        // Saving a playback setting must not dim and re-enable the whole lesson.
+        savingPreferences = true
+        defer { savingPreferences = false }
         var candidate = library; candidate.preferences = preferences
         return await write(candidate)
     }

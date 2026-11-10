@@ -93,7 +93,7 @@ private struct BeiLibraryView: View {
                 .navigationTitle(selected?.title ?? "简单背")
             }
         }
-        .disabled(store.busy && store.isReady)
+        .disabled(store.blocksInteraction && store.isReady)
         .sheet(item: $presentation) { destination in
             switch destination {
             case .editor(let passage): BeiEditorView(store: store, original: passage)

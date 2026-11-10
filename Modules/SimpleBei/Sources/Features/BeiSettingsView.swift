@@ -23,13 +23,7 @@ struct BeiSettingsView: View {
                     if probe.active { Button("停止当前操作") { probe.end() }.disabled(probe.state == .stopping) }
                 }
                 Section("常用播放设置") {
-                    Text("语速：\(rateDescription)")
-                    Slider(value: $preferences.speechRate, in: 0.1...0.65, step: 0.01)
-                    HStack {
-                        Button("慢") { preferences.speechRate = 0.35 }
-                        Button("正常") { preferences.speechRate = 0.45 }
-                        Button("快") { preferences.speechRate = 0.55 }
-                    }.buttonStyle(.bordered)
+                    BeiSpeechRateControl(rate: $preferences.speechRate)
                     Toggle("无限循环", isOn: Binding(get: { preferences.totalPasses == nil }, set: { preferences.totalPasses = $0 ? nil : 3 }))
                     if preferences.totalPasses != nil {
                         Stepper("总遍数：\(preferences.totalPasses ?? 3)", value: Binding(get: { preferences.totalPasses ?? 3 }, set: { preferences.totalPasses = $0 }), in: 1...10000)
@@ -54,7 +48,6 @@ struct BeiSettingsView: View {
         .interactiveDismissDisabled()
         .onChange(of: scenePhase) { _, value in probe.sceneChanged(String(describing: value)) }
     }
-    private var rateDescription: String { preferences.speechRate < 0.4 ? "慢" : (preferences.speechRate > 0.5 ? "快" : "正常") }
     @ViewBuilder private func voicePicker(language: PassageLanguage, selection: Binding<String?>) -> some View {
         let candidates = probe.voices.filter { BeiVoicePreview.isRequestedVoice($0, language: language) }
         Picker("\(language.title)声音", selection: selection) {
@@ -72,5 +65,56 @@ struct BeiSettingsView: View {
     }
     private func quality(_ voice: AVSpeechSynthesisVoice) -> String {
         switch voice.quality { case .default: "系统基础音质"; case .enhanced: "系统优化音质"; case .premium: "系统高音质"; @unknown default: "系统音质" }
+    }
+}
+
+// Keep drag updates local so the lesson and sentence list only refresh on release.
+struct BeiSpeechRateControl: View {
+    @Binding var rate: Float
+    var onCommit: () -> Void = {}
+    @State private var selection: Double
+    private static let rates: [Float] = [0.1, 0.35, 0.45, 0.55, 0.65]
+    private static let titles = ["很慢", "慢", "正常", "快", "很快"]
+
+    init(rate: Binding<Float>, onCommit: @escaping () -> Void = {}) {
+        _rate = rate
+        self.onCommit = onCommit
+        _selection = State(initialValue: Self.nearestIndex(to: rate.wrappedValue))
+    }
+
+    var body: some View {
+        HStack {
+            Text("语速")
+            Slider(value: $selection, in: 0...4, step: 1) { editing in
+                if !editing {
+                    commitSelection()
+                }
+            }
+            .accessibilityLabel("语速")
+            .accessibilityValue(Self.titles[Int(selection)])
+            .accessibilityIdentifier("bei.speechRate")
+            .accessibilityAdjustableAction { direction in
+                switch direction {
+                case .increment: selection = min(4, selection + 1)
+                case .decrement: selection = max(0, selection - 1)
+                @unknown default: return
+                }
+                commitSelection()
+            }
+            Text(Self.titles[Int(selection)])
+                .frame(width: 44, alignment: .trailing)
+        }
+        .onChange(of: rate) { _, value in selection = Self.nearestIndex(to: value) }
+    }
+
+    private func commitSelection() {
+        let selectedRate = Self.rates[Int(selection)]
+        guard selectedRate != rate else { return }
+        rate = selectedRate
+        onCommit()
+    }
+
+    private static func nearestIndex(to rate: Float) -> Double {
+        Double(rates.indices.min(by: { abs(rates[$0] - rate) < abs(rates[$1] - rate) }) ?? 2)
     }
 }
