@@ -288,7 +288,11 @@ struct LearningHomeView: View {
     private var learningOverview: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("今天的学习").font(StudyAppearance.sectionTitle)
-            if [LearningModule.ji, .suan, .lian].allSatisfy({ overview[$0]?.isComplete == true }) {
+            if overview.isEmpty || overviewDayKey != FreeDayLedger.dayKey(Date()) {
+                ProgressView("正在读取今天的学习…")
+                    .frame(maxWidth: .infinity, minHeight: 112)
+                    .accessibilityIdentifier("home.overview.loading")
+            } else if [LearningModule.ji, .suan, .lian].allSatisfy({ overview[$0]?.isComplete == true }) {
                 HStack(spacing: 16) {
                     Image(systemName: "party.popper.fill")
                         .font(.system(size: 38)).foregroundStyle(.orange)
@@ -422,9 +426,8 @@ struct LearningHomeView: View {
     @MainActor private func refreshOverview() async {
         overviewReadCount += 1
         defer { overviewReadCount -= 1 }
-        overview = [:]
         let now = Date()
-        overviewDayKey = FreeDayLedger.dayKey(now)
+        let dayKey = FreeDayLedger.dayKey(now)
         do { freeDayLedger = try FreeDayStore.live().load() }
         catch { freeDayLedger = nil; freeDayMessage = "无法读取免做卡记录：\(error.localizedDescription)" }
         var updated: [LearningModule: HomeOverviewStatus] = [:]
@@ -444,6 +447,11 @@ struct LearningHomeView: View {
             updated[.suan] = .init(text: status.text, isComplete: status.isComplete)
         } catch { updated[.suan] = .init(text: "读取失败，点此查看", isComplete: false) }
         guard !Task.isCancelled else { return }
+        guard dayKey == FreeDayLedger.dayKey(Date()) else {
+            overviewRevision = UUID()
+            return
+        }
+        overviewDayKey = dayKey
         overview = updated
     }
 

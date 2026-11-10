@@ -90,12 +90,17 @@ struct StatisticsView: View {
                             Text("最近正式复习正确率")
                                 .font(.title3.bold())
                             Chart(trend) { point in
-                                BarMark(
+                                LineMark(
                                     x: .value("复习", point.index),
                                     y: .value("正确率", point.accuracy)
                                 )
-                                .foregroundStyle(AppPalette.accent.gradient)
-                                .cornerRadius(5)
+                                .foregroundStyle(AppPalette.accent)
+                                PointMark(
+                                    x: .value("复习", point.index),
+                                    y: .value("正确率", point.accuracy)
+                                )
+                                .foregroundStyle(AppPalette.accent)
+                                .symbolSize(isInspectingReview && selectedReview == point.index ? 90 : 30)
                                 .annotation(position: .top, spacing: 6,
                                     overflowResolution: .init(x: .fit(to: .chart), y: .disabled)) {
                                     if isInspectingReview && selectedReview == point.index {
@@ -115,6 +120,7 @@ struct StatisticsView: View {
                                 .accessibilityLabel("第\(point.index)次复习，\(point.date.formatted(date: .abbreviated, time: .shortened))")
                                 .accessibilityValue(String(format: "%.1f%%", point.accuracy))
                             }
+                            .chartXScale(domain: 1...max(2, trend.count))
                             .chartYScale(domain: 0...100)
                             .chartXSelection(value: $selectedReview)
                             .chartGesture { proxy in
@@ -136,6 +142,7 @@ struct StatisticsView: View {
                                     }
                                 }
                             }
+                            .frame(maxWidth: .infinity)
                             .frame(height: 210)
                             .padding(.top, tooltipTopSpace)
                         }
@@ -381,7 +388,7 @@ struct StatisticsView: View {
             .filter {
                 $0.mode == PracticeMode.scheduled.rawValue && $0.formalAnswered > 0
             }
-            .prefix(12)
+            .prefix(30)
             .reversed()
         return recent.enumerated().map { offset, session in
             TrendPoint(
