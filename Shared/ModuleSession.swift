@@ -135,7 +135,12 @@ public enum FreeDayError: LocalizedError {
 // A separate ledger credits attendance without changing answers or review schedules.
 public struct FreeDayLedger: Codable, Equatable, Sendable {
     public var usedAt: [Date] = []
-    public init(usedAt: [Date] = []) { self.usedAt = usedAt }
+    // Saved with the ledger so unopened Fridays can be credited after relaunch or restore.
+    public var automaticFridaysFrom: Date?
+    public init(usedAt: [Date] = [], automaticFridaysFrom: Date? = nil) {
+        self.usedAt = usedAt
+        self.automaticFridaysFrom = automaticFridaysFrom
+    }
     public static var calendar: Calendar {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
@@ -150,15 +155,36 @@ public struct FreeDayLedger: Codable, Equatable, Sendable {
         calendar.dateInterval(of: .weekOfYear, for: date)!.start
     }
     public func isUsed(on date: Date) -> Bool {
-        usedAt.contains { $0 <= date && Self.dayKey($0) == Self.dayKey(date) }
+        isAutomaticallyUsed(on: date)
+            || usedAt.contains { $0 <= date && Self.dayKey($0) == Self.dayKey(date) }
+    }
+    public func isAutomaticallyUsed(on date: Date) -> Bool {
+        guard let start = automaticFridaysFrom, date >= start,
+              Self.calendar.component(.weekday, from: date) == 6 else { return false }
+        return !usedAt.contains { Self.weekStart($0) == Self.weekStart(date) }
     }
     public func canUse(on date: Date) -> Bool {
         let weekday = Self.calendar.component(.weekday, from: date)
         return (2...6).contains(weekday)
             && !usedAt.contains { Self.weekStart($0) == Self.weekStart(date) }
+            && !isAutomaticallyUsed(on: date)
     }
     public func completionKeys(now: Date) -> Set<String> {
-        Set(usedAt.filter { $0 <= now }.map(Self.dayKey))
+        var keys = Set(usedAt.filter { $0 <= now }.map(Self.dayKey))
+        guard var friday = automaticFridaysFrom else { return keys }
+        let manualWeeks = Set(usedAt.map(Self.weekStart))
+        while friday <= now {
+            if !manualWeeks.contains(Self.weekStart(friday)) { keys.insert(Self.dayKey(friday)) }
+            guard let next = Self.calendar.date(byAdding: .weekOfYear, value: 1, to: friday) else { break }
+            friday = next
+        }
+        return keys
+    }
+    public mutating func enableAutomaticFridays(now: Date) {
+        guard automaticFridaysFrom == nil else { return }
+        let today = Self.calendar.startOfDay(for: now)
+        let weekday = Self.calendar.component(.weekday, from: today)
+        automaticFridaysFrom = Self.calendar.date(byAdding: .day, value: (6 - weekday + 7) % 7, to: today)
     }
     public func validated() throws -> Self {
         guard usedAt.allSatisfy({ $0.timeIntervalSince1970.isFinite
@@ -169,6 +195,14 @@ public struct FreeDayLedger: Codable, Equatable, Sendable {
         guard weeks.count == Set(weeks).count,
               usedAt.allSatisfy({ (2...6).contains(Self.calendar.component(.weekday, from: $0)) }) else {
             throw FreeDayError.message("免做卡记录无效，请保留数据。")
+        }
+        if let start = automaticFridaysFrom {
+            guard start.timeIntervalSince1970.isFinite,
+                  (2000...9999).contains(Self.calendar.component(.year, from: start)),
+                  Self.calendar.component(.weekday, from: start) == 6,
+                  start == Self.calendar.startOfDay(for: start) else {
+                throw FreeDayError.message("免做卡自动使用日期无效，请保留数据。")
+            }
         }
         return self
     }
@@ -188,6 +222,14 @@ public struct FreeDayStore: Sendable {
         try JSONDecoder().decode(FreeDayLedger.self, from: data).validated()
     }
     public func export() throws -> Data { try JSONEncoder().encode(load()) }
+    public func enableAutomaticFridays(now: Date = Date()) throws -> FreeDayLedger {
+        var ledger = try load()
+        if ledger.automaticFridaysFrom == nil {
+            ledger.enableAutomaticFridays(now: now)
+            try restore(JSONEncoder().encode(ledger))
+        }
+        return ledger
+    }
     public func restore(_ data: Data) throws {
         let ledger = try Self.decode(data)
         try JSONEncoder().encode(ledger).write(to: fileURL, options: .atomic)

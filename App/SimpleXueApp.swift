@@ -344,7 +344,7 @@ struct LearningHomeView: View {
             }
             .buttonStyle(.bordered)
             .disabled(!enabled)
-            .accessibilityValue(freeDayLedger?.isUsed(on: timeline.date) == true ? "今天已使用" : enabled ? "可使用" : "暂不可用")
+            .accessibilityValue(freeDayLedger?.isAutomaticallyUsed(on: timeline.date) == true ? "今天已自动使用" : freeDayLedger?.isUsed(on: timeline.date) == true ? "今天已使用" : enabled ? "可使用" : "暂不可用")
             .accessibilityIdentifier("home.freeDay.use")
         }
     }
@@ -428,7 +428,7 @@ struct LearningHomeView: View {
         defer { overviewReadCount -= 1 }
         let now = Date()
         let dayKey = FreeDayLedger.dayKey(now)
-        do { freeDayLedger = try FreeDayStore.live().load() }
+        do { freeDayLedger = try FreeDayStore.live().enableAutomaticFridays(now: now) }
         catch { freeDayLedger = nil; freeDayMessage = "无法读取免做卡记录：\(error.localizedDescription)" }
         var updated: [LearningModule: HomeOverviewStatus] = [:]
         do {
@@ -506,6 +506,8 @@ struct LearningHomeView: View {
         recoveryError = nil
         do {
             let recovered = try await WholeBackupService.coordinator().recoverIfNeeded()
+            do { freeDayLedger = try FreeDayStore.live().enableAutomaticFridays() }
+            catch { freeDayLedger = nil; freeDayMessage = "无法读取免做卡记录：\(error.localizedDescription)" }
             backupReady = true
             overviewRevision = UUID()
             if recovered { recoveryNotice = "上次整体恢复未完成，已自动回退到恢复前数据。" }

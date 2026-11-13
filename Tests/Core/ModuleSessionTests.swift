@@ -195,6 +195,67 @@ final class FreeDayTests: XCTestCase {
     private func date(_ year: Int = 2026, _ month: Int = 11, _ day: Int, _ hour: Int = 12, _ minute: Int = 0) -> Date {
         FreeDayLedger.calendar.date(from: DateComponents(year: year, month: month, day: day, hour: hour, minute: minute))!
     }
+    func testAutomaticFridayStartsAtBeijingMidnightWithoutAClick() throws {
+        var ledger = FreeDayLedger()
+        ledger.enableAutomaticFridays(now: date(2026, 11, 2))
+        XCTAssertEqual(ledger.automaticFridaysFrom, date(2026, 11, 6, 0))
+        XCTAssertTrue(ledger.canUse(on: date(2026, 11, 5, 23, 59)))
+        XCTAssertTrue(ledger.completionKeys(now: date(2026, 11, 5, 23, 59)).isEmpty)
+        let midnight = date(2026, 11, 6, 0)
+        XCTAssertTrue(ledger.isUsed(on: midnight))
+        XCTAssertTrue(ledger.isAutomaticallyUsed(on: midnight))
+        XCTAssertFalse(ledger.canUse(on: midnight))
+        XCTAssertEqual(ledger.completionKeys(now: midnight), ["2026-11-06"])
+        XCTAssertTrue(ledger.canUse(on: date(2026, 11, 9)))
+        XCTAssertFalse(ledger.isUsed(on: date(2026, 11, 7)))
+        XCTAssertNoThrow(try ledger.validated())
+    }
+    func testManualUseOnEachWeekdayPreventsThatWeeksAutomaticUse() {
+        for day in 2...5 {
+            var ledger = FreeDayLedger(usedAt: [date(2026, 11, day)])
+            ledger.enableAutomaticFridays(now: date(2026, 11, 2))
+            XCTAssertFalse(ledger.isUsed(on: date(2026, 11, 6)))
+            XCTAssertFalse(ledger.canUse(on: date(2026, 11, 6)))
+            XCTAssertEqual(ledger.completionKeys(now: date(2026, 11, 6)), [FreeDayLedger.dayKey(date(2026, 11, day))])
+            XCTAssertTrue(ledger.isAutomaticallyUsed(on: date(2026, 11, 13)))
+        }
+    }
+    func testUnopenedFridaysAreCreditedAcrossYearBoundaryAndBackupRestore() throws {
+        var ledger = FreeDayLedger(usedAt: [date(2027, 1, 4)])
+        ledger.enableAutomaticFridays(now: date(2026, 12, 28))
+        let restored = try FreeDayStore.decode(JSONEncoder().encode(ledger))
+        XCTAssertEqual(restored.completionKeys(now: date(2027, 1, 16)),
+                       ["2027-01-01", "2027-01-04", "2027-01-15"])
+        XCTAssertEqual(restored.completionKeys(now: date(2027, 1, 16)),
+                       restored.completionKeys(now: date(2027, 1, 17)))
+        XCTAssertFalse(restored.isUsed(on: date(2027, 1, 8)))
+    }
+    func testActivationDoesNotBackfillFridaysBeforeFirstLaunch() throws {
+        for day in [6, 7, 8, 9] {
+            // Old backups without the new field remain readable.
+            var ledger = try FreeDayStore.decode(Data("{\"usedAt\":[]}".utf8))
+            ledger.enableAutomaticFridays(now: date(2026, 11, day))
+            XCTAssertEqual(ledger.automaticFridaysFrom, date(2026, 11, day == 6 ? 6 : 13, 0))
+            XCTAssertEqual(ledger.completionKeys(now: date(2026, 11, 9)), day == 6 ? ["2026-11-06"] : [])
+        }
+    }
+    func testActivationPersistsAndIsIdempotentWithoutChangingManualRecords() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let store = FreeDayStore(fileURL: folder.appendingPathComponent("Ledger.json"))
+        try store.use(now: date(2026, 11, 4))
+        let ledger = try store.enableAutomaticFridays(now: date(2026, 11, 5))
+        let before = try store.export()
+        XCTAssertEqual(ledger.usedAt, [date(2026, 11, 4)])
+        let reopened = FreeDayStore(fileURL: store.fileURL)
+        let later = try reopened.enableAutomaticFridays(now: date(2026, 11, 21))
+        XCTAssertEqual(try reopened.export(), before)
+        XCTAssertEqual(later.completionKeys(now: date(2026, 11, 21)), ["2026-11-04", "2026-11-13", "2026-11-20"])
+        XCTAssertThrowsError(try reopened.use(now: date(2026, 11, 13)))
+        XCTAssertThrowsError(try FreeDayLedger(automaticFridaysFrom: date(2026, 11, 5, 0)).validated())
+        XCTAssertThrowsError(try FreeDayLedger(automaticFridaysFrom: date(2026, 11, 6, 12)).validated())
+    }
     func testWeeklyAvailabilityExpiresAndNeverAccumulates() {
         let empty = FreeDayLedger()
         XCTAssertTrue(empty.canUse(on: date(2026, 11, 2))) // Monday
