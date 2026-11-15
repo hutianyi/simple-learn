@@ -21,9 +21,15 @@ public enum SimpleSuanBackupTransfer {
         try learningOverviewStatus(now: now).text
     }
     public static func learningOverviewStatus(now: Date = Date()) throws -> (text: String, isComplete: Bool) {
+        let status = try homeLearningOverview(now: now)
+        return (status.text, status.isComplete)
+    }
+    public static func homeLearningOverview(now: Date = Date()) throws -> ModuleLearningOverview {
         let data = try PersistenceService.shared.load()
-        if FreeDayStore.isUsedToday(now: now) { return ("免做卡 · 今日已完成", true) }
-        return PracticeActivity(sessions: data.sessions, now: now).overviewStatus
+        let activity = PracticeActivity(sessions: data.sessions, now: now)
+        let status = activity.overviewStatus
+        return ModuleLearningOverview(text: FreeDayStore.isUsedToday(now: now) ? "免做卡 · 今日已完成" : status.text,
+            isComplete: status.isComplete, reward: activity.rewardProgress)
     }
     public static func exportData() throws -> Data {
         try SuanBackup.encode(PersistenceService.shared.load())

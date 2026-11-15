@@ -150,6 +150,12 @@ final class StudyRepairRepository {
 
     static func completedKeys(in context: NSManagedObjectContext, records: [StudyCompletionDay],
                               now: Date, calendar: Calendar) throws -> Set<String> {
+        let historical = try historicalKeys(in: context, records: records, now: now, calendar: calendar)
+        return StudyStreak.completionKeys(completedDays: records, historicalKeys: historical, now: now, calendar: calendar)
+    }
+
+    static func historicalKeys(in context: NSManagedObjectContext, records: [StudyCompletionDay],
+                               now: Date, calendar: Calendar) throws -> Set<String> {
         let cutoff = records.map(\.dayKey).min() ?? DictationEligibility.dayKey(for: now, calendar: calendar)
         let sessions = try context.fetch(StudySessionEntity.fetchRequest()).filter { $0.mode == PracticeMode.scheduled.rawValue }
         let events = try context.fetch(DictationEventEntity.fetchRequest())
@@ -167,6 +173,6 @@ final class StudyRepairRepository {
                 && StudyStreak.historicalDictationFinished(dayKey: day.dayKey, phase: day.phase,
                     items: items, successfulRetests: retests, calendar: dayCalendar) { historical.insert(day.dayKey) }
         }
-        return StudyStreak.completionKeys(completedDays: records, historicalKeys: historical, now: now, calendar: calendar)
+        return historical
     }
 }

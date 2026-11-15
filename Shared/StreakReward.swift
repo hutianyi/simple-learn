@@ -44,6 +44,50 @@ public struct StreakRewardProgress: Equatable {
     }
 }
 
+// A single homepage refresh carries task status and reward progress together.
+public struct ModuleLearningOverview {
+    public let text: String
+    public let isComplete: Bool
+    public let reward: StreakRewardProgress?
+
+    public init(text: String, isComplete: Bool, reward: StreakRewardProgress? = nil) {
+        self.text = text
+        self.isComplete = isComplete
+        self.reward = reward
+    }
+}
+
+public struct HomeLearningCelebration {
+    public struct Entry {
+        public let moduleName: String
+        public let progress: StreakRewardProgress
+    }
+    public let allComplete: Bool
+    public let entries: [Entry]
+    public var rewardedEntries: [Entry] { entries.filter { $0.progress.isRewardDay } }
+    public var hasReward: Bool { !rewardedEntries.isEmpty }
+    public var isVisible: Bool { allComplete || hasReward }
+    public var title: String {
+        guard hasReward else { return "今天的学习全部完成！" }
+        let again = rewardedEntries.contains { $0.progress.rewardMilestone > 7 }
+        if rewardedEntries.count == 2 {
+            return again ? "又完成双份七天挑战，去兑换奖励吧！" : "双份七天挑战成功，去兑换奖励吧！"
+        }
+        return "\(rewardedEntries[0].moduleName)\(again ? "又完成一轮七天打卡" : "七天打卡成功")，去兑换奖励吧！"
+    }
+
+    public init(ji: ModuleLearningOverview?, suan: ModuleLearningOverview?, lian: ModuleLearningOverview?) {
+        allComplete = ji?.isComplete == true && suan?.isComplete == true && lian?.isComplete == true
+        let complete = allComplete
+        entries = [("简单记", ji), ("简单算", suan)].compactMap { name, status in
+            // Yesterday's retained streak must never announce a new reward before today's completion.
+            guard let status, status.isComplete, let progress = status.reward,
+                  complete || progress.isRewardDay else { return nil }
+            return Entry(moduleName: name, progress: progress)
+        }
+    }
+}
+
 #if os(iOS)
 import SwiftUI
 

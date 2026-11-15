@@ -41,9 +41,7 @@ enum LearningModule: String, CaseIterable, Identifiable {
     var color: Color { theme.accent }
 }
 
-private struct HomeOverviewStatus {
-    let text: String
-    let isComplete: Bool
+private extension ModuleLearningOverview {
     var badge: String {
         if isComplete { return "已完成" }
         if text.hasPrefix("读取失败") { return "读取失败" }
@@ -76,7 +74,7 @@ struct LearningHomeView: View {
     @State private var dragOrigin: CGRect = .zero
     @State private var dragTranslation: CGSize = .zero
     @State private var dragStartLocation: CGPoint = .zero
-    @State private var overview: [LearningModule: HomeOverviewStatus] = [:]
+    @State private var overview: [LearningModule: ModuleLearningOverview] = [:]
     @State private var overviewReadCount = 0
     @State private var homeWidth: CGFloat = 0
     @Environment(\.colorScheme) private var colorScheme
@@ -292,34 +290,65 @@ struct LearningHomeView: View {
                 ProgressView("正在读取今天的学习…")
                     .frame(maxWidth: .infinity, minHeight: 112)
                     .accessibilityIdentifier("home.overview.loading")
-            } else if [LearningModule.ji, .suan, .lian].allSatisfy({ overview[$0]?.isComplete == true }) {
-                HStack(spacing: 16) {
-                    Image(systemName: "party.popper.fill")
-                        .font(.system(size: 38)).foregroundStyle(.orange)
-                        .accessibilityHidden(true)
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("今天的学习全部完成！").font(StudyAppearance.moduleTitle)
-                        Text("简单记、简单算、简单练都完成啦，真棒！")
-                            .font(.subheadline).foregroundStyle(.secondary)
-                    }
-                    Spacer(minLength: 0)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading).padding(18)
-                .frame(minHeight: 112)
-                .background(LinearGradient(colors: [.yellow.opacity(0.2), .green.opacity(0.15)],
-                                           startPoint: .topLeading, endPoint: .bottomTrailing),
-                            in: RoundedRectangle(cornerRadius: 18))
-                .accessibilityElement(children: .combine)
-                .accessibilityIdentifier("home.overview.completed")
             } else {
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12),
-                    count: homeWidth >= 600 && !dynamicTypeSize.isAccessibilitySize ? 3 : 1), spacing: 12) {
-                    ForEach([LearningModule.ji, .suan, .lian]) { module in
-                        overviewCard(module)
+                let celebration = HomeLearningCelebration(ji: overview[.ji], suan: overview[.suan], lian: overview[.lian])
+                if celebration.isVisible { learningCelebration(celebration) }
+                if !celebration.allComplete {
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12),
+                        count: homeWidth >= 600 && !dynamicTypeSize.isAccessibilitySize ? 3 : 1), spacing: 12) {
+                        ForEach([LearningModule.ji, .suan, .lian]) { module in
+                            overviewCard(module)
+                        }
                     }
                 }
             }
         }
+    }
+
+    private func learningCelebration(_ celebration: HomeLearningCelebration) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .top, spacing: 16) {
+                Image(systemName: celebration.hasReward ? "gift.fill" : "party.popper.fill")
+                    .font(.system(size: 38)).foregroundStyle(.orange)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(celebration.title).font(StudyAppearance.moduleTitle)
+                    if celebration.allComplete {
+                        Text(celebration.hasReward ? "今天的学习也全部完成啦！" : "简单记、简单算、简单练都完成啦，真棒！")
+                            .font(.subheadline).foregroundStyle(.secondary)
+                    }
+                }
+            }
+            ForEach(celebration.entries, id: \.moduleName) { entry in
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("\(entry.moduleName) · 已连续打卡 **\(entry.progress.streak) 天**")
+                        .font(.headline)
+                    if entry.progress.isRewardDay {
+                        Text("已达成连续 **\(entry.progress.rewardMilestone) 天**，可以找爸爸兑换 **3 元**零花钱啦！")
+                            .font(.subheadline)
+                        if entry.progress.streak != entry.progress.rewardMilestone {
+                            Text(entry.progress.countdown).font(.subheadline).foregroundStyle(.secondary)
+                        }
+                    } else {
+                        Text("再打卡 **\(entry.progress.daysRemaining) 天**，就能兑换 **3 元**零花钱")
+                            .font(.subheadline).foregroundStyle(.secondary)
+                    }
+                }
+            }
+            if celebration.rewardedEntries.count == 2 {
+                Text("两项各可兑换 3 元，合计 **6 元**零花钱！").font(.headline)
+            }
+        }
+        .fixedSize(horizontal: false, vertical: true)
+        .frame(maxWidth: .infinity, alignment: .leading).padding(20)
+        .background(LinearGradient(colors: celebration.hasReward
+            ? [.yellow.opacity(0.24), .orange.opacity(0.15)]
+            : [.yellow.opacity(0.2), .green.opacity(0.15)], startPoint: .topLeading, endPoint: .bottomTrailing),
+            in: RoundedRectangle(cornerRadius: 18))
+        .overlay(RoundedRectangle(cornerRadius: 18)
+            .strokeBorder(Color.primary.opacity(contrast == .increased ? 0.35 : 0)))
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier(celebration.hasReward ? "home.overview.reward" : "home.overview.completed")
     }
 
     private func homeActionLabel(_ title: String, symbol: String) -> some View {
@@ -430,11 +459,11 @@ struct LearningHomeView: View {
         let dayKey = FreeDayLedger.dayKey(now)
         do { freeDayLedger = try FreeDayStore.live().enableAutomaticFridays(now: now) }
         catch { freeDayLedger = nil; freeDayMessage = "无法读取免做卡记录：\(error.localizedDescription)" }
-        var updated: [LearningModule: HomeOverviewStatus] = [:]
+        var updated: [LearningModule: ModuleLearningOverview] = [:]
         do {
-            let status = try await SimpleJiBackupTransfer.learningOverviewStatus(now: now)
+            let status = try await SimpleJiBackupTransfer.homeLearningOverview(now: now)
             guard !Task.isCancelled else { return }
-            updated[.ji] = .init(text: status.text, isComplete: status.isComplete)
+            updated[.ji] = status
         }
         catch { if !Task.isCancelled { updated[.ji] = .init(text: "读取失败，点此查看", isComplete: false) } }
         guard !Task.isCancelled else { return }
@@ -443,8 +472,8 @@ struct LearningHomeView: View {
             updated[.lian] = .init(text: status.text, isComplete: status.isComplete)
         } catch { updated[.lian] = .init(text: "读取失败，点此查看", isComplete: false) }
         do {
-            let status = try SimpleSuanBackupTransfer.learningOverviewStatus(now: now)
-            updated[.suan] = .init(text: status.text, isComplete: status.isComplete)
+            let status = try SimpleSuanBackupTransfer.homeLearningOverview(now: now)
+            updated[.suan] = status
         } catch { updated[.suan] = .init(text: "读取失败，点此查看", isComplete: false) }
         guard !Task.isCancelled else { return }
         guard dayKey == FreeDayLedger.dayKey(Date()) else {

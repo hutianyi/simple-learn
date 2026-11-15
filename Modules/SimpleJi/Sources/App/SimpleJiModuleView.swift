@@ -56,6 +56,10 @@ public enum SimpleJiBackupTransfer {
         try await learningOverviewStatus(now: now).text
     }
     public static func learningOverviewStatus(now: Date = Date()) async throws -> (text: String, isComplete: Bool) {
+        let status = try await homeLearningOverview(now: now)
+        return (status.text, status.isComplete)
+    }
+    public static func homeLearningOverview(now: Date = Date()) async throws -> ModuleLearningOverview {
         let persistence = try await open()
         let settings = SettingsStore(defaults: UserDefaults(suiteName: "com.hutianyi.SimpleXue.SimpleJi")!)
         let baseline = settings.baselineCampaign
@@ -63,7 +67,14 @@ public enum SimpleJiBackupTransfer {
         let dictationLimit = settings.dictationLimit.rawValue
         let context = persistence.newBackgroundContext()
         return try await context.perform {
-            try StudyCompletionRepository.overviewStatus(in: context, now: now, baseline: baseline, masteredTerms: mastered, dictationLimit: dictationLimit)
+            let status = try StudyCompletionRepository.overviewStatus(in: context, now: now, baseline: baseline,
+                masteredTerms: mastered, dictationLimit: dictationLimit)
+            let records = try context.fetch(StudyCompletionDayEntity.fetchRequest()).map {
+                try JSONDecoder().decode(StudyCompletionDay.self, from: $0.snapshotData)
+            }
+            let historical = try StudyRepairRepository.historicalKeys(in: context, records: records, now: now, calendar: .current)
+            let reward = StudyStreak.rewardProgress(completedDays: records, historicalKeys: historical, now: now)
+            return ModuleLearningOverview(text: status.text, isComplete: status.isComplete, reward: reward)
         }
     }
     public static func checkFreeDayEligibility(now: Date = Date()) async throws {
