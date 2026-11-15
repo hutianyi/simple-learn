@@ -13,12 +13,12 @@ struct SessionResultView: View {
         NavigationStack {
             ScrollView { VStack(spacing: 20) {
                 if saved {
-                    StreakRewardCard(moduleName: "简单算", progress: activity.rewardProgress)
                     celebrationHeader(activity: activity)
+                    PracticeHeatmapView(activity: activity)
+                    StreakRewardCard(moduleName: "简单算", progress: activity.rewardProgress)
                     if activity.isComplete(activity.today) {
                         WeekendCompletionNotice(date: activity.today, calendar: activity.calendar)
                     }
-                    PracticeHeatmapView(activity: activity)
                 } else {
                     Text("本次练习完成").font(StudyAppearance.title)
                     Text("\(statistics.total) 题 · 等待保存").font(.title2).foregroundStyle(.secondary)
@@ -54,8 +54,9 @@ struct SessionResultView: View {
                 .font(.system(.largeTitle, design: .rounded, weight: .bold))
             Text("本次完成 \(statistics.total) 题 · 今天累计 \(activity.todayCount) 题")
                 .font(.title2.weight(.semibold))
-            Label("连续练习 \(activity.streak) 天", systemImage: "flame.fill")
-                .font(.title3.bold()).foregroundStyle(.purple)
+            Label("已连续打卡 \(activity.streak) 天", systemImage: "flame.fill")
+                .font(.system(.title, design: .rounded, weight: .bold)).foregroundStyle(.purple)
+                .accessibilityIdentifier("suanCelebrationStreak")
             Text(activity.streak > 1
                 ? "每天坚持一点点，你的计算本领正在积累！"
                 : "每一道题都是一次进步，今天的努力已经点亮！")

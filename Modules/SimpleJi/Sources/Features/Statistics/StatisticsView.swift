@@ -53,17 +53,19 @@ struct StatisticsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 if celebration {
+                    celebrationHeader
+                }
+                completionHeatmap
+
+                if celebration {
                     if completionError == nil && completionHistory.error == nil {
                         StreakRewardCard(moduleName: "简单记", progress: completionHistory.reward)
                     }
-                    celebrationHeader
                     if completionError == nil && completionHistory.error == nil
                         && completionHistory.keys.contains(DictationEligibility.dayKey(for: Date(), calendar: calendar)) {
                         WeekendCompletionNotice(calendar: calendar)
                     }
                 }
-                completionHeatmap
-
                 if celebration {
                     Button([1, 7].contains(calendar.component(.weekday, from: Date()))
                         ? "太棒了，完成啦！" : "太棒了，明天继续！") { dismiss() }
@@ -234,6 +236,12 @@ struct StatisticsView: View {
             Text("今天的你，太棒了！")
                 .font(.system(.largeTitle, design: .rounded, weight: .bold))
                 .multilineTextAlignment(.center)
+            if completionError == nil && completionHistory.error == nil {
+                Label("已连续打卡 \(completionHistory.streak) 天", systemImage: "flame.fill")
+                    .font(.system(.title, design: .rounded, weight: .bold))
+                    .foregroundStyle(Color.purple)
+                    .accessibilityIdentifier("dailyCelebrationStreak")
+            }
             Text("卡片复习、默写和错词订正都完成了。\n今天的格子已经点亮，看看你坚持的足迹！")
                 .font(.title3)
                 .foregroundStyle(AppPalette.textSecondary)
