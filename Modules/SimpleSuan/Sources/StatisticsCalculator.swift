@@ -46,6 +46,7 @@ struct PracticeActivity {
 
     var firstDay: Date { calendar.date(byAdding: .day, value: -364, to: today) ?? today }
     var todayCount: Int { count(on: today) }
+    var hasCompletedDailyGoal: Bool { todayCount >= 40 }
     var isWeekendComplete: Bool {
         WeekendStreak.isWeekendComplete(completedKeys: completedKeys, now: today, calendar: calendar)
     }

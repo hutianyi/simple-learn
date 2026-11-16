@@ -45,6 +45,7 @@ struct DictationItem: Codable, Equatable, Identifiable {
 
     var isDeferred: Bool { deferred == true }
     var allowsKeyboard: Bool { keyboardAllowed == true }
+    var requiresCopyKeyboard: Bool { (consecutiveCopyFailures ?? 0) >= 5 }
 
     var id: UUID { wordID }
     var needsRemediation: Bool { formalResult == false && !remediationPassed }
@@ -130,6 +131,8 @@ struct InitialCopyPrompt: Identifiable, Equatable {
     let completedCopies: Int
     var consecutiveFailures: Int = 0
     var keyboardAllowed: Bool = false
+
+    var requiresCopyKeyboard: Bool { consecutiveFailures >= 5 }
 
     var id: UUID { wordID }
 }

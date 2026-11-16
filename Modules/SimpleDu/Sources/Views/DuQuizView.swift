@@ -85,7 +85,7 @@ struct DuQuizView: View {
 
     private var result: some View {
         VStack(alignment: .leading, spacing: 24) {
-            Label("阅读完成！", systemImage: "checkmark.seal.fill").font(.largeTitle.bold()).foregroundStyle(.tint)
+            Label(book.progress.hasCompletedStudy ? "阅读完成！" : "答题完成！", systemImage: "checkmark.seal.fill").font(.largeTitle.bold()).foregroundStyle(.tint)
             Text(book.article.title).font(.title2)
             HStack(alignment: .firstTextBaseline) {
                 Text("\(book.progress.score(book.progress.answers, article: book.article)) / \(book.article.questions.count)").font(.system(size: 48, weight: .bold, design: .rounded))
@@ -115,9 +115,14 @@ struct DuQuizView: View {
                 }
             }
             if book.isRead {
-                Text("文章已自动收进书柜，阅读和做题记录已保留。").font(.subheadline).foregroundStyle(.secondary)
+                Text("文章已标为已读，阅读和做题记录已保留。").font(.subheadline).foregroundStyle(.secondary)
             }
-            Button("返回书架", systemImage: "books.vertical") { dismiss() }
+            if !book.isRead && book.progress.readingCompleted != true {
+                Text("正文尚未读完，读完后会自动标为已读。").font(.subheadline).foregroundStyle(.secondary)
+                Button("继续阅读文章", systemImage: "book") { readEvidence(nil) }
+                    .buttonStyle(.borderedProminent).accessibilityIdentifier("du.finishReading")
+            }
+            Button("返回文章列表", systemImage: "list.bullet") { dismiss() }
                 .buttonStyle(StudyPrimaryButtonStyle()).accessibilityIdentifier("du.archiveResult")
             HStack {
                 Button("再读一遍", systemImage: "book") { readEvidence(book.article.units.first?.paragraphs.first?.id) }

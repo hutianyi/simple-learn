@@ -60,6 +60,35 @@ public enum StudyAppearance {
     public static let surface = Color(uiColor: .secondarySystemGroupedBackground)
 }
 
+public struct StudyCompletionCard: View {
+    @Environment(\.studyTheme) private var theme
+    private let title: String
+
+    public init(_ title: String) {
+        self.title = title
+    }
+
+    public var body: some View {
+        VStack(spacing: 18) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 64, weight: .semibold))
+                .accessibilityHidden(true)
+            Text(title)
+                .font(.largeTitle.bold())
+                .multilineTextAlignment(.center)
+        }
+        .foregroundStyle(theme.accent)
+        .padding(28)
+        .frame(maxWidth: 540)
+        .background(theme.accent.opacity(0.10), in: RoundedRectangle(cornerRadius: 24))
+        .overlay {
+            RoundedRectangle(cornerRadius: 24)
+                .strokeBorder(theme.accent.opacity(0.20), lineWidth: 1)
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
 public struct StudyNavigationButton: View {
     @Environment(\.studyTheme) private var theme
     private let title: String

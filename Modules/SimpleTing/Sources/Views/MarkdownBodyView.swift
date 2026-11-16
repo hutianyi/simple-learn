@@ -22,11 +22,13 @@ struct MarkdownBodyView: View {
         return result
     }
     var body: some View {
-        LazyVStack(alignment: .leading, spacing: 20) {
+        // Measure the complete article so scrolling never relies on estimated paragraph heights.
+        VStack(alignment: .leading, spacing: 20) {
             ForEach(blocks) { block in
                 Text((try? AttributedString(markdown: block.text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(block.text))
                     .font(block.heading ? .title2.weight(.semibold) : .title3)
                     .lineSpacing(8).frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .textSelection(.enabled)

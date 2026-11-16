@@ -54,6 +54,49 @@ public enum ImportParser {
     }
 }
 
+public enum ImportFileError: LocalizedError {
+    case unsupportedType, invalidEncoding
+
+    public var errorDescription: String? {
+        switch self {
+        case .unsupportedType: return "请选择 TXT 或 JSON 题库文件。"
+        case .invalidEncoding: return "文件不是 UTF-8 文本，请重新生成题库文件。"
+        }
+    }
+}
+
+public enum ImportFileReader {
+    public static func read(_ url: URL) throws -> String {
+        guard ["txt", "json"].contains(url.pathExtension.lowercased()) else {
+            throw ImportFileError.unsupportedType
+        }
+        let accessed = url.startAccessingSecurityScopedResource()
+        defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+
+        // Coordinate with iCloud and bound the read before decoding untrusted files.
+        var coordinationError: NSError?
+        var result: Result<String, Error>?
+        NSFileCoordinator().coordinate(readingItemAt: url, options: [], error: &coordinationError) { readableURL in
+            result = Result {
+                let handle = try FileHandle(forReadingFrom: readableURL)
+                defer { try? handle.close() }
+                let data = try handle.read(upToCount: ImportParser.defaultMaximumBytes + 1) ?? Data()
+                guard data.count <= ImportParser.defaultMaximumBytes else {
+                    throw ImportParserError.tooLarge(maxBytes: ImportParser.defaultMaximumBytes)
+                }
+                guard var text = String(data: data, encoding: .utf8) else {
+                    throw ImportFileError.invalidEncoding
+                }
+                if text.hasPrefix("\u{FEFF}") { text.removeFirst() }
+                return text
+            }
+        }
+        if let coordinationError { throw coordinationError }
+        guard let result else { throw CocoaError(.fileReadUnknown) }
+        return try result.get()
+    }
+}
+
 private extension String {
     func ranges(of text: String) -> [Range<String.Index>] {
         var result: [Range<String.Index>] = []

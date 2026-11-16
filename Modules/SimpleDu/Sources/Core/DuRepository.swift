@@ -18,17 +18,18 @@ enum DuLibraryAction {
     case markRead, markUnread, archive, unarchive, markReadAndArchive
     var resultText: String {
         switch self {
-        case .markRead: "篇已标为已读，收进书柜"
-        case .markUnread: "篇已标为未读，放回书架"
-        case .archive: "篇已收进书柜"
-        case .unarchive: "篇已移回书架"
-        case .markReadAndArchive: "篇已标为已读并收进书柜"
+        case .markRead: "篇已标为已读"
+        case .markUnread: "篇已标为未读"
+        case .archive: "篇已移至已读文章"
+        case .unarchive: "篇已标为未读"
+        case .markReadAndArchive: "篇已标为已读"
         }
     }
 }
 
 struct DuIndex: Codable, Equatable {
     var schemaVersion = 1
+    var readingStateVersion: Int? = 1
     var installations: [DuInstallation] = []
     var progress: [String: DuProgress] = [:]
     var fontSize: Double = 28
@@ -42,9 +43,10 @@ struct DuIndex: Codable, Equatable {
     }
 
     func validated(packages: [String: DuPackage]) throws {
+        try duRequire(readingStateVersion == nil || readingStateVersion == 1, "阅读状态版本暂不受支持。")
         try duRequire(schemaVersion == 1 && Set(installations.map(\.key)).count == installations.count &&
                       Set(installations.map(\.sequence)).count == installations.count &&
-                      Set(installations.map(\.key)) == Set(packages.keys) && (24...36).contains(fontSize), "简单读书架数据无效，原文件已保留。")
+                      Set(installations.map(\.key)) == Set(packages.keys) && (24...36).contains(fontSize), "简单读文章列表数据无效，原文件已保留。")
         var editions = Set<String>(), validKeys = Set<String>(), articleIdentities = Set<String>()
         for item in installations {
             let package = packages[item.key]!
@@ -59,7 +61,7 @@ struct DuIndex: Codable, Equatable {
         }
         let deleted = deletedArticles ?? []
         try duRequire(Set(deleted).count == deleted.count && Set(deleted).isSubset(of: articleIdentities), "文章删除记录无效。")
-        try duRequire(Set((libraryStates ?? [:]).keys).isSubset(of: validKeys), "书架整理状态缺少对应文章。")
+        try duRequire(Set((libraryStates ?? [:]).keys).isSubset(of: validKeys), "阅读状态缺少对应文章。")
         try duRequire(Set(progress.keys).isSubset(of: validKeys) && (lastArticle.map { validKeys.contains($0) } ?? true), "简单读进度缺少对应文章。")
     }
     static func articleKey(_ package: String, _ article: String) -> String { "\(package):\(article)" }
@@ -69,15 +71,16 @@ struct DuBook: Identifiable {
     let article: DuArticle
     let progress: DuProgress
     var libraryState = DuLibraryState()
-    var isRead: Bool { libraryState.readOverride ?? !progress.attempts.isEmpty }
-    var isArchived: Bool { isRead || libraryState.archived }
+    var isRead: Bool { libraryState.readOverride ?? progress.hasCompletedStudy }
+    var isArchived: Bool { isRead }
+    var canContinue: Bool { !isArchived && (progress.anchor != nil || progress.stage != .reading) }
     var shouldOfferListening: Bool {
-        progress.readingCompleted == true && !progress.attempts.isEmpty && libraryState.listeningPromptHandled != true
+        progress.hasCompletedStudy && libraryState.listeningPromptHandled != true
     }
     var readingStatus: String {
         if isRead { return "已读" }
-        if libraryState.readOverride == false { return "未读" }
         if progress.stage == .quiz { return "答题中" }
+        if progress.stage == .result && progress.readingCompleted != true { return "待完成阅读" }
         return progress.anchor == nil ? "未读" : "阅读中"
     }
     var id: String { DuIndex.articleKey(package.key, article.id) }
@@ -105,6 +108,9 @@ struct DuBook: Identifiable {
 struct DuSnapshot {
     var index: DuIndex
     var packages: [String: DuPackage]
+    var continuingBook: DuBook? {
+        books.first { $0.id == index.lastArticle && $0.canContinue }
+    }
     var books: [DuBook] {
         let active = Dictionary(grouping: index.installations, by: \.batchID).values.compactMap { $0.max { $0.revision < $1.revision } }
         return active.sorted { $0.sequence > $1.sequence }.flatMap { item in
@@ -116,6 +122,28 @@ struct DuSnapshot {
                        libraryState: index.libraryStates?[DuIndex.articleKey(package.key, article.id)] ?? DuLibraryState())
             }
         }
+    }
+    func normalizingReadingState() -> DuSnapshot {
+        guard index.readingStateVersion == nil else { return self }
+        var value = self
+        var states = index.libraryStates ?? [:]
+        for id in Set(index.progress.keys).union(states.keys) {
+            var state = states[id] ?? DuLibraryState()
+            if state.readOverride == false && index.progress[id]?.readingStartRun == nil {
+                var progress = index.progress[id] ?? DuProgress()
+                progress.resetForReading()
+                value.index.progress[id] = progress
+                if value.index.lastArticle == id { value.index.lastArticle = nil }
+            } else if state.readOverride == nil && !(index.progress[id]?.attempts.isEmpty ?? true) {
+                // Preserve the read status inferred by older versions from completed quizzes.
+                state.readOverride = true
+            }
+            state.archived = state.readOverride ?? (value.index.progress[id]?.hasCompletedStudy ?? false)
+            states[id] = state
+        }
+        value.index.libraryStates = states
+        value.index.readingStateVersion = 1
+        return value
     }
 }
 
@@ -147,7 +175,7 @@ struct DuDisk {
             packages[item.key] = package
         }
         try index.validated(packages: packages)
-        return DuSnapshot(index: index, packages: packages)
+        return DuSnapshot(index: index, packages: packages).normalizingReadingState()
     }
     func writeArchive(_ package: DuPackage, preservingCorrupt: Bool = false) throws {
         let url = try archiveURL(package.key)
@@ -215,7 +243,7 @@ actor DuRepository {
     }
     func deleteArticle(_ bookID: String) throws -> DuSnapshot {
         var current = try snapshot ?? disk.load()
-        guard let book = current.books.first(where: { $0.id == bookID }) else { throw DuError("文章已删除或已更新，请返回书架刷新。") }
+        guard let book = current.books.first(where: { $0.id == bookID }) else { throw DuError("文章已删除或已更新，请返回文章列表刷新。") }
         let batch = book.package.manifest.batchID
         var deleted = Set(current.index.deletedArticles ?? [])
         deleted.insert(DuIndex.deletionKey(batch, book.article.id))
@@ -235,18 +263,18 @@ actor DuRepository {
     func arrangeArticles(_ ids: Set<String>, action: DuLibraryAction) throws -> DuSnapshot {
         var current = try snapshot ?? disk.load()
         let books = Dictionary(uniqueKeysWithValues: current.books.map { ($0.id, $0) })
-        try duRequire(!ids.isEmpty && ids.isSubset(of: Set(books.keys)), "所选文章已改变，请刷新书架后重新选择。")
+        try duRequire(!ids.isEmpty && ids.isSubset(of: Set(books.keys)), "所选文章已改变，请刷新文章列表后重新选择。")
         var states = current.index.libraryStates ?? [:]
         for id in ids {
             var state = states[id] ?? DuLibraryState()
             switch action {
-            case .markRead: state.readOverride = true; state.archived = true
-            case .markUnread: state.readOverride = false; state.archived = false
-            case .archive: state.archived = true
-            case .unarchive:
-                state.archived = false
-                if books[id]!.isRead { state.readOverride = false }
-            case .markReadAndArchive: state.readOverride = true; state.archived = true
+            case .markRead, .archive, .markReadAndArchive: state.readOverride = true; state.archived = true
+            case .markUnread, .unarchive:
+                state.readOverride = false; state.archived = false
+                var progress = current.index.progress[id] ?? DuProgress()
+                progress.resetForReading()
+                current.index.progress[id] = progress
+                if current.index.lastArticle == id { current.index.lastArticle = nil }
             }
             states[id] = state
         }
@@ -257,7 +285,7 @@ actor DuRepository {
     }
     func acknowledgeListeningOffer(_ bookID: String) throws -> DuSnapshot {
         var current = try snapshot ?? disk.load()
-        guard let book = current.books.first(where: { $0.id == bookID }) else { throw DuError("这篇文章已更新，请返回书架重新打开。") }
+        guard let book = current.books.first(where: { $0.id == bookID }) else { throw DuError("这篇文章已更新，请返回文章列表重新打开。") }
         if book.libraryState.listeningPromptHandled == true { return current }
         try duRequire(book.shouldOfferListening, "请先完成文章阅读和全部题目。")
         var state = book.libraryState
@@ -270,9 +298,9 @@ actor DuRepository {
     }
     func saveProgress(_ progress: DuProgress, bookID: String, fontSize: Double? = nil) throws -> DuSnapshot {
         var current = try snapshot ?? disk.load()
-        guard let book = current.books.first(where: { $0.id == bookID }) else { throw DuError("这篇文章已更新，请返回书架重新打开。") }
+        guard let book = current.books.first(where: { $0.id == bookID }) else { throw DuError("这篇文章已更新，请返回文章列表重新打开。") }
         try progress.validated(article: book.article)
-        if progress.attempts.count > book.progress.attempts.count {
+        if progress.hasCompletedStudy && !book.progress.hasCompletedStudy {
             var state = current.index.libraryStates?[bookID] ?? DuLibraryState()
             state.readOverride = true
             state.archived = true
@@ -301,7 +329,7 @@ struct DuBackup: Codable {
             packages[key] = package
         }
         try index.validated(packages: packages)
-        return DuSnapshot(index: index, packages: packages)
+        return DuSnapshot(index: index, packages: packages).normalizingReadingState()
     }
     static func decode(_ data: Data) throws -> Self {
         let value = try JSONDecoder().decode(Self.self, from: data)
@@ -321,7 +349,7 @@ public enum SimpleDuBackupTransfer {
     public static func validate(_ data: Data) throws -> String {
         let value = try DuBackup.decode(data).validated()
         let archived = value.books.filter(\.isArchived).count
-        return "文章 \(value.books.count) 篇（书架 \(value.books.count - archived)，书柜 \(archived)），包含插图、历史版本、阅读状态与答题进度"
+        return "文章 \(value.books.count) 篇（未读文章 \(value.books.count - archived)，已读文章 \(archived)），包含插图、历史版本、阅读状态与答题进度"
     }
     public static func restore(_ data: Data, directory: URL? = nil) throws {
         let incoming = try DuBackup.decode(data).validated(), disk = try disk(directory)
@@ -389,7 +417,14 @@ extension DuBook {
         return (String(id[stemRange]), sequence)
     }
     private static func listeningEscape(_ text: String) -> String {
-        let special: Set<Character> = ["\\", "`", "*", "_", "[", "]", "<", ">", "#"]
-        return text.map { special.contains($0) ? "\\\($0)" : String($0) }.joined()
+        let special: Set<Character> = ["\\", "`", "*", "_", "[", "]", "#"]
+        return text.map { character in
+            switch character {
+            case "&": return "&amp;"
+            case "<": return "&lt;"
+            case ">": return "&gt;"
+            default: return special.contains(character) ? "\\\(character)" : String(character)
+            }
+        }.joined()
     }
 }

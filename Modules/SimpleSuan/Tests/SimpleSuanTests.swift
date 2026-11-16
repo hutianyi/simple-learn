@@ -123,6 +123,37 @@ final class SimpleSuanTests: XCTestCase {
         XCTAssertEqual(PracticeActivity(sessions: [], now: now, calendar: activityCalendar).todayCount, 0)
     }
 
+    func testDailyGoalRequiresFortySavedAnswersAcrossBatches() {
+        let now = activityDate(2026, 10, 2, hour: 20)
+        for count in [0, 20, 39, 40, 60] {
+            let activity = PracticeActivity(sessions: [activitySession(count: count, at: now)],
+                now: now, calendar: activityCalendar, freeDayKeys: [])
+            XCTAssertEqual(activity.hasCompletedDailyGoal, count >= 40, "\(count) answers")
+        }
+        let first = activitySession(count: 20, at: now)
+        let second = activitySession(count: 20, at: now, operation: .division)
+        XCTAssertTrue(PracticeActivity(sessions: [first, second], now: now,
+            calendar: activityCalendar, freeDayKeys: []).hasCompletedDailyGoal)
+        XCTAssertFalse(PracticeActivity(sessions: [first], now: now,
+            calendar: activityCalendar, freeDayKeys: []).hasCompletedDailyGoal)
+    }
+
+    func testDailyGoalExcludesPartialOtherDaysAndFreeDayCredits() {
+        let now = activityDate(2026, 10, 2, hour: 20)
+        let yesterday = activityDate(2026, 10, 1, hour: 20)
+        let tomorrow = activityDate(2026, 10, 3, hour: 20)
+        var partial = activitySession(count: 40, at: now)
+        partial.isPartial = true
+        let activity = PracticeActivity(sessions: [partial, activitySession(count: 40, at: yesterday),
+            activitySession(count: 40, at: tomorrow)], now: now, calendar: activityCalendar,
+            freeDayKeys: ["2026-10-02"])
+        XCTAssertEqual(activity.todayCount, 0)
+        XCTAssertFalse(activity.hasCompletedDailyGoal)
+        let finished = activitySession(count: 40, at: now)
+        XCTAssertFalse(PracticeActivity(sessions: [finished], now: tomorrow,
+            calendar: activityCalendar, freeDayKeys: []).hasCompletedDailyGoal)
+    }
+
     func testHeatmapDarkensBeyondFortyAndOneHundredQuestions() {
         let counts = [0, 1, 10, 20, 30, 40, 60, 80, 100, 200, 500]
         let intensities = counts.map(PracticeActivity.intensity(for:))

@@ -8,6 +8,79 @@ final class ListenCoreTests: XCTestCase {
     }
     private func library() throws -> ListenLibrary { try ListenLibrary().importing([draft(7), draft(1, count: 3)]) }
 
+    @MainActor
+    func testArticleEditingPreservesIdentityOrderAndOtherArticles() throws {
+        let original = try library()
+        let article = original.days[0].articles[0]
+        let date = Date(timeIntervalSince1970: 20_000)
+        let updated = try original.updatingArticle(article.id, title: " Updated title \n",
+            markdown: "\n## New heading\n\nA **new** body.\n", at: date)
+        let edited = try XCTUnwrap(updated.article(article.id))
+        XCTAssertEqual(edited.id, article.id)
+        XCTAssertEqual(edited.articleNumber, article.articleNumber)
+        XCTAssertEqual(edited.title, "Updated title")
+        XCTAssertEqual(edited.rawMarkdown, "## New heading\n\nA **new** body.")
+        XCTAssertEqual(edited.speechText, "New heading.\n\nA new body.")
+        XCTAssertEqual(updated.articlesNewestFirst.map(\.id), original.articlesNewestFirst.map(\.id))
+        XCTAssertEqual(updated.nextImportSequence, original.nextImportSequence)
+        XCTAssertEqual(updated.days[1], original.days[1])
+        var expectedDay = original.days[0]
+        expectedDay.articles[0] = edited
+        expectedDay.updatedAt = date
+        XCTAssertEqual(updated.days[0], expectedDay)
+        let restored = try ListenBackup.decode(ListenBackup(library: updated).encoded())
+        XCTAssertEqual(restored.library, updated)
+        let playback = PlaybackSession(order: .forward, loopEnabled: false)
+        playback.library = updated
+        _ = playback.begin(article.id)
+        XCTAssertEqual(playback.article?.speechText, edited.speechText)
+    }
+
+    @MainActor
+    func testArticleEditingPersistsAndKeepsSafetyCopy() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("TingEdit-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let file = LibraryFile(url: folder.appendingPathComponent("library.json"))
+        let original = try library(); try file.save(original)
+        let store = LibraryStore(file: file)
+        let article = original.articlesNewestFirst[0]
+        try store.updateArticle(article.id, title: "Changed", markdown: "Changed **words**.")
+        XCTAssertEqual(try file.load(), store.library)
+        XCTAssertEqual(LibraryStore(file: file).library.article(article.id)?.speechText, "Changed words.")
+        let copies = try FileManager.default.contentsOfDirectory(at: folder.appendingPathComponent("SafetyBackups"), includingPropertiesForKeys: nil)
+        XCTAssertTrue(try copies.contains { try LibraryFile(url: $0).load() == original })
+    }
+
+    @MainActor
+    func testArticleEditingRejectsInvalidInputWithoutWriting() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("TingEdit-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let file = LibraryFile(url: folder.appendingPathComponent("library.json"))
+        let original = try library(); try file.save(original)
+        let store = LibraryStore(file: LibraryFile(url: file.url, writer: { _, _ in XCTFail("Invalid or unchanged edits must not write") }))
+        let article = original.articlesNewestFirst[0]
+        for (title, body) in [(" ", "Body."), ("Title", " \n"), ("Title", "---"), ("Title", "<b>HTML</b>"), ("Title", "| a | table |") ] {
+            XCTAssertThrowsError(try store.updateArticle(article.id, title: title, markdown: body))
+        }
+        XCTAssertThrowsError(try store.updateArticle(UUID(), title: "Title", markdown: "Body."))
+        try store.updateArticle(article.id, title: article.title, markdown: article.rawMarkdown)
+        XCTAssertEqual(store.library, original)
+        XCTAssertEqual(try file.load(), original)
+    }
+
+    @MainActor
+    func testArticleEditingWriteFailureKeepsOriginalMemoryAndDisk() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("TingEdit-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let file = LibraryFile(url: folder.appendingPathComponent("library.json"))
+        let original = try library(); try file.save(original)
+        let before = try Data(contentsOf: file.url)
+        let store = LibraryStore(file: LibraryFile(url: file.url, writer: { _, _ in throw ListenError.message("disk full") }))
+        XCTAssertThrowsError(try store.updateArticle(original.articlesNewestFirst[0].id, title: "Changed", markdown: "Changed body."))
+        XCTAssertEqual(store.library, original)
+        XCTAssertEqual(try Data(contentsOf: file.url), before)
+    }
+
     func testParsesArticlesAfterQuestionsAndSkipsAppendixHeadings() throws {
         let text = """
         # Article 1: First: A title
@@ -603,6 +676,17 @@ extension ListenCoreTests {
         try manual.commit([MarkdownArticleParser.parsePastedText("# Article 1: Manual\n\nManual body.")])
         try manual.commit([MarkdownArticleParser.parsePastedText("# Article 1: Manual\n\nManual body.")])
         XCTAssertEqual(try file.load().articlesNewestFirst.count, 3)
+    }
+    @MainActor
+    func testReadingLinkAcceptsEncodedLiteralAnglesAndPreservesText() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("TingLink-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let file = LibraryFile(url: folder.appendingPathComponent("library.json"))
+        let result = try SimpleTingArticleImport.addFromReading(title: "A card",
+            bodyMarkdown: "Please write &lt;name&gt; &amp; keep &amp;lt; as text.", sourceID: "reading:literal", file: file)
+        XCTAssertEqual(result, .added)
+        XCTAssertEqual(try file.load().articlesNewestFirst[0].speechText, "Please write <name> & keep &lt; as text.")
+        XCTAssertThrowsError(try MarkdownCleaner.plainText("A real <b>HTML</b> fragment."))
     }
     @MainActor
     func testReadingLinkPreservesCorruptLibraryAndWriteFailure() throws {

@@ -23,7 +23,7 @@ struct LibraryView: View {
             }
             .overlay {
                 if batches.isEmpty {
-                    ContentUnavailableView("还没有题库", systemImage: "books.vertical", description: Text("导入一个 JSON 或 simplelian-json 代码块开始使用。"))
+                    ContentUnavailableView("还没有题库", systemImage: "books.vertical", description: Text("导入 TXT 或 JSON 题库文件开始使用，可一次选择多个文件。"))
                 }
             }
             .navigationTitle("题库")

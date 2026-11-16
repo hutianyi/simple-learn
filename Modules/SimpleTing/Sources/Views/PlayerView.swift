@@ -48,6 +48,8 @@ struct PlayerView: View {
         }
         .padding(.horizontal, 20).padding(.vertical, 14)
         .frame(maxWidth: .infinity).background(.bar)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("listen.player")
     }
 
     private var sleepTimer: some View {

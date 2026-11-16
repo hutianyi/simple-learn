@@ -89,6 +89,53 @@ final class ModuleNavigationTests: XCTestCase {
         }
     }
 
+    func testListenArticleEndStaysAbovePlayerAfterScrollingStops() {
+        XCUIDevice.shared.orientation = .landscapeLeft
+        defer { XCUIDevice.shared.orientation = .portrait }
+        let app = XCUIApplication()
+        app.launch()
+        XCTAssertTrue(app.buttons["module.ting"].waitForExistence(timeout: 10))
+        app.buttons["module.ting"].tap()
+        app.buttons["listen.import"].tap()
+        let editor = app.textViews["listen.importText"]
+        XCTAssertTrue(editor.waitForExistence(timeout: 5))
+        let finalParagraph = "The final paragraph must remain fully visible after releasing the scroll. These last sentences belong above the player, including this final line."
+        let paragraphs = (1...18).map {
+            "Paragraph \($0). This is a long reading passage. Each paragraph takes several lines so the article needs scrolling in both portrait and landscape."
+        }.joined(separator: "\n\n")
+        editor.tap()
+        editor.typeText("# Article 1: Scroll Boundary Test\n\n\(paragraphs)\n\n\(finalParagraph)")
+        app.buttons["listen.confirmImport"].tap()
+        XCTAssertTrue(expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: editor).fulfillWithin(timeout: 10))
+
+        for orientation in [UIDeviceOrientation.landscapeLeft, .portrait] {
+            XCUIDevice.shared.orientation = orientation
+            let body = app.scrollViews["listen.articleBody"]
+            let player = app.otherElements["listen.player"]
+            XCTAssertTrue(body.waitForExistence(timeout: 5))
+            XCTAssertTrue(player.waitForExistence(timeout: 5))
+            let end = body.staticTexts[finalParagraph]
+            for _ in 0..<20 {
+                body.swipeUp()
+                if end.exists, end.frame.minY >= body.frame.minY, end.frame.maxY <= body.frame.maxY { break }
+            }
+            // Push past the end once more, then check the settled position after the drag releases.
+            body.swipeUp()
+            XCTAssertTrue(end.exists)
+            XCTAssertLessThanOrEqual(body.frame.maxY, player.frame.minY + 1, "The scroll viewport must end above the entire player")
+            for _ in 0..<3 {
+                XCTAssertGreaterThanOrEqual(end.frame.minY, body.frame.minY)
+                XCTAssertLessThanOrEqual(end.frame.maxY, body.frame.maxY, "All final lines must remain visible after overscroll settles")
+                XCTAssertLessThanOrEqual(end.frame.maxY, player.frame.minY)
+                // Screenshot capture also allows the UI to settle between position checks.
+                let screenshot = XCTAttachment(screenshot: app.screenshot())
+                screenshot.name = "文章末尾松手后-\(orientation.rawValue)"
+                screenshot.lifetime = .keepAlways
+                add(screenshot)
+            }
+        }
+    }
+
     func testLongPressReordersCardsAndPersistsAfterRelaunch() {
         let app = XCUIApplication()
         app.launch()

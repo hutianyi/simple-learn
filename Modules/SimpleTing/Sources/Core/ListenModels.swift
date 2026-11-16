@@ -71,6 +71,27 @@ struct ListenLibrary: Codable, Equatable, Sendable {
     func day(for articleID: UUID) -> ListenDay? { days.first { $0.articles.contains { $0.id == articleID } } }
     func article(_ id: UUID) -> ListenArticle? { day(for: id)?.articles.first { $0.id == id } }
 
+    func updatingArticle(_ id: UUID, title: String, markdown: String, at date: Date = Date()) throws -> ListenLibrary {
+        let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let markdown = markdown.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty, !markdown.isEmpty else { throw ListenError.message("标题和正文不能为空。") }
+        let speechText = try MarkdownCleaner.plainText(markdown)
+        guard !speechText.isEmpty else { throw ListenError.message("正文没有可朗读的文字，请检查后再保存。") }
+        var result = self
+        guard let day = result.days.firstIndex(where: { $0.articles.contains { $0.id == id } }),
+              let article = result.days[day].articles.firstIndex(where: { $0.id == id }) else {
+            throw ListenError.message("这篇文章已不存在，请返回文章库。")
+        }
+        let original = result.days[day].articles[article]
+        guard original.title != title || original.rawMarkdown != markdown || original.speechText != speechText else { return self }
+        result.days[day].articles[article].title = title
+        result.days[day].articles[article].rawMarkdown = markdown
+        result.days[day].articles[article].speechText = speechText
+        result.days[day].updatedAt = date
+        try result.validate()
+        return result
+    }
+
     func validate() throws {
         guard schemaVersion == 1, parserVersion == 1, nextImportSequence > 0 else {
             throw ListenError.message("文章库格式不受支持，原文件已保留。")

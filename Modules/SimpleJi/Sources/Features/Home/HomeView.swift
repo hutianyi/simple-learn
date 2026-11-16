@@ -9,15 +9,10 @@ struct HomeView: View {
 
     @FetchRequest private var dueStates: FetchedResults<ReviewStateEntity>
     @FetchRequest private var words: FetchedResults<WordEntity>
-    @FetchRequest private var dictationStates: FetchedResults<DictationStateEntity>
-    @FetchRequest private var dictationDays: FetchedResults<DictationDayEntity>
-    @FetchRequest private var dictationEvents: FetchedResults<DictationEventEntity>
     @FetchRequest private var completionDays: FetchedResults<StudyCompletionDayEntity>
+    @State private var dictationStatus: Result<DictationDay, Error>?
     private let calendar: Calendar
     private let now: Date
-    private let today: String
-    private let startOfToday: Date
-    private let tomorrow: Date
 
     init(settings: SettingsStore, calendar: Calendar = .current, now: Date = Date()) {
         self.settings = settings
@@ -25,9 +20,6 @@ struct HomeView: View {
         self.now = now
         let start = calendar.startOfDay(for: now)
         let tomorrow = calendar.date(byAdding: .day, value: 1, to: start) ?? now
-        self.today = DictationEligibility.dayKey(for: now, calendar: calendar)
-        self.startOfToday = start
-        self.tomorrow = tomorrow
 
         let dueRequest = ReviewStateEntity.fetchRequest()
         dueRequest.sortDescriptors = []
@@ -36,37 +28,27 @@ struct HomeView: View {
         let wordRequest = WordEntity.fetchRequest()
         wordRequest.sortDescriptors = [NSSortDescriptor(keyPath: \WordEntity.createdAt, ascending: true)]
         _words = FetchRequest(fetchRequest: wordRequest, animation: .default)
-        let stateRequest = DictationStateEntity.fetchRequest()
-        stateRequest.sortDescriptors = []
-        _dictationStates = FetchRequest(fetchRequest: stateRequest)
-        let dayRequest = DictationDayEntity.fetchRequest()
-        dayRequest.sortDescriptors = []
-        _dictationDays = FetchRequest(fetchRequest: dayRequest)
-        let eventRequest = DictationEventEntity.fetchRequest()
-        eventRequest.sortDescriptors = []
-        _dictationEvents = FetchRequest(fetchRequest: eventRequest)
         let completionRequest = StudyCompletionDayEntity.fetchRequest()
         completionRequest.sortDescriptors = []
-        var visibleCompletionKeys = [today]
-        if calendar.component(.weekday, from: now) == 1,
-           let saturday = calendar.date(byAdding: .day, value: -1, to: start) {
-            visibleCompletionKeys.append(DictationEligibility.dayKey(for: saturday, calendar: calendar))
-        }
-        completionRequest.predicate = NSPredicate(format: "dayKey IN %@", visibleCompletionKeys)
+        completionRequest.predicate = NSPredicate(format: "dayKey == %@",
+            DictationEligibility.dayKey(for: now, calendar: calendar))
         _completionDays = FetchRequest(fetchRequest: completionRequest)
     }
 
     var body: some View {
         let weekend = weekendStatus
+        let complete = todayIsComplete
         ZStack {
             AppPalette.background.ignoresSafeArea()
 
             VStack(spacing: 28) {
                 Spacer(minLength: 30)
 
-                Text("今天的单词学习")
-                    .font(StudyAppearance.title)
-                    .foregroundStyle(AppPalette.textPrimary)
+                if !complete {
+                    Text("今天的单词学习")
+                        .font(StudyAppearance.title)
+                        .foregroundStyle(AppPalette.textPrimary)
+                }
 
                 if FreeDayStore.isUsedToday(now: now) {
                     Text("免做卡 · 今天已打卡，以下学习可自愿进行。未完成内容留待之后学习。")
@@ -77,7 +59,9 @@ struct HomeView: View {
                         .font(.footnote).foregroundStyle(.red)
                 }
 
-                if weekend.isComplete {
+                if complete {
+                    completionCard
+                } else if weekend.isComplete {
                     Label("周末已完成", systemImage: "checkmark.circle.fill")
                         .font(.title2.bold()).foregroundStyle(AppPalette.accent)
                 } else {
@@ -94,18 +78,12 @@ struct HomeView: View {
                 }
 
                 VStack(spacing: 14) {
-                    if !weekend.isComplete {
-                        if dueStates.isEmpty {
-                            reviewButton.buttonStyle(LargeSecondaryButtonStyle())
-                        } else {
+                    if !complete && !weekend.isComplete {
+                        if !dueStates.isEmpty {
                             reviewButton.buttonStyle(LargePrimaryButtonStyle())
                         }
 
-                        if hasPendingDictation && dueStates.isEmpty {
-                            dictationButton.buttonStyle(LargePrimaryButtonStyle())
-                        } else {
-                            dictationButton.buttonStyle(LargeSecondaryButtonStyle())
-                        }
+                        dictationEntry
                     }
 
                     Button {
@@ -123,7 +101,7 @@ struct HomeView: View {
                         .font(.body)
                         .foregroundStyle(AppPalette.textSecondary)
                         .multilineTextAlignment(.center)
-                } else {
+                } else if !complete {
                     Text("词库共有 \(words.count) 个单词")
                         .font(.subheadline)
                         .foregroundStyle(AppPalette.textSecondary)
@@ -137,6 +115,10 @@ struct HomeView: View {
         }
         .navigationBarBackButtonHidden()
         .toolbar(.hidden, for: .navigationBar)
+        .onAppear(perform: refreshDictationStatus)
+        .onReceive(NotificationCenter.default.publisher(for: .NSManagedObjectContextObjectsDidChange, object: context)) { _ in
+            refreshDictationStatus()
+        }
     }
 
     private var weekendStatus: (isComplete: Bool, error: String?) {
@@ -144,11 +126,23 @@ struct HomeView: View {
         catch { return (false, error.localizedDescription) }
     }
 
+    private var todayIsComplete: Bool {
+        guard dueStates.isEmpty, case .success(let day) = dictationStatus,
+              day.items.allSatisfy({
+                  StudyStreak.dictationFinished(phase: DictationPhase.complete.rawValue, items: [$0])
+              }), let snapshot = completionDays.first else { return false }
+        return (try? JSONDecoder().decode(StudyCompletionDay.self, from: snapshot.snapshotData))?.isComplete == true
+    }
+
+    private var completionCard: some View {
+        StudyCompletionCard("今天的单词学习已完成")
+            .accessibilityIdentifier("home.studyComplete")
+    }
+
     private var dictationButton: some View {
         Button { router.push(.dictation) } label: {
             Label("开始默写", systemImage: "pencil.line")
         }
-        .disabled(words.isEmpty)
         .accessibilityIdentifier("home.startDictation")
     }
 
@@ -160,54 +154,41 @@ struct HomeView: View {
         .accessibilityIdentifier("home.startReview")
     }
 
-    private var uninitializedLegacyWordsExist: Bool {
-        guard settings.baselineCampaign == nil,
-              !words.isEmpty else { return false }
-        return words.contains {
-            $0.createdAt < startOfToday && ($0.dictationState?.totalFormal ?? 0) == 0
-                && !isMasteredForDictation($0)
+    @ViewBuilder
+    private var dictationEntry: some View {
+        switch dictationStatus {
+        case .success(let day):
+            let pending = day.items.contains {
+                !StudyStreak.dictationFinished(phase: DictationPhase.complete.rawValue, items: [$0])
+            }
+            if pending {
+                if dueStates.isEmpty {
+                    dictationButton.buttonStyle(LargePrimaryButtonStyle())
+                } else {
+                    dictationButton.buttonStyle(LargeSecondaryButtonStyle())
+                }
+            } else {
+                Label(day.items.isEmpty ? "今天没有到期的默写词" : "今天的默写已完成",
+                      systemImage: day.items.isEmpty ? "checkmark.circle" : "checkmark.circle.fill")
+                    .font(.headline)
+                    .foregroundStyle(AppPalette.textSecondary)
+                    .accessibilityIdentifier("home.dictationStatus")
+            }
+        case .failure(let error):
+            Text("无法读取默写任务：\(error.localizedDescription)")
+                .font(.footnote).foregroundStyle(.red)
+            Button("重试读取默写任务", action: refreshDictationStatus)
+                .buttonStyle(LargeSecondaryButtonStyle())
+        case nil:
+            ProgressView("正在读取默写任务")
         }
     }
 
-    private var hasPendingDictation: Bool {
-        if uninitializedLegacyWordsExist { return true }
-        let existing = Set(words.filter { !isMasteredForDictation($0) }.map(\.id))
-        let completed = Set(dictationEvents.filter { $0.kind == "baselineFormal" }.map(\.wordID))
-        let hasPendingBaseline = settings.baselineCampaign?.selectedWordIDs.contains {
-            existing.contains($0) && !completed.contains($0)
-        } ?? false
-        if let todayDay = dictationDays.first(where: { $0.dayKey == today }) {
-            if todayDay.phase != DictationPhase.complete.rawValue { return true }
-            let count = (try? JSONDecoder().decode([DictationItem].self,
-                                                    from: todayDay.tasksData))?.count ?? 0
-            let baselineLimit = settings.dictationLimit.rawValue == 0 ? 50 : min(50, settings.dictationLimit.rawValue)
-            if count == 0 && hasNewDictationWords && !completedToday { return true }
-            return hasPendingBaseline && count < baselineLimit
-        }
-        if hasPendingBaseline { return true }
-        if hasNewDictationWords && !completedToday { return true }
-        return dictationStates.contains {
-            ($0.initialCopyCompletedAt != nil || $0.totalFormal > 0)
-                && ($0.nextReviewDate.map { $0 < tomorrow } ?? false)
-                && ($0.word.map { !isMasteredForDictation($0) } ?? false)
+    private func refreshDictationStatus() {
+        dictationStatus = Result {
+            try DictationRepository.previewDay(in: context, limit: settings.dictationLimit.rawValue,
+                campaign: settings.baselineCampaign, masteredTerms: settings.masteredDictationTerms,
+                now: now, calendar: calendar)
         }
     }
-
-    private var completedToday: Bool {
-        completionDays.first(where: { $0.dayKey == today }).flatMap {
-            try? JSONDecoder().decode(StudyCompletionDay.self, from: $0.snapshotData)
-        }?.isComplete == true
-    }
-
-    private var hasNewDictationWords: Bool {
-        words.contains {
-            !isMasteredForDictation($0)
-                && DictationEligibility.canStartDirectly(word: $0, now: now, calendar: calendar)
-        }
-    }
-
-    private func isMasteredForDictation(_ word: WordEntity) -> Bool {
-        settings.masteredDictationTerms.contains(EnglishNormalizer.normalize(word.english))
-    }
-
 }

@@ -291,6 +291,108 @@ final class DuCoreTests: XCTestCase {
         XCTAssertThrowsError(try package { $0.articles[0].dayNumber = 0 })
         XCTAssertThrowsError(try package { $0.articles[0].articleNumber = -1 })
     }
+    func testMarkUnreadClearsResumeAndCurrentWorkThenResumesNewReadingAndQuiz() async throws {
+        let directory = try folder(), restored = try folder()
+        defer { try? FileManager.default.removeItem(at: directory); try? FileManager.default.removeItem(at: restored) }
+        let repo = DuRepository(directory: directory)
+        let installed = try await repo.install(package(count: 2)).0
+        let book = installed.books[0], other = installed.books[1]
+        var progress = DuProgress()
+        progress.anchor = DuAnchor(unitID: "u1", paragraphID: "p1", offset: 8)
+        progress.readingCompleted = true
+        try progress.select(2, question: book.article.questions[0])
+        try progress.submit(book.article.questions[0], article: book.article)
+        try progress.select(1, question: book.article.questions[1])
+        _ = try await repo.saveProgress(progress, bookID: other.id)
+        let started = try await repo.saveProgress(progress, bookID: book.id)
+        XCTAssertEqual(started.continuingBook?.id, book.id)
+        let unread = try await repo.arrangeArticles([book.id], action: .markUnread)
+        let fresh = unread.books[0]
+        XCTAssertNil(unread.index.lastArticle)
+        XCTAssertNil(unread.continuingBook)
+        XCTAssertNil(fresh.progress.anchor)
+        XCTAssertNil(fresh.progress.currentQuestionID)
+        XCTAssertEqual(fresh.progress.stage, .reading)
+        XCTAssertEqual(fresh.readingStatus, "未读")
+        XCTAssertEqual(fresh.progress.readingCompleted, false)
+        XCTAssertTrue(fresh.progress.answers.isEmpty)
+        XCTAssertTrue(fresh.progress.selections.isEmpty)
+        XCTAssertEqual(fresh.progress.firstAnswers, progress.firstAnswers)
+        XCTAssertEqual(fresh.progress.run, progress.run + 1)
+        XCTAssertEqual(unread.index.progress[other.id], progress)
+        XCTAssertEqual(try DuDisk(directory: directory).load().index, unread.index)
+        let backup = try SimpleDuBackupTransfer.exportData(directory: directory)
+        try SimpleDuBackupTransfer.restore(backup, directory: restored)
+        let recovered = try DuDisk(directory: restored).load()
+        XCTAssertEqual(recovered.index, unread.index)
+        XCTAssertNil(recovered.continuingBook)
+        let repeated = try await repo.arrangeArticles([book.id], action: .markUnread)
+        XCTAssertEqual(repeated.books[0].progress.run, fresh.progress.run)
+        var rereading = fresh.progress
+        rereading.anchor = DuAnchor(unitID: "u1", paragraphID: "p1", offset: 0)
+        let reading = try await repo.saveProgress(rereading, bookID: book.id)
+        XCTAssertEqual(reading.continuingBook?.id, book.id)
+        XCTAssertEqual(reading.books[0].readingStatus, "阅读中")
+        try rereading.select(0, question: book.article.questions[0])
+        let quiz = try await repo.saveProgress(rereading, bookID: book.id)
+        XCTAssertEqual(quiz.continuingBook?.progress.stage, .quiz)
+        XCTAssertEqual(quiz.books[0].readingStatus, "答题中")
+        XCTAssertEqual(try DuDisk(directory: directory).load().continuingBook?.progress, rereading)
+    }
+    func testReturningArchivedUnreadArticleAlsoStartsFresh() async throws {
+        let directory = try folder(); defer { try? FileManager.default.removeItem(at: directory) }
+        let repo = DuRepository(directory: directory)
+        let book = try await repo.install(package()).0.books[0]
+        XCTAssertFalse(book.canContinue)
+        let settingsOnly = try await repo.saveProgress(book.progress, bookID: book.id, fontSize: 32)
+        XCTAssertNil(settingsOnly.continuingBook)
+        var progress = book.progress
+        progress.anchor = DuAnchor(unitID: "u1", paragraphID: "p1", offset: 8)
+        _ = try await repo.saveProgress(progress, bookID: book.id)
+        let archived = try await repo.arrangeArticles([book.id], action: .archive)
+        XCTAssertTrue(archived.books[0].isArchived)
+        XCTAssertNil(archived.continuingBook)
+        let returned = try await repo.arrangeArticles([book.id], action: .unarchive)
+        XCTAssertFalse(returned.books[0].isArchived)
+        XCTAssertNil(returned.books[0].progress.anchor)
+        XCTAssertNil(returned.continuingBook)
+        XCTAssertNil(returned.index.lastArticle)
+    }
+    func testRereadingDoesNotUseHistoricalAttemptsToOfferListeningPrematurely() async throws {
+        let directory = try folder(); defer { try? FileManager.default.removeItem(at: directory) }
+        let repo = DuRepository(directory: directory)
+        let book = try await repo.install(package()).0.books[0]
+        var progress = DuProgress()
+        progress.readingCompleted = true
+        for question in book.article.questions {
+            try progress.select(question.answer, question: question)
+            try progress.submit(question, article: book.article)
+        }
+        let completed = try await repo.saveProgress(progress, bookID: book.id)
+        XCTAssertTrue(completed.books[0].shouldOfferListening)
+        let unread = try await repo.arrangeArticles([book.id], action: .unarchive)
+        XCTAssertEqual(unread.books[0].progress.attempts, progress.attempts)
+        XCTAssertEqual(unread.books[0].progress.firstAnswers, progress.firstAnswers)
+        XCTAssertFalse(unread.books[0].shouldOfferListening)
+        progress = unread.books[0].progress
+        progress.readingCompleted = true
+        let reread = try await repo.saveProgress(progress, bookID: book.id)
+        XCTAssertFalse(reread.books[0].shouldOfferListening)
+        let manuallyRead = try await repo.arrangeArticles([book.id], action: .markRead)
+        XCTAssertFalse(manuallyRead.books[0].shouldOfferListening)
+        for question in book.article.questions {
+            try progress.select(question.answer, question: question)
+            try progress.submit(question, article: book.article)
+        }
+        let recompleted = try await repo.saveProgress(progress, bookID: book.id)
+        XCTAssertTrue(recompleted.books[0].shouldOfferListening)
+        XCTAssertTrue(recompleted.books[0].isRead)
+        XCTAssertEqual(recompleted.books[0].progress.attempts.map(\.run), [1, 2])
+        XCTAssertEqual(recompleted.books[0].progress.firstAnswers, completed.books[0].progress.firstAnswers)
+        progress.restart(article: book.article)
+        let retry = try await repo.saveProgress(progress, bookID: book.id)
+        XCTAssertTrue(retry.books[0].shouldOfferListening)
+    }
     func testBatchMarkingAndArchivingPreservesAnswersAndSurvivesBackup() async throws {
         let directory = try folder(), restored = try folder()
         defer { try? FileManager.default.removeItem(at: directory); try? FileManager.default.removeItem(at: restored) }
@@ -315,7 +417,9 @@ final class DuCoreTests: XCTestCase {
         XCTAssertEqual(recovered.index.progress[first.id], progress)
         let unread = try await repo.arrangeArticles(ids, action: .markUnread)
         XCTAssertTrue(unread.books.allSatisfy { !$0.isArchived && !$0.isRead })
-        XCTAssertEqual(unread.index.progress[first.id], progress)
+        XCTAssertEqual(unread.index.progress[first.id]?.firstAnswers, progress.firstAnswers)
+        XCTAssertTrue(unread.index.progress[first.id]!.answers.isEmpty)
+        XCTAssertNil(unread.index.lastArticle)
     }
     func testReadAutomaticallyArchivesAndReturningToShelfMarksUnread() async throws {
         let directory = try folder(); defer { try? FileManager.default.removeItem(at: directory) }
@@ -324,7 +428,7 @@ final class DuCoreTests: XCTestCase {
         let id = installed.books[0].id
         let archived = try await repo.arrangeArticles([id], action: .archive)
         XCTAssertTrue(archived.books[0].isArchived)
-        XCTAssertFalse(archived.books[0].isRead)
+        XCTAssertTrue(archived.books[0].isRead)
         XCTAssertTrue(archived.index.progress.isEmpty)
         let unarchived = try await repo.arrangeArticles([id], action: .unarchive)
         XCTAssertFalse(unarchived.books[0].isArchived)
@@ -332,12 +436,119 @@ final class DuCoreTests: XCTestCase {
         let read = try await repo.arrangeArticles([id], action: .markRead)
         XCTAssertTrue(read.books[0].isRead)
         XCTAssertTrue(read.books[0].isArchived)
-        XCTAssertTrue(read.index.progress.isEmpty)
+        XCTAssertEqual(read.books[0].progress.stage, .reading)
         let returned = try await repo.arrangeArticles([id], action: .unarchive)
         XCTAssertFalse(returned.books[0].isRead)
         XCTAssertFalse(returned.books[0].isArchived)
-        XCTAssertTrue(returned.index.progress.isEmpty)
+        XCTAssertNil(returned.books[0].progress.anchor)
+        XCTAssertEqual(returned.books[0].progress.readingStartRun, 1)
         XCTAssertEqual(try DuDisk(directory: directory).load().index, returned.index)
+    }
+    func testLegacyUnreadResetsOnceWhileModernRereadingAndHistoryArePreserved() async throws {
+        let directory = try folder(), restored = try folder()
+        defer { try? FileManager.default.removeItem(at: directory); try? FileManager.default.removeItem(at: restored) }
+        let repo = DuRepository(directory: directory)
+        let installed = try await repo.install(package(count: 3)).0
+        let first = installed.books[0], second = installed.books[1], third = installed.books[2]
+        var completed = DuProgress()
+        completed.anchor = DuAnchor(unitID: "u1", paragraphID: "p1", offset: 8)
+        completed.readingCompleted = true
+        for question in first.article.questions {
+            try completed.select(question.answer, question: question)
+            try completed.submit(question, article: first.article)
+        }
+        completed.stage = .result
+        var rereading = completed
+        rereading.resetForReading()
+        rereading.anchor = DuAnchor(unitID: "u1", paragraphID: "p1", offset: 3)
+        try rereading.select(1, question: second.article.questions[0])
+        var legacy = installed.index
+        legacy.readingStateVersion = nil
+        legacy.progress = [first.id: completed, second.id: rereading]
+        legacy.lastArticle = first.id
+        legacy.libraryStates = [
+            first.id: DuLibraryState(readOverride: false, listeningPromptHandled: true),
+            second.id: DuLibraryState(readOverride: false), third.id: DuLibraryState(readOverride: true)]
+        let disk = DuDisk(directory: directory)
+        try disk.save(legacy)
+        let original = try Data(contentsOf: disk.indexURL)
+        let migrated = try await repo.load()
+        let fresh = migrated.books[0]
+        XCTAssertEqual(migrated.index.readingStateVersion, 1)
+        XCTAssertFalse(fresh.isRead)
+        XCTAssertNil(fresh.progress.anchor)
+        XCTAssertEqual(fresh.progress.stage, .reading)
+        XCTAssertTrue(fresh.progress.answers.isEmpty)
+        XCTAssertTrue(fresh.progress.selections.isEmpty)
+        XCTAssertEqual(fresh.progress.firstAnswers, completed.firstAnswers)
+        XCTAssertEqual(fresh.progress.attempts, completed.attempts)
+        XCTAssertEqual(fresh.libraryState.listeningPromptHandled, true)
+        XCTAssertEqual(fresh.progress.readingStartRun, 2)
+        XCTAssertNil(migrated.continuingBook)
+        XCTAssertNil(migrated.index.lastArticle)
+        XCTAssertEqual(migrated.books[1].progress, rereading)
+        XCTAssertTrue(migrated.books[2].isRead)
+        XCTAssertEqual(migrated.normalizingReadingState().index, migrated.index)
+        XCTAssertEqual(try Data(contentsOf: disk.indexURL), original)
+        // Restoring a pre-fix backup applies the same migration before it is saved.
+        let oldBackup = try JSONEncoder().encode(DuBackup(index: legacy, archives: installed.packages.mapValues(\.archive)))
+        try SimpleDuBackupTransfer.restore(oldBackup, directory: restored)
+        let recovered = try DuDisk(directory: restored).load()
+        XCTAssertEqual(recovered.books[0].progress.stage, .reading)
+        XCTAssertNil(recovered.continuingBook)
+        XCTAssertEqual(recovered.books[0].progress.attempts, completed.attempts)
+        XCTAssertEqual(recovered.books[1].progress, rereading)
+        XCTAssertTrue(recovered.books[2].isRead)
+        let saved = try await repo.saveProgress(rereading, bookID: second.id)
+        XCTAssertEqual(try disk.load().index, saved.index)
+    }
+    func testLegacyArchiveOnlyDoesNotMakeUnreadArticlesRead() async throws {
+        let directory = try folder(); defer { try? FileManager.default.removeItem(at: directory) }
+        let repo = DuRepository(directory: directory)
+        let installed = try await repo.install(package(count: 2)).0
+        let first = installed.books[0], second = installed.books[1]
+        var legacy = installed.index
+        legacy.readingStateVersion = nil
+        var progress = DuProgress()
+        progress.anchor = DuAnchor(unitID: "u1", paragraphID: "p1", offset: 8)
+        legacy.progress[first.id] = progress
+        legacy.lastArticle = first.id
+        legacy.libraryStates = [first.id: DuLibraryState(archived: true),
+                                second.id: DuLibraryState(readOverride: true)]
+        try DuDisk(directory: directory).save(legacy)
+        let migrated = try await repo.load()
+        XCTAssertFalse(migrated.books[0].isRead)
+        XCTAssertFalse(migrated.books[0].isArchived)
+        XCTAssertEqual(migrated.books[0].readingStatus, "阅读中")
+        XCTAssertEqual(migrated.books[0].progress, progress)
+        XCTAssertEqual(migrated.continuingBook?.id, first.id)
+        XCTAssertTrue(migrated.books[1].isRead)
+        let backup = try SimpleDuBackupTransfer.exportData(directory: directory)
+        XCTAssertTrue(try SimpleDuBackupTransfer.validate(backup).contains("未读文章 1，已读文章 1"))
+    }
+    func testReadingBeforeQuizOnlyMarksReadAfterAllQuestionsAreSubmitted() async throws {
+        let directory = try folder(); defer { try? FileManager.default.removeItem(at: directory) }
+        let repo = DuRepository(directory: directory)
+        let book = try await repo.install(package()).0.books[0]
+        var progress = DuProgress()
+        progress.anchor = DuAnchor(unitID: "u1", paragraphID: "p1", offset: 0)
+        progress.readingCompleted = true
+        let readOnly = try await repo.saveProgress(progress, bookID: book.id)
+        XCTAssertFalse(readOnly.books[0].isRead)
+        for question in book.article.questions.dropLast() {
+            try progress.select(1, question: question)
+            try progress.submit(question, article: book.article)
+        }
+        let partial = try await repo.saveProgress(progress, bookID: book.id)
+        XCTAssertFalse(partial.books[0].isRead)
+        XCTAssertEqual(partial.continuingBook?.id, book.id)
+        let last = book.article.questions.last!
+        try progress.select(1, question: last)
+        try progress.submit(last, article: book.article)
+        let completed = try await repo.saveProgress(progress, bookID: book.id)
+        XCTAssertTrue(completed.books[0].isRead)
+        XCTAssertTrue(completed.books[0].shouldOfferListening)
+        XCTAssertNil(completed.continuingBook)
     }
     func testInvalidBatchSelectionIsAtomicAndDoesNotWrite() async throws {
         let directory = try folder(); defer { try? FileManager.default.removeItem(at: directory) }
@@ -364,6 +575,7 @@ final class DuCoreTests: XCTestCase {
         let disk = DuDisk(directory: directory)
         var json = try JSONSerialization.jsonObject(with: Data(contentsOf: disk.indexURL)) as! [String: Any]
         json.removeValue(forKey: "libraryStates")
+        json.removeValue(forKey: "readingStateVersion")
         try JSONSerialization.data(withJSONObject: json).write(to: disk.indexURL)
         let originalIndex = try Data(contentsOf: disk.indexURL)
         let legacy = try DuDisk(directory: directory).load()
@@ -375,7 +587,8 @@ final class DuCoreTests: XCTestCase {
         XCTAssertFalse(unread.books[0].isRead)
         XCTAssertFalse(unread.books[0].isArchived)
         XCTAssertEqual(unread.index.progress[book.id]?.attempts.count, 1)
-        progress.restart(article: book.article)
+        progress = unread.books[0].progress
+        progress.readingCompleted = true
         _ = try await repo.saveProgress(progress, bookID: book.id)
         for question in book.article.questions {
             try progress.select(question.answer, question: question)
@@ -400,11 +613,12 @@ final class DuCoreTests: XCTestCase {
         }
         _ = try await repo.saveProgress(progress, bookID: first.id)
         var legacy = try DuDisk(directory: directory).load().index
+        legacy.readingStateVersion = nil
         // Previous versions could leave both completed and manually read articles on the shelf.
         legacy.libraryStates = [first.id: DuLibraryState(), second.id: DuLibraryState(readOverride: true)]
         try DuDisk(directory: directory).save(legacy)
         let backup = try SimpleDuBackupTransfer.exportData(directory: directory)
-        XCTAssertTrue(try SimpleDuBackupTransfer.validate(backup).contains("书架 1，书柜 2"))
+        XCTAssertTrue(try SimpleDuBackupTransfer.validate(backup).contains("未读文章 1，已读文章 2"))
         try SimpleDuBackupTransfer.restore(backup, directory: restored)
         let recovered = try DuDisk(directory: restored).load()
         XCTAssertEqual(Set(recovered.books.filter(\.isArchived).map(\.id)), [first.id, second.id])
@@ -414,9 +628,13 @@ final class DuCoreTests: XCTestCase {
         let recoveredRepo = DuRepository(directory: restored)
         let unread = try await recoveredRepo.arrangeArticles([first.id, second.id], action: .unarchive)
         XCTAssertTrue(unread.books.allSatisfy { !$0.isRead && !$0.isArchived })
-        XCTAssertEqual(unread.index.progress[first.id], progress)
+        var rereading = unread.books.first { $0.id == first.id }!.progress
+        XCTAssertEqual(rereading.firstAnswers, progress.firstAnswers)
+        XCTAssertEqual(rereading.attempts, progress.attempts)
+        XCTAssertTrue(rereading.answers.isEmpty)
         // Ordinary reading-position saves must not mark the old completed attempt as read again.
-        let resumed = try await recoveredRepo.saveProgress(progress, bookID: first.id)
+        rereading.anchor = DuAnchor(unitID: "u1", paragraphID: "p1", offset: 0)
+        let resumed = try await recoveredRepo.saveProgress(rereading, bookID: first.id)
         XCTAssertFalse(resumed.books.first { $0.id == first.id }!.isArchived)
         XCTAssertEqual(resumed.index.progress[first.id]?.firstAnswers, progress.firstAnswers)
     }
@@ -475,11 +693,21 @@ final class DuCoreTests: XCTestCase {
             try progress.select(question.answer, question: question)
             try progress.submit(question, article: book.article)
         }
+        progress.stage = .result
         let quizOnly = try await repo.saveProgress(progress, bookID: book.id)
         XCTAssertFalse(quizOnly.books[0].shouldOfferListening)
+        XCTAssertFalse(quizOnly.books[0].isRead)
+        XCTAssertFalse(quizOnly.books[0].isArchived)
+        XCTAssertEqual(quizOnly.continuingBook?.id, book.id)
+        XCTAssertEqual(quizOnly.books[0].readingStatus, "待完成阅读")
+        let backup = try SimpleDuBackupTransfer.exportData(directory: directory)
+        XCTAssertFalse(try DuBackup.decode(backup).validated().books[0].isRead)
         progress.readingCompleted = true
         let read = try await repo.saveProgress(progress, bookID: book.id)
         XCTAssertTrue(read.books[0].shouldOfferListening)
+        XCTAssertTrue(read.books[0].isRead)
+        XCTAssertTrue(read.books[0].isArchived)
+        XCTAssertNil(read.continuingBook)
         XCTAssertTrue(try DuDisk(directory: directory).load().books[0].shouldOfferListening)
     }
     func testListeningOfferChoiceSurvivesRetryUnreadAndBackupAndResetsForNewEdition() async throws {
@@ -502,8 +730,8 @@ final class DuCoreTests: XCTestCase {
         let before = try Data(contentsOf: DuDisk(directory: directory).indexURL)
         _ = try await repo.acknowledgeListeningOffer(book.id)
         XCTAssertEqual(try Data(contentsOf: DuDisk(directory: directory).indexURL), before)
-        _ = try await repo.arrangeArticles([book.id], action: .markUnread)
-        progress.restart(article: book.article)
+        let unread = try await repo.arrangeArticles([book.id], action: .markUnread)
+        progress = unread.books[0].progress
         let retry = try await repo.saveProgress(progress, bookID: book.id)
         XCTAssertFalse(retry.books[0].shouldOfferListening)
         let backup = try SimpleDuBackupTransfer.exportData(directory: directory)
@@ -529,6 +757,7 @@ final class DuCoreTests: XCTestCase {
         XCTAssertTrue(book.isArchived)
         XCTAssertFalse(book.shouldOfferListening)
         XCTAssertNil(decoded.readingCompleted)
+        XCTAssertNil(decoded.readingStartRun)
         XCTAssertNil(oldState.listeningPromptHandled)
     }
     func testListeningExportIncludesOnlyChosenArticleBodyAndStableIdentity() throws {
@@ -565,6 +794,18 @@ final class DuCoreTests: XCTestCase {
         }
         let book = DuBook(package: pack, article: pack.content.articles[0], progress: DuProgress())
         XCTAssertEqual(book.listeningArticle().bodyMarkdown, "An \\[item\\] and 2\\*3.")
+    }
+    func testListeningExportPreservesLiteralAnglesAndExistingEntityText() throws {
+        let plain = "Please write <name> & keep &lt; as text."
+        let pack = try package { content in
+            content.articles[0].units[0].heading = ""
+            content.articles[0].units[0].paragraphs[0].runs = [DuRun(text: plain, target: false)]
+        }
+        let book = DuBook(package: pack, article: pack.content.articles[0], progress: DuProgress())
+        let exported = book.listeningArticle()
+        XCTAssertEqual(exported.bodyMarkdown, "Please write &lt;name&gt; &amp; keep &amp;lt; as text.")
+        let parsed = try AttributedString(markdown: exported.bodyMarkdown, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))
+        XCTAssertEqual(String(parsed.characters), plain)
     }
     private func le(_ value: UInt32) -> Data { Data((0..<4).map { UInt8((value >> ($0 * 8)) & 255) }) }
     private func word(_ value: Int) -> Data { Data([UInt8(value & 255), UInt8((value >> 8) & 255)]) }

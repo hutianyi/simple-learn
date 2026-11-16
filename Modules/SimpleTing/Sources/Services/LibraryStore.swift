@@ -40,6 +40,13 @@ final class LibraryStore {
         try file.save(candidate)
         library = candidate
     }
+    func updateArticle(_ id: UUID, title: String, markdown: String) throws {
+        guard let file, loadError == nil else { throw ListenError.message("文章库尚未成功打开。") }
+        let candidate = try library.updatingArticle(id, title: title, markdown: markdown)
+        guard candidate != library else { return }
+        try file.save(candidate)
+        library = candidate
+    }
 }
 
 @MainActor

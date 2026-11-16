@@ -62,7 +62,7 @@ struct DuReaderView: View {
                 }
                 .task {
                     guard !initialized else { return }
-                    initialized = true; reading = book.libraryState.readOverride == false || book.progress.stage == .reading
+                    initialized = true; reading = book.progress.stage == .reading
                 }
                 .task(id: book.shouldOfferListening && !store.busy && !store.saving && store.message == nil && !showingSources) {
                     if addToListening != nil, book.shouldOfferListening, !store.busy, !store.saving,
@@ -97,7 +97,7 @@ struct DuReaderView: View {
                         }.navigationTitle("家长资料").toolbar { Button("完成") { showingSources = false } }
                     }
                 }
-            } else { ContentUnavailableView("文章已更新", systemImage: "book", description: Text("请返回书架重新选择文章。")) }
+            } else { ContentUnavailableView("文章已更新", systemImage: "book", description: Text("请返回文章列表重新选择文章。")) }
         }
     }
 }

@@ -218,3 +218,69 @@ func leavingPracticeResumesSavedCheckpoint(checkpoint: String) throws {
     #expect(restored.attempts.first?.id == attempt.id)
     #expect(restored.attempts.first?.question?.id == attempt.question?.id)
 }
+
+private func fileImportFixture(title: String = "文件导入") throws -> Data {
+    let original = QuestionPayload(questionID: "G001-O", promptMarkdown: "1+1=?", answerMarkdown: "2", explanationMarkdown: "相加")
+    let variant = VariantPayload(questionID: "G001-N01", variantKind: .near,
+        promptMarkdown: "2+2=?", answerMarkdown: "4", explanationMarkdown: "相加")
+    return try JSONEncoder().encode(SimpleLianPayload(schemaVersion: 1, batchTitle: title, groups: [
+        GroupPayload(groupID: "G001", title: title, original: original, variants: [variant])
+    ]))
+}
+
+@MainActor @Test func multipleFilesPreviewWithoutWritingAndCommitOnlyValidUniqueFiles() async throws {
+    let container = try ModelContainer(for: AppSchema.schema, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+    let context = container.mainContext
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let first = directory.appendingPathComponent("旧格式题库.txt")
+    let second = directory.appendingPathComponent("新题库.json")
+    let duplicate = directory.appendingPathComponent("重复副本.txt")
+    let broken = directory.appendingPathComponent("内容损坏.txt")
+    let invalid = directory.appendingPathComponent("缺少题型.txt")
+    let missing = directory.appendingPathComponent("不存在.txt")
+    try fileImportFixture(title: "第一题").write(to: first)
+    try fileImportFixture(title: "第二题").write(to: second)
+    try FileManager.default.copyItem(at: first, to: duplicate)
+    try Data("{broken".utf8).write(to: broken)
+    try Data(#"{"schema_version":1,"batch_title":"无效","groups":[]}"#.utf8).write(to: invalid)
+    let urls = [first, broken, second, duplicate, invalid, missing]
+    let originalData = try urls.dropLast().map { try Data(contentsOf: $0) }
+
+    let previews = await ImportService.previewFiles(urls, context: context)
+    #expect(previews.map(\.status) == [.ready, .invalid, .ready, .duplicate, .invalid, .invalid])
+    #expect(previews[3].message?.contains("本次选择") == true)
+    #expect(previews[4].preview?.report.canImport == false)
+    #expect(try context.fetchCount(FetchDescriptor<ImportBatch>()) == 0)
+    // Warnings about small legacy banks remain visible and do not prevent importing.
+    #expect(previews[0].preview?.report.warnings.isEmpty == false)
+
+    let results = ImportService.commitFiles(previews, context: context)
+    #expect(results.map(\.status) == [.imported, .invalid, .imported, .duplicate, .invalid, .invalid])
+    let saved = ModelContext(container)
+    #expect(try saved.fetchCount(FetchDescriptor<ImportBatch>()) == 2)
+    #expect(try saved.fetchCount(FetchDescriptor<ProblemGroup>()) == 2)
+    #expect(try saved.fetchCount(FetchDescriptor<Question>()) == 4)
+    #expect(try saved.fetch(FetchDescriptor<ReviewState>()).allSatisfy { $0.creditedCorrectCount == 0 })
+    #expect(try urls.dropLast().map { try Data(contentsOf: $0) } == originalData)
+    _ = ImportService.commitFiles(results, context: context)
+    #expect(try context.fetchCount(FetchDescriptor<ImportBatch>()) == 2)
+    let again = await ImportService.previewFiles([first, second], context: context)
+    #expect(again.allSatisfy { $0.status == .duplicate && $0.message?.contains("题库中已有") == true })
+}
+
+@MainActor @Test func staleFilePreviewSkipsDuplicateAtCommitAndContinuesOtherFiles() async throws {
+    let container = try ModelContainer(for: AppSchema.schema, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+    let context = container.mainContext
+    let first = try ImportService.preview(text: String(decoding: fileImportFixture(title: "第一题"), as: UTF8.self), context: context)
+    let second = try ImportService.preview(text: String(decoding: fileImportFixture(title: "第二题"), as: UTF8.self), context: context)
+    try ImportService.commit(first, context: context)
+    let results = ImportService.commitFiles([
+        FileImportPreview(fileName: "第一题.txt", preview: first, status: .ready),
+        FileImportPreview(fileName: "第二题.txt", preview: second, status: .ready)
+    ], context: context)
+    #expect(results.map(\.status) == [.duplicate, .imported])
+    #expect(try context.fetchCount(FetchDescriptor<ImportBatch>()) == 2)
+    #expect(try context.fetchCount(FetchDescriptor<ProblemGroup>()) == 2)
+}

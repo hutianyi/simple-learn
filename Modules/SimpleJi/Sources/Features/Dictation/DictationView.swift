@@ -97,6 +97,7 @@ struct DictationView: View {
         }) { prompt in
             DictationKeyboardSheet(
                 chinese: prompt.chinese, answer: prompt.answer, duration: prompt.duration,
+                requiresKeyboard: viewModel.requiresCopyKeyboard,
                 submissionError: { viewModel.errorMessage },
                 startClock: prompt.answer == nil ? { await viewModel.beginVerificationKeyboard() } : nil
             ) { text, reason in
@@ -105,7 +106,7 @@ struct DictationView: View {
                 if close { drawing = PKDrawing() }
                 return close
             }
-            .interactiveDismissDisabled(prompt.answer == nil || viewModel.isBusy)
+            .interactiveDismissDisabled(prompt.answer == nil || viewModel.requiresCopyKeyboard || viewModel.isBusy)
         }
         .onChange(of: viewModel.recognitionNotice) { _, newValue in
             if newValue != nil {
@@ -122,7 +123,9 @@ struct DictationView: View {
                     viewModel.dismissRecognitionNotice()
                     openKeyboard()
                 }
-                Button("继续手写", role: .cancel) { viewModel.dismissRecognitionNotice() }
+                if !viewModel.requiresCopyKeyboard {
+                    Button("继续手写", role: .cancel) { viewModel.dismissRecognitionNotice() }
+                }
             } else if viewModel.errorMessage == nil && verificationAlertPresented {
                 Button("改用字母键盘（\(Int(keyboardDuration))秒）", action: openVerificationKeyboard)
                 Button("按本次结果提交") { Task { await viewModel.acceptHandwritingResult() } }
@@ -192,7 +195,32 @@ struct DictationView: View {
         .padding(28)
     }
 
+    @ViewBuilder
     private var practiceView: some View {
+        if viewModel.requiresCopyKeyboard {
+            VStack(spacing: 22) {
+                Text("请用键盘完成抄写").font(.title.bold())
+                Text(prompt?.chinese ?? "").font(.title2)
+                Text(prompt?.english ?? "").font(.title).foregroundStyle(AppPalette.accent)
+                Text("这个词已连续 5 次手写未通过，可能是系统没认准。请照着答案用键盘正确输入一次，完成剩余抄写。")
+                    .multilineTextAlignment(.center)
+                if let notice = viewModel.notice {
+                    Text(notice).foregroundStyle(AppPalette.textSecondary)
+                }
+                Button("使用键盘输入", action: openKeyboard)
+                    .buttonStyle(LargePrimaryButtonStyle())
+                    .accessibilityIdentifier("dictation.requiredCopyKeyboard")
+                Button("稍后继续", action: returnHome)
+            }
+            .disabled(viewModel.isBusy || isSubmitting)
+            .frame(maxWidth: 620)
+            .padding(28)
+        } else {
+            handwritingPracticeView
+        }
+    }
+
+    private var handwritingPracticeView: some View {
         GeometryReader { geometry in
             ScrollView {
                 VStack(spacing: 16) {
@@ -564,13 +592,17 @@ struct DictationView: View {
 
     private var recognitionAlertTitle: String {
         if viewModel.errorMessage != nil { return "默写暂时无法继续" }
+        if viewModel.requiresCopyKeyboard { return "请改用键盘抄写" }
         return viewModel.offersCopyKeyboard ? "要改用键盘抄写吗？" : "手写识别结果"
     }
 
     private var recognitionAlertMessage: String {
         if let error = viewModel.errorMessage { return error }
+        if viewModel.requiresCopyKeyboard {
+            return "这个词已连续 5 次手写未通过，可能是系统没认准。这次请照着答案用键盘正确输入一次，完成剩余抄写。"
+        }
         if viewModel.offersCopyKeyboard {
-            return "手写已经连续多次未通过，可能是系统没认准。改用键盘照着答案正确输入一次，就能完成这个词剩余的抄写。"
+            return "手写已经连续多次未通过，可能是系统没认准。改用键盘照着答案正确输入一次，就能完成这个词剩余的抄写。若继续手写，连续第 5 次未通过后将必须使用键盘。"
         }
         return (verificationAlertPresented ? viewModel.verificationMessage : viewModel.recognitionNotice) ?? "发生未知错误。"
     }
@@ -621,6 +653,7 @@ private struct DictationKeyboardSheet: View {
     let chinese: String
     let answer: String?
     let duration: TimeInterval
+    let requiresKeyboard: Bool
     let submissionError: () -> String?
     let startClock: (() async -> Date?)?
     let submit: (String, DictationFailureReason?) async -> Bool
@@ -665,7 +698,7 @@ private struct DictationKeyboardSheet: View {
                         .disabled(!ready || isSubmitting || remaining <= 0)
                     if let message {
                         Text(message).foregroundStyle(.red)
-                        if isVerification && remaining <= 0 {
+                        if remaining <= 0 {
                             Button("重试保存超时结果") { confirm(reason: .timeout) }
                                 .disabled(isSubmitting)
                         }
@@ -688,7 +721,7 @@ private struct DictationKeyboardSheet: View {
                     if isVerification {
                         Button("不会") { confirm(reason: .unknown) }
                             .disabled(!ready || isSubmitting)
-                    } else {
+                    } else if !requiresKeyboard {
                         Button("继续手写") { dismiss() }.disabled(isSubmitting)
                     }
                 }

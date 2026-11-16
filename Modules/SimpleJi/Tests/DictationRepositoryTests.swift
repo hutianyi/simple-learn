@@ -421,6 +421,119 @@ final class DictationRepositoryTests: XCTestCase {
             .fetch(WordEntity.fetchRequest()).first { $0.id == wordID })
     }
 
+    func testInitialCopyRequiresKeyboardAfterFiveFailuresAndKeepsRequirementAfterReopening() async throws {
+        let controller = PersistenceController(inMemory: true)
+        let id = try seedEligibleWord(in: controller.container.viewContext)
+        let repo = DictationRepository(container: controller.container)
+        _ = try await repo.initialCopyQueue(now: now)
+        for index in 1...5 {
+            let copy = try await repo.recordInitialCopy(wordID: id, recognized: "aple",
+                now: now.addingTimeInterval(Double(index)))
+            XCTAssertEqual(copy.keyboardAllowed, index >= 3)
+            XCTAssertEqual(copy.requiresCopyKeyboard, index >= 5)
+        }
+        let restarted = DictationRepository(container: controller.container)
+        let queue = try await restarted.initialCopyQueue(now: now.addingTimeInterval(6))
+        XCTAssertTrue(try XCTUnwrap(queue.first).requiresCopyKeyboard)
+        do {
+            _ = try await restarted.recordInitialCopy(wordID: id, recognized: "apple", now: now.addingTimeInterval(7))
+            XCTFail("Handwriting must be rejected once keyboard is required")
+        } catch DictationRepository.DictationError.invalidPhase {}
+        let timeout = try await restarted.recordInitialCopy(wordID: id, recognized: "apple", viaKeyboard: true,
+            explicitReason: .timeout, now: now.addingTimeInterval(8))
+        XCTAssertTrue(timeout.requiresCopyKeyboard)
+        XCTAssertEqual(timeout.completedCopies, 0)
+        let wrong = try await restarted.recordInitialCopy(wordID: id, recognized: "aple", viaKeyboard: true,
+            now: now.addingTimeInterval(9))
+        XCTAssertTrue(wrong.requiresCopyKeyboard)
+        let completed = try await restarted.recordInitialCopy(wordID: id, recognized: "apple", viaKeyboard: true,
+            now: now.addingTimeInterval(10))
+        XCTAssertEqual(completed.completedCopies, 3)
+    }
+
+    func testCorrectInitialHandwritingResetsFailuresBeforeKeyboardBecomesRequired() async throws {
+        let controller = PersistenceController(inMemory: true)
+        let id = try seedEligibleWord(in: controller.container.viewContext)
+        let repo = DictationRepository(container: controller.container)
+        _ = try await repo.initialCopyQueue(now: now)
+        for (index, text) in ["aple", "aple", "aple", "aple", "apple", "aple", "aple"].enumerated() {
+            let copy = try await repo.recordInitialCopy(wordID: id, recognized: text,
+                now: now.addingTimeInterval(Double(index + 1)))
+            XCTAssertFalse(copy.requiresCopyKeyboard)
+        }
+        let queue = try await repo.initialCopyQueue(now: now.addingTimeInterval(8))
+        XCTAssertEqual(queue.first?.consecutiveFailures, 2)
+        XCTAssertEqual(queue.first?.completedCopies, 1)
+    }
+
+    func testRemediationRequiresKeyboardAfterFiveFailuresAndResetsAfterCorrectHandwriting() async throws {
+        let (controller, repo, day, ids, campaign) = try await verificationFixture()
+        let id = ids[0]
+        _ = try await repo.submitFormal(dayID: day.id, wordID: id, recognized: "qas", now: now)
+        _ = try await repo.beginRemediation(dayID: day.id, now: now)
+        for text in ["qas", "qas", "qas", "qas", "gas", "qas", "qas"] {
+            let copy = try await repo.recordRemediationCopy(dayID: day.id, wordID: id, recognized: text, now: now)
+            XCTAssertFalse(try XCTUnwrap(copy.items.first).requiresCopyKeyboard)
+        }
+        for index in 3...5 {
+            let copy = try await repo.recordRemediationCopy(dayID: day.id, wordID: id, recognized: "qas", now: now)
+            XCTAssertEqual(try XCTUnwrap(copy.items.first).requiresCopyKeyboard, index == 5)
+        }
+        let restarted = DictationRepository(container: controller.container)
+        let reopened = try await restarted.loadOrCreateDay(limit: 20, campaign: campaign, now: now)
+        XCTAssertTrue(try XCTUnwrap(reopened.items.first).requiresCopyKeyboard)
+        do {
+            _ = try await restarted.recordRemediationCopy(dayID: day.id, wordID: id, recognized: "gas", now: now)
+            XCTFail("Handwriting must be rejected once keyboard is required")
+        } catch DictationRepository.DictationError.invalidPhase {}
+        let timeout = try await restarted.recordRemediationCopy(dayID: day.id, wordID: id, recognized: "gas",
+            viaKeyboard: true, explicitReason: .timeout, now: now)
+        XCTAssertTrue(try XCTUnwrap(timeout.items.first).requiresCopyKeyboard)
+        XCTAssertEqual(timeout.items.first?.remediationCopyCount, 1)
+        let wrong = try await restarted.recordRemediationCopy(dayID: day.id, wordID: id, recognized: "qas",
+            viaKeyboard: true, now: now)
+        XCTAssertTrue(try XCTUnwrap(wrong.items.first).requiresCopyKeyboard)
+        let completed = try await restarted.recordRemediationCopy(dayID: day.id, wordID: id, recognized: "gas",
+            viaKeyboard: true, now: now)
+        XCTAssertEqual(completed.phase, .retest)
+        XCTAssertEqual(completed.items.first?.remediationCopyCount, 3)
+    }
+
+    func testViewModelCannotResumeHandwritingAfterRequiredKeyboardOrTimeout() async throws {
+        let controller = PersistenceController(inMemory: true)
+        _ = try seedEligibleWord(in: controller.container.viewContext)
+        let repo = DictationRepository(container: controller.container)
+        _ = try await repo.initialCopyQueue(now: now)
+        let suite = "DictationRequiredKeyboard-\(UUID())"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        var recognitions = 0
+        let model = DictationViewModel(container: controller.container,
+            settings: SettingsStore(defaults: defaults), recognition: { _ in
+                recognitions += 1
+                return "aple"
+            })
+        await model.startInitialCopy()
+        for index in 1...5 {
+            _ = await model.submit(drawing: PKDrawing(), submittedAt: now.addingTimeInterval(Double(index)))
+            XCTAssertEqual(model.requiresCopyKeyboard, index >= 5)
+            XCTAssertTrue(model.offersCopyKeyboard == (index >= 3))
+            model.dismissRecognitionNotice()
+        }
+        XCTAssertFalse(model.canDefer)
+        _ = await model.submit(drawing: PKDrawing())
+        XCTAssertEqual(recognitions, 5)
+        let timedOut = await model.submitKeyboard("apple", reason: .timeout)
+        XCTAssertTrue(timedOut)
+        XCTAssertTrue(model.requiresCopyKeyboard)
+        await model.startInitialCopy()
+        XCTAssertTrue(model.requiresCopyKeyboard)
+        let accepted = await model.submitKeyboard("apple")
+        XCTAssertTrue(accepted)
+        XCTAssertNil(model.activeCopy)
+        XCTAssertFalse(model.requiresCopyKeyboard)
+    }
+
     func testInitialKeyboardRequiresThreeConsecutiveFailuresAndPreservesNextDayGate() async throws {
         let controller = PersistenceController(inMemory: true)
         let context = controller.container.viewContext

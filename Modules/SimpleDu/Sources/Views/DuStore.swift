@@ -21,7 +21,7 @@ final class DuStore {
         do {
             let repository = try DuRepository(directory: ModuleStorage.directory("SimpleDu"))
             snapshot = try await repository.load(); self.repository = repository; loadError = nil
-        } catch { loadError = "书架读取失败，原文件已保留。\n\(error.localizedDescription)" }
+        } catch { loadError = "文章列表读取失败，原文件已保留。\n\(error.localizedDescription)" }
     }
     func prepare(_ urls: [URL]) async {
         busy = true

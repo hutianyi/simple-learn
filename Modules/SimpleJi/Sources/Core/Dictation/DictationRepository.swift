@@ -110,6 +110,7 @@ final class DictationRepository {
             guard let state = word.dictationState,
                   state.initialCopyCompletedAt == nil else { throw DictationError.invalidPhase }
             let failures = try Self.initialCopyFailures(for: word, state: state, in: context)
+            guard viaKeyboard || failures < 5 else { throw DictationError.invalidPhase }
             guard try !viaKeyboard || Self.initialKeyboardAllowed(for: word, state: state, in: context) else {
                 throw DictationError.invalidPhase
             }
@@ -651,6 +652,7 @@ final class DictationRepository {
                 throw DictationError.answerChanged
             }
             guard !day.items[index].isDeferred,
+                  viaKeyboard || !day.items[index].requiresCopyKeyboard,
                   !viaKeyboard || day.items[index].allowsKeyboard else { throw DictationError.invalidPhase }
             let correct = explicitReason == nil && DictationAnswerMatcher.matches(recognized, answer: day.items[index].english)
             if correct {

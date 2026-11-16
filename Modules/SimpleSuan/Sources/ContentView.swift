@@ -48,12 +48,18 @@ struct StartPracticeView: View {
     @State private var repairError: String?
     @State private var checkedDayKey = ""
     @State private var now = Date()
-    private var weekendComplete: Bool { PracticeActivity(sessions: store.sessions, now: now).isWeekendComplete }
     var body: some View {
+        let activity = PracticeActivity(sessions: store.sessions, now: now)
+        let showCompletion = activity.hasCompletedDailyGoal
         VStack(spacing: 28) {
             Spacer()
-            Text("今天的心算练习").font(StudyAppearance.title)
-            if weekendComplete {
+            if !showCompletion {
+                Text("今天的心算练习").font(StudyAppearance.title)
+            }
+            if showCompletion {
+                StudyCompletionCard("今天的计算已完成")
+                    .accessibilityIdentifier("suan.studyComplete")
+            } else if activity.isWeekendComplete {
                 Label("周末已完成", systemImage: "checkmark.circle.fill")
                     .font(.title2.bold()).foregroundStyle(theme.accent)
             } else {
@@ -96,7 +102,7 @@ struct StartPracticeView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(StudyAppearance.background)
         .navigationBarTitleDisplayMode(.inline)
-        .fullScreenCover(item: $practice) { PracticeFlowView(viewModel: $0).interactiveDismissDisabled() }
+        .fullScreenCover(item: $practice, onDismiss: checkRepair) { PracticeFlowView(viewModel: $0).interactiveDismissDisabled() }
         .onAppear(perform: checkRepair)
         .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) { now = $0 }
         .onChange(of: scenePhase) { _, phase in if phase == .active { checkRepair() } }

@@ -93,8 +93,13 @@ final class DictationViewModel: ObservableObject {
         return (activeItem?.consecutiveCopyFailures ?? 0) >= 3
     }
 
+    var requiresCopyKeyboard: Bool {
+        if let copy = activeCopy { return copy.requiresCopyKeyboard }
+        return day?.phase == .remediationCopy && activeItem?.requiresCopyKeyboard == true
+    }
+
     var canDefer: Bool {
-        !isRepairFlow && (activeCopy != nil || (activeItem != nil && (day?.phase == .remediationCopy || day?.phase == .retest)))
+        !isRepairFlow && !requiresCopyKeyboard && (activeCopy != nil || (activeItem != nil && (day?.phase == .remediationCopy || day?.phase == .retest)))
     }
 
     var hasDeferredWork: Bool {
@@ -213,6 +218,7 @@ final class DictationViewModel: ObservableObject {
         do {
             let viaKeyboard = keyboardText != nil
             guard !viaKeyboard || keyboardAllowed else { return false }
+            guard viaKeyboard || !requiresCopyKeyboard else { return false }
             let recognized: String?
             if let keyboardText { recognized = keyboardText }
             else { recognized = explicitReason == nil ? try await recognize(drawing) : nil }
@@ -331,7 +337,9 @@ final class DictationViewModel: ObservableObject {
         _ = await submit(drawing: PKDrawing(), explicitReason: reason, keyboardText: text)
         guard errorMessage == nil else { return false }
         if reason == .timeout {
-            notice = "键盘抄写时间已到，当前抄写尚未完成。可以重新手写或再试一次。"
+            notice = requiresCopyKeyboard
+                ? "键盘抄写时间已到，当前抄写尚未完成。请再次使用键盘输入。"
+                : "键盘抄写时间已到，当前抄写尚未完成。可以重新手写或再试一次。"
             return true
         }
         return DictationAnswerMatcher.matches(text, answer: answer)

@@ -26,16 +26,16 @@ public struct SimpleDuModuleView: View {
             Group {
                 if let error = store.loadError {
                     ContentUnavailableView {
-                        Label("暂时无法打开书架", systemImage: "exclamationmark.triangle")
+                        Label("暂时无法打开文章列表", systemImage: "exclamationmark.triangle")
                     } description: { Text(error) } actions: {
                         Button("重新读取") { Task { await store.load() } }.buttonStyle(.borderedProminent)
                         Text("如需恢复数据，请返回首页使用“备份与恢复”。").font(.subheadline)
                     }
                 } else if store.snapshot == nil {
-                    ProgressView("正在打开书架…")
+                    ProgressView("正在加载文章…")
                 } else if store.books.isEmpty {
                     ContentUnavailableView {
-                        Label("把第一本绘本放上书架", systemImage: "books.vertical")
+                        Label("还没有阅读文章", systemImage: "doc.text")
                     } description: {
                         Text("从‘文件’中选择阅读包，即可开始阅读。\n同一批中的每篇文章会单独显示。")
                     } actions: {
@@ -44,7 +44,7 @@ public struct SimpleDuModuleView: View {
                     }
                 } else { bookshelf }
             }
-            .navigationTitle(location == .shelf ? "我的书架" : "我的书柜")
+            .navigationTitle("KET 阅读")
             .background(StudyAppearance.background)
             .toolbar {
                 ToolbarItemGroup(placement: .topBarTrailing) {
@@ -108,9 +108,9 @@ public struct SimpleDuModuleView: View {
     private var bookshelf: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
-                Picker("文章位置", selection: $location) {
-                    Text("书架 · \(store.books.count - archivedCount)").tag(DuShelfLocation.shelf)
-                    Text("书柜 · \(archivedCount)").tag(DuShelfLocation.cabinet)
+                Picker("阅读状态", selection: $location) {
+                    Text("未读文章 · \(store.books.count - archivedCount)").tag(DuShelfLocation.shelf)
+                    Text("已读文章 · \(archivedCount)").tag(DuShelfLocation.cabinet)
                 }.pickerStyle(.segmented).accessibilityIdentifier("du.libraryLocation")
                 if let notice = store.libraryNotice {
                     Label(notice, systemImage: "checkmark.circle.fill")
@@ -121,14 +121,13 @@ public struct SimpleDuModuleView: View {
                     HStack(spacing: 12) {
                         Image(systemName: "books.vertical.fill").font(.title2).foregroundStyle(.brown)
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("读过的故事，收在这里").font(.headline)
-                            Text("已读文章自动收在这里；标为未读可移回书架，进度和成绩保留。").font(.subheadline).foregroundStyle(.secondary)
+                            Text("已读文章").font(.headline)
+                            Text("标为未读后可从头阅读，历史成绩保留。").font(.subheadline).foregroundStyle(.secondary)
                         }
                     }.padding(16).frame(maxWidth: .infinity, alignment: .leading)
                         .background(Color.brown.opacity(0.08), in: RoundedRectangle(cornerRadius: 18))
-                } else if !selecting, let last = store.snapshot?.index.lastArticle,
-                          let book = store.book(last), !book.isArchived {
-                    NavigationLink(value: last) {
+                } else if !selecting, let book = store.snapshot?.continuingBook {
+                    NavigationLink(value: book.id) {
                         HStack(spacing: 16) {
                             Image(systemName: "book.pages.fill").font(.largeTitle)
                             VStack(alignment: .leading, spacing: 4) {
@@ -154,11 +153,11 @@ public struct SimpleDuModuleView: View {
                 }
                 if visibleBooks.isEmpty {
                     ContentUnavailableView {
-                        Label(location == .shelf ? "书架清爽了" : "书柜还是空的", systemImage: location == .shelf ? "book.closed" : "books.vertical")
+                        Label(location == .shelf ? "暂无未读文章" : "暂无已读文章", systemImage: "doc.text")
                     } description: {
-                        Text(location == .shelf ? "已读文章已自动收进书柜，也可以导入新的阅读包。" : "文章读完后会自动收进书柜，书架上只留下接下来要读的。")
+                        Text(location == .shelf ? "可以查看已读文章，或导入新的阅读包。" : "完成阅读和答题，或标为已读后，文章会显示在这里。")
                     } actions: {
-                        if location == .shelf { Button("打开书柜") { location = .cabinet } }
+                        if location == .shelf { Button("查看已读文章") { location = .cabinet } }
                     }.padding(.vertical, 24)
                 } else {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 128, maximum: 156), spacing: 18)], spacing: 20) {
@@ -209,9 +208,6 @@ public struct SimpleDuModuleView: View {
         }
         Button("标为已读", systemImage: "checkmark.circle") { arrange([book.id], action: .markRead) }
         Button("标为未读", systemImage: "circle") { arrange([book.id], action: .markUnread) }
-        Button(book.isArchived ? "标为未读并移回书架" : "收进书柜", systemImage: book.isArchived ? "arrow.uturn.backward" : "books.vertical") {
-            arrange([book.id], action: book.isArchived ? .unarchive : .archive)
-        }
         Divider()
         Button("删除文章", systemImage: "trash", role: .destructive) { pendingDeletion = book }
     }
@@ -234,13 +230,13 @@ public struct SimpleDuModuleView: View {
     private var batchStatusMenu: some View {
         Menu {
             Button("标为已读") { arrange(selectedIDs, action: .markRead) }
-            Button("标为未读，并移回书架") { arrange(selectedIDs, action: .markUnread) }
+            Button("标为未读") { arrange(selectedIDs, action: .markUnread) }
         } label: { Label("标记状态", systemImage: "checkmark.circle") }
             .fixedSize().disabled(selectedIDs.isEmpty).accessibilityIdentifier("du.batchStatus")
     }
     private var batchArchiveButton: some View {
-        Button(location == .cabinet ? "标为未读并移回书架" : "收进书柜", systemImage: location == .cabinet ? "arrow.uturn.backward" : "books.vertical") {
-            arrange(selectedIDs, action: location == .cabinet ? .unarchive : .archive)
+        Button(location == .cabinet ? "标为未读" : "标为已读", systemImage: location == .cabinet ? "circle" : "checkmark.circle") {
+            arrange(selectedIDs, action: location == .cabinet ? .markUnread : .markRead)
         }.buttonStyle(.borderedProminent).fixedSize().disabled(selectedIDs.isEmpty).accessibilityIdentifier("du.batchArchive")
     }
 
@@ -282,7 +278,7 @@ private struct DuImportPreview: View {
                                 Text("新版本将从头阅读和答题；旧版本的内容与成绩仍保存在完整备份中。")
                                     .foregroundStyle(.secondary)
                             } else if kind == .restore {
-                                Text("已删除的文章将重新加入书架，从头阅读和答题；原有其他文章及成绩保留。")
+                                Text("已删除的文章将重新加入未读文章，从头阅读和答题；原有其他文章及成绩保留。")
                                     .foregroundStyle(.secondary)
                             } else if kind == .conflict {
                                 Text("同一批次和版本的内容不同，请制作者递增版本后重新导入。")

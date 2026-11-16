@@ -22,55 +22,73 @@ struct TodayView: View {
     private var needsExplanation: [ProblemGroup] { groups.filter { !$0.isArchived && $0.reviewState?.status == .needsExplanation } }
     private var pendingCorrection: [ProblemGroup] { groups.filter { !$0.isArchived && $0.reviewState?.status == .pendingCorrection } }
 
+    private var todayIsComplete: Bool {
+        weekendComplete || (active == nil && due.isEmpty && needsExplanation.isEmpty
+            && pendingCorrection.isEmpty && unavailable.isEmpty)
+    }
+
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(greeting).font(StudyAppearance.title)
-                        Text(statusText).foregroundStyle(.secondary)
-                        if FreeDayStore.isUsedToday() {
-                            Text("免做卡 · 今天免练，未完成任务留待之后练习，也可以自愿继续。")
-                                .font(.subheadline).foregroundStyle(.secondary)
-                        }
+            Group {
+                if todayIsComplete {
+                    VStack {
+                        Spacer()
+                        StudyCompletionCard("今天的练习已完成")
+                            .accessibilityIdentifier("lian.studyComplete")
+                        Spacer()
                     }
+                    .padding(StudyAppearance.pagePadding)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 24) {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text(greeting).font(StudyAppearance.title)
+                                Text(statusText).foregroundStyle(.secondary)
+                                if FreeDayStore.isUsedToday() {
+                                    Text("免做卡 · 今天免练，未完成任务留待之后练习，也可以自愿继续。")
+                                        .font(.subheadline).foregroundStyle(.secondary)
+                                }
+                            }
 
-                    if !weekendComplete {
-                        Button(action: beginOrResume) {
-                            Label(active == nil ? "开始今天的练习" : "继续未完成练习", systemImage: active == nil ? "play.fill" : "arrow.forward.circle.fill")
-                        }
-                        .buttonStyle(StudyPrimaryButtonStyle())
-                        .disabled(active == nil && due.isEmpty)
+                            if !weekendComplete {
+                                Button(action: beginOrResume) {
+                                    Label(active == nil ? "开始今天的练习" : "继续未完成练习", systemImage: active == nil ? "play.fill" : "arrow.forward.circle.fill")
+                                }
+                                .buttonStyle(StudyPrimaryButtonStyle())
+                                .disabled(active == nil && due.isEmpty)
 
-                        if !needsExplanation.isEmpty {
-                            StatusSection(title: "需要讲解", icon: "person.wave.2", groups: needsExplanation) { startCorrection($0) }
-                        }
-                        if !pendingCorrection.isEmpty && active == nil {
-                            StatusSection(title: "等待订正", icon: "arrow.trianglehead.2.clockwise.rotate.90", groups: pendingCorrection) { startCorrection($0) }
-                        }
-                        if !unavailable.isEmpty {
-                            VStack(alignment: .leading, spacing: 12) {
-                                Label("缺少可用题目", systemImage: "exclamationmark.triangle").font(.headline)
-                                Text("以下题型的扩展题已全部停用或缺失。请启用题目，或导入补充题库后再练习。")
-                                    .foregroundStyle(.secondary)
-                                ForEach(unavailable) { group in
-                                    NavigationLink { GroupDetailView(group: group) } label: {
-                                        HStack { Text(group.title); Spacer(); Text("查看题目") }
-                                    }.padding(12).background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
+                                if !needsExplanation.isEmpty {
+                                    StatusSection(title: "需要讲解", icon: "person.wave.2", groups: needsExplanation) { startCorrection($0) }
+                                }
+                                if !pendingCorrection.isEmpty && active == nil {
+                                    StatusSection(title: "等待订正", icon: "arrow.trianglehead.2.clockwise.rotate.90", groups: pendingCorrection) { startCorrection($0) }
+                                }
+                                if !unavailable.isEmpty {
+                                    VStack(alignment: .leading, spacing: 12) {
+                                        Label("缺少可用题目", systemImage: "exclamationmark.triangle").font(.headline)
+                                        Text("以下题型的扩展题已全部停用或缺失。请启用题目，或导入补充题库后再练习。")
+                                            .foregroundStyle(.secondary)
+                                        ForEach(unavailable) { group in
+                                            NavigationLink { GroupDetailView(group: group) } label: {
+                                                HStack { Text(group.title); Spacer(); Text("查看题目") }
+                                            }.padding(12).background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
+                                        }
+                                    }
+                                }
+                                if groups.isEmpty {
+                                    ContentUnavailableView("还没有题目", systemImage: "tray", description: Text("到“题库”页导入 ChatGPT 生成的题库。"))
                                 }
                             }
                         }
-                        if groups.isEmpty {
-                            ContentUnavailableView("还没有题目", systemImage: "tray", description: Text("到“题库”页导入 ChatGPT 生成的题库。"))
-                        }
+                        .frame(maxWidth: StudyAppearance.contentWidth, alignment: .leading)
+                        .padding(StudyAppearance.pagePadding)
+                        .frame(maxWidth: .infinity)
                     }
                 }
-                .frame(maxWidth: StudyAppearance.contentWidth, alignment: .leading)
-                .padding(StudyAppearance.pagePadding)
-                .frame(maxWidth: .infinity)
             }
             .background(StudyAppearance.background)
-            .navigationTitle("今天")
+            .navigationTitle(todayIsComplete ? "" : "今天")
             .navigationBarTitleDisplayMode(.inline)
             .onAppear { now = Date() }
             .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) { now = $0 }

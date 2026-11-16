@@ -95,3 +95,28 @@ import Testing
     #expect(QuestionSelector.choose(from: [disabled, excluded], creditedCorrectCount: 0, excluding: [excluded.id]) == nil)
     #expect(QuestionSelector.choose(from: [disabled, excluded], creditedCorrectCount: 0)?.id == excluded.id)
 }
+
+@Test func readsUTF8FilesWithBOMAndUppercaseExtension() throws {
+    let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).TXT")
+    defer { try? FileManager.default.removeItem(at: url) }
+    let text = #"{"schema_version":1,"batch_title":"旧题库","groups":[]}"#
+    try Data(("\u{FEFF}" + text).utf8).write(to: url)
+    let content = try ImportFileReader.read(url)
+    #expect(content == text)
+    #expect(try ImportParser.parse(content).batchTitle == "旧题库")
+}
+
+@Test func rejectsOversizedNonUTF8AndUnsupportedFiles() throws {
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let oversized = directory.appendingPathComponent("太大.txt")
+    try Data(repeating: 32, count: ImportParser.defaultMaximumBytes + 1).write(to: oversized)
+    #expect(throws: ImportParserError.tooLarge(maxBytes: ImportParser.defaultMaximumBytes)) {
+        try ImportFileReader.read(oversized)
+    }
+    let invalid = directory.appendingPathComponent("编码错误.json")
+    try Data([0xFF, 0xFE, 0xFF]).write(to: invalid)
+    #expect(throws: ImportFileError.self) { try ImportFileReader.read(invalid) }
+    #expect(throws: ImportFileError.self) { try ImportFileReader.read(directory.appendingPathComponent("材料.pdf")) }
+}
