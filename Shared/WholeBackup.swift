@@ -139,21 +139,26 @@ public final class WholeBackupCoordinator {
     }
     private let endpoints: [WholeBackupEndpoint]
     private let freeDayStore: FreeDayStore?
+    private let preservingMissingModules: Set<String>
     private let directory: URL
     private var journalURL: URL { directory.appendingPathComponent("RestoreJournal.json") }
-    public init(endpoints: [WholeBackupEndpoint], directory: URL, freeDayStore: FreeDayStore? = nil) {
+    public init(endpoints: [WholeBackupEndpoint], directory: URL, freeDayStore: FreeDayStore? = nil,
+                preservingMissingModules: Set<String> = []) {
         self.endpoints = endpoints; self.directory = directory; self.freeDayStore = freeDayStore
+        self.preservingMissingModules = preservingMissingModules
     }
     public func preview(_ backup: WholeBackupEnvelope) throws -> [String] {
         guard backup.app == "SimpleXue", backup.formatVersion == 1 else {
             throw WholeBackupError.message("这不是受支持的简单学整体备份。")
         }
-        guard Set(backup.modules.keys) == Set(endpoints.map(\.id)), endpoints.count == backup.modules.count else {
-            throw WholeBackupError.message("整体备份必须完整包含六个模块，文件缺少模块或包含不支持的模块。")
+        let supported = Set(endpoints.map(\.id)), incoming = Set(backup.modules.keys)
+        guard incoming.isSubset(of: supported), supported.subtracting(preservingMissingModules).isSubset(of: incoming) else {
+            throw WholeBackupError.message("整体备份缺少必要模块，或包含不支持的模块。")
         }
         if let data = backup.freeDayLedger { _ = try FreeDayStore.decode(data) }
         return try endpoints.map { endpoint in
-            do { return "\(endpoint.title)：\(try endpoint.validate(backup.modules[endpoint.id]!))" }
+            guard let data = backup.modules[endpoint.id] else { return "\(endpoint.title)：旧备份未包含，保留当前数据" }
+            do { return "\(endpoint.title)：\(try endpoint.validate(data))" }
             catch { throw WholeBackupError.message("\(endpoint.title)备份校验失败：\(error.localizedDescription)") }
         }
     }
@@ -211,11 +216,12 @@ public final class WholeBackupCoordinator {
         try writeJournal(journal)
         do {
             for endpoint in endpoints {
+                guard let data = backup.modules[endpoint.id] else { continue }
                 do {
                     if rawModules.contains(endpoint.id) {
                         try endpoint.rawStorage!.prepareForRestore(using: rawDirectory(filename: filename, module: endpoint.id))
                     }
-                    try await endpoint.restore(backup.modules[endpoint.id]!)
+                    try await endpoint.restore(data)
                 }
                 catch { throw WholeBackupError.message("\(endpoint.title)恢复失败：\(error.localizedDescription)") }
             }
@@ -239,7 +245,7 @@ public final class WholeBackupCoordinator {
             do {
                 if (journal.rawModules ?? []).contains(endpoint.id) {
                     try endpoint.rawStorage!.restore(from: rawDirectory(filename: journal.safetyFilename, module: endpoint.id))
-                } else { try await endpoint.restore(backup.modules[endpoint.id]!) }
+                } else if let data = backup.modules[endpoint.id] { try await endpoint.restore(data) }
             }
             catch { failures.append("\(endpoint.title)：\(error.localizedDescription)") }
         }
@@ -256,14 +262,15 @@ public final class WholeBackupCoordinator {
         if let data = backup.freeDayLedger { _ = try FreeDayStore.decode(data) }
         let raw = journal.rawModules ?? []
         guard raw.count == Set(raw).count, Set(raw).isDisjoint(with: Set(backup.modules.keys)),
-              Set(raw).union(backup.modules.keys) == Set(endpoints.map(\.id)) else {
+              Set(raw).union(backup.modules.keys).isSubset(of: Set(endpoints.map(\.id))),
+              Set(endpoints.map(\.id)).subtracting(preservingMissingModules).isSubset(of: Set(raw).union(backup.modules.keys)) else {
             throw WholeBackupError.message("恢复前安全副本的模块范围不完整。")
         }
         for endpoint in endpoints {
             if raw.contains(endpoint.id) {
                 guard let storage = endpoint.rawStorage else { throw WholeBackupError.message("缺少原始数据回退能力。") }
                 try storage.validate(at: rawDirectory(filename: journal.safetyFilename, module: endpoint.id))
-            } else { _ = try endpoint.validate(backup.modules[endpoint.id]!) }
+            } else if let data = backup.modules[endpoint.id] { _ = try endpoint.validate(data) }
         }
     }
     private func readJournal() throws -> Journal? {

@@ -567,4 +567,59 @@ extension ListenCoreTests {
         let copies = try FileManager.default.contentsOfDirectory(at: folder.appendingPathComponent("SafetyBackups"), includingPropertiesForKeys: nil)
         XCTAssertTrue(try copies.contains { try Data(contentsOf: $0) == corrupt })
     }
+    @MainActor
+    func testReadingLinkAppendsOneArticleAndRepeatDoesNotWrite() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("TingLink-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let file = LibraryFile(url: folder.appendingPathComponent("library.json"))
+        let original = try library(); try file.save(original)
+        let result = try SimpleTingArticleImport.addFromReading(title: "From the farm", bodyMarkdown: "## Food\n\nA **farm** grows food.", sourceID: "reading:article1", file: file)
+        XCTAssertEqual(result, .added)
+        let loaded = try file.load()
+        XCTAssertEqual(loaded.days.count, original.days.count + 1)
+        XCTAssertEqual(loaded.days.first { $0.id == original.days[0].id }, original.days[0])
+        XCTAssertEqual(loaded.articlesNewestFirst[0].title, "From the farm")
+        XCTAssertEqual(loaded.articlesNewestFirst[0].speechText, "Food.\n\nA farm grows food.")
+        XCTAssertEqual(loaded.nextImportSequence, original.nextImportSequence + 1)
+        let before = try Data(contentsOf: file.url)
+        let noWrite = LibraryFile(url: file.url, writer: { _, _ in XCTFail("Duplicate must not write") })
+        let duplicate = try SimpleTingArticleImport.addFromReading(title: "From the farm", bodyMarkdown: "A farm grows food.", sourceID: "reading:article1", file: noWrite)
+        XCTAssertEqual(duplicate, .alreadyPresent)
+        XCTAssertEqual(try Data(contentsOf: file.url), before)
+    }
+    @MainActor
+    func testReadingLinkDeletionAllowsReaddingAndPasteImportStillAppends() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("TingLink-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let file = LibraryFile(url: folder.appendingPathComponent("library.json"))
+        _ = try SimpleTingArticleImport.addFromReading(title: "Title", bodyMarkdown: "A body.", sourceID: "reading:one", file: file)
+        let store = LibraryStore(file: file)
+        let firstID = store.library.articlesNewestFirst[0].id
+        try store.delete(store.library.articlesNewestFirst[0])
+        XCTAssertTrue(try file.load().days.isEmpty)
+        XCTAssertEqual(try SimpleTingArticleImport.addFromReading(title: "Title", bodyMarkdown: "A body.", sourceID: "reading:one", file: file), .added)
+        XCTAssertNotEqual(try file.load().articlesNewestFirst[0].id, firstID)
+        let manual = LibraryStore(file: file)
+        try manual.commit([MarkdownArticleParser.parsePastedText("# Article 1: Manual\n\nManual body.")])
+        try manual.commit([MarkdownArticleParser.parsePastedText("# Article 1: Manual\n\nManual body.")])
+        XCTAssertEqual(try file.load().articlesNewestFirst.count, 3)
+    }
+    @MainActor
+    func testReadingLinkPreservesCorruptLibraryAndWriteFailure() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("TingLink-\(UUID())")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let file = LibraryFile(url: folder.appendingPathComponent("library.json"))
+        let corrupt = Data("broken library".utf8); try corrupt.write(to: file.url)
+        XCTAssertThrowsError(try SimpleTingArticleImport.addFromReading(title: "Title", bodyMarkdown: "Body.", sourceID: "id", file: file))
+        XCTAssertEqual(try Data(contentsOf: file.url), corrupt)
+        try file.save(library())
+        let before = try Data(contentsOf: file.url)
+        let failed = LibraryFile(url: file.url, writer: { _, _ in throw ListenError.message("disk full") })
+        XCTAssertThrowsError(try SimpleTingArticleImport.addFromReading(title: "Title", bodyMarkdown: "Body.", sourceID: "id", file: failed))
+        XCTAssertEqual(try Data(contentsOf: file.url), before)
+        XCTAssertThrowsError(try SimpleTingArticleImport.addFromReading(title: " ", bodyMarkdown: "Body.", sourceID: "id", file: file))
+        XCTAssertThrowsError(try SimpleTingArticleImport.addFromReading(title: "Title", bodyMarkdown: " ", sourceID: "id", file: file))
+    }
+
 }

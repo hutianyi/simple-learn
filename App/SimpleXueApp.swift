@@ -7,6 +7,7 @@ import DictationApp
 import SimpleSuan
 import SimpleTing
 import SimpleBei
+import SimpleDu
 
 @main
 struct SimpleXueApp: App {
@@ -22,21 +23,21 @@ struct SimpleXueApp: App {
 }
 
 enum LearningModule: String, CaseIterable, Identifiable {
-    case ji, suan, ting, lian, bei, mo
+    case ji, suan, du, ting, lian, bei, mo
     var id: String { rawValue }
     var title: String {
-        switch self { case .ji: "简单记"; case .lian: "简单练"; case .mo: "简单默"; case .suan: "简单算"; case .ting: "简单听"; case .bei: "简单背" }
+        switch self { case .ji: "简单记"; case .lian: "简单练"; case .mo: "简单默"; case .suan: "简单算"; case .ting: "简单听"; case .du: "简单读"; case .bei: "简单背" }
     }
     var symbol: String {
         switch self { case .ji: "rectangle.on.rectangle"; case .lian: "pencil.and.list.clipboard";
-            case .mo: "speaker.wave.2"; case .suan: "plus.forwardslash.minus"; case .ting: "headphones"; case .bei: "text.book.closed" }
+            case .mo: "speaker.wave.2"; case .suan: "plus.forwardslash.minus"; case .ting: "headphones"; case .du: "book.pages"; case .bei: "text.book.closed" }
     }
     var detail: String {
         switch self { case .ji: "单词卡片与手写默写"; case .lian: "错题练习与订正";
-            case .mo: "听语音，在纸上默写"; case .suan: "心算练习与统计"; case .ting: "英文文章连续朗读"; case .bei: "听读、练习与背诵检查" }
+            case .mo: "听语音，在纸上默写"; case .suan: "心算练习与统计"; case .ting: "英文文章连续朗读"; case .du: "绘本阅读与互动答题"; case .bei: "听读、练习与背诵检查" }
     }
     var theme: StudyTheme {
-        switch self { case .ji: .ji; case .lian: .lian; case .mo: .mo; case .suan: .suan; case .ting: .ting; case .bei: .bei }
+        switch self { case .ji: .ji; case .lian: .lian; case .mo: .mo; case .suan: .suan; case .ting: .ting; case .du: .du; case .bei: .bei }
     }
     var color: Color { theme.accent }
 }
@@ -86,11 +87,11 @@ struct LearningHomeView: View {
     private var orderedModules: [LearningModule] {
         var modules: [LearningModule] = []
         for id in savedModuleOrder.split(separator: ",") {
-            if let module = LearningModule(rawValue: String(id)), !modules.contains(module) {
+            if let module = LearningModule(rawValue: String(id)), module != .bei, !modules.contains(module) {
                 modules.append(module)
             }
         }
-        return modules + LearningModule.allCases.filter { !modules.contains($0) }
+        return modules + LearningModule.allCases.filter { $0 != .bei && !modules.contains($0) }
     }
 
     private enum HomePresentation: String, Identifiable {
@@ -166,7 +167,7 @@ struct LearningHomeView: View {
                                         .buttonStyle(.plain).accessibilityIdentifier("module.\(module.rawValue)")
                                         .accessibilityAction { openModule(module, accessibility: true) }
                                         .accessibilityHint("长按并拖动可调整顺序，也可使用向前或向后移动操作")
-                                        .accessibilityValue("第 \((orderedModules.firstIndex(of: module) ?? 0) + 1) 项，共 6 项")
+                                        .accessibilityValue("第 \((orderedModules.firstIndex(of: module) ?? 0) + 1) 项，共 \(orderedModules.count) 项")
                                         .accessibilityAction(named: "向前移动") { moveModule(module, by: -1) }
                                         .accessibilityAction(named: "向后移动") { moveModule(module, by: 1) }
                                         .opacity(draggedModule == module ? 0 : 1)
@@ -550,6 +551,14 @@ struct LearningHomeView: View {
         case .mo: SimpleMoModuleView()
         case .suan: SimpleSuanModuleView()
         case .ting: SimpleTingModuleView()
+        case .du:
+            SimpleDuModuleView { article in
+                let result = try SimpleTingArticleImport.addFromReading(title: article.title, bodyMarkdown: article.bodyMarkdown, sourceID: article.sourceID)
+                switch result {
+                case .added: return "已添加到简单听：\(article.title)\n可返回首页进入简单听播放。"
+                case .alreadyPresent: return "这篇文章已在简单听中，无需重复添加。"
+                }
+            }
         case .bei: SimpleBeiModuleView()
         }
     }

@@ -37,9 +37,10 @@ final class ModuleNavigationTests: XCTestCase {
             XCUIDevice.shared.orientation = orientation
             XCTAssertTrue(app.buttons["module.ji"].waitForExistence(timeout: 10))
             let viewport = app.windows.firstMatch.frame
+            XCTAssertFalse(app.buttons["module.bei"].exists)
             if orientation == .portrait { XCTAssertLessThan(viewport.width, viewport.height) }
             else { XCTAssertGreaterThan(viewport.width, viewport.height) }
-            for module in ["ji", "suan", "ting", "lian", "bei", "mo"] {
+            for module in ["ji", "suan", "du", "ting", "lian", "mo"] {
                 let card = app.buttons["module.\(module)"]
                 XCTAssertTrue(card.exists)
                 XCTAssertTrue(card.isHittable)
@@ -92,7 +93,7 @@ final class ModuleNavigationTests: XCTestCase {
         let app = XCUIApplication()
         app.launch()
         XCTAssertTrue(app.buttons["module.ji"].waitForExistence(timeout: 10))
-        let cards = ["ji", "suan", "ting", "lian", "bei", "mo"].map { app.buttons["module.\($0)"] }
+        let cards = ["ji", "suan", "du", "ting", "lian", "mo"].map { app.buttons["module.\($0)"] }
             .sorted { left, right in
                 if abs(left.frame.minY - right.frame.minY) > 10 { return left.frame.minY < right.frame.minY }
                 return left.frame.minX < right.frame.minX

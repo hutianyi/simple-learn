@@ -7,6 +7,7 @@ import DictationApp
 import SimpleSuan
 import SimpleTing
 import SimpleBei
+import SimpleDu
 
 @MainActor
 enum WholeBackupService {
@@ -25,10 +26,15 @@ enum WholeBackupService {
                 validate: SimpleLianBackupTransfer.validate, restore: { try SimpleLianBackupTransfer.restore($0) }, rawStorage: try rawStorage("SimpleLian")),
             WholeBackupEndpoint(id: "SimpleBei", title: "简单背", export: { try SimpleBeiBackupTransfer.exportData() },
                 validate: SimpleBeiBackupTransfer.validate, restore: { try SimpleBeiBackupTransfer.restore($0) }, rawStorage: try rawStorage("SimpleBei")),
+            WholeBackupEndpoint(id: "SimpleDu", title: "简单读", export: {
+                try await Task.detached { try SimpleDuBackupTransfer.exportData() }.value
+            }, validate: SimpleDuBackupTransfer.validate, restore: { data in
+                try await Task.detached { try SimpleDuBackupTransfer.restore(data) }.value
+            }, rawStorage: try rawStorage("SimpleDu")),
             WholeBackupEndpoint(id: "SimpleMo", title: "简单默", export: { try SimpleMoBackupTransfer.exportData() },
                 validate: SimpleMoBackupTransfer.validate, restore: { try SimpleMoBackupTransfer.restore($0) },
                 rawStorage: try rawStorage("SimpleMo", domains: ["com.hutianyi.SimpleXue.SimpleMo"]))
-        ], directory: try ModuleStorage.directory("WholeBackup"), freeDayStore: try FreeDayStore.live())
+        ], directory: try ModuleStorage.directory("WholeBackup"), freeDayStore: try FreeDayStore.live(), preservingMissingModules: ["SimpleDu"])
     }
     private static func rawStorage(_ module: String, domains: [String] = [], standardKeys: [String] = []) throws -> WholeBackupRawStorage {
         WholeBackupRawStorage(directory: try ModuleStorage.directory(module), defaultsDomains: domains, standardKeys: standardKeys)
@@ -69,7 +75,7 @@ struct WholeBackupView: View {
                     Button("一键备份全部数据") { Task { await exportAll() } }
                         .buttonStyle(.borderedProminent).accessibilityIdentifier("backup.exportAll")
                         .disabled(needsRecovery)
-                    Text("包含六个模块已保存的数据、学习记录、进度和设置，以及免做卡使用记录。不含简单背录音、临时缓存及系统语音资源。")
+                    Text("包含所有模块（含隐藏的简单背）的数据、学习记录和设置，以及简单读的正文、插图、答题进度和免做卡使用记录。不含简单背录音、临时缓存及系统语音资源。")
                         .font(.footnote).foregroundStyle(.secondary)
                     if lastExport > 0 {
                         Text("上次成功导出：\(Date(timeIntervalSince1970: lastExport).formatted(date: .abbreviated, time: .shortened))")
@@ -82,7 +88,7 @@ struct WholeBackupView: View {
                 Section("整体恢复") {
                     Button("从整体备份恢复", systemImage: "square.and.arrow.down") { importing = true }
                         .disabled(needsRecovery).accessibilityIdentifier("backup.restoreAll")
-                    Text("恢复将替换全部六个模块的数据和设置，包括简单背课文库及免做卡记录。旧备份没有免做卡记录时保留当前免做卡记录。恢复前保存安全副本；无法读取的模块会原样保留文件和设置，再从备份恢复。失败时回退到恢复前状态。")
+                    Text("恢复将替换备份所含模块的数据和设置，包括隐藏的简单背。旧备份没有简单读或免做卡记录时保留对应的当前数据。恢复前保存安全副本；无法读取的模块会原样保留文件和设置，再从备份恢复。失败时回退到恢复前状态。")
                         .font(.footnote).foregroundStyle(.secondary)
                     if needsRecovery {
                         Button("重试回退到恢复前数据") { Task { await recover() } }
@@ -111,7 +117,7 @@ struct WholeBackupView: View {
             Button("取消", role: .cancel) { pending = nil }
             Button("恢复并替换", role: .destructive) { Task { await restoreAll() } }
         } message: {
-            Text("\(pending?.exportedAt.formatted(date: .abbreviated, time: .shortened) ?? "")\n\(previewLines.joined(separator: "\n"))\n当前六个模块的数据和设置将被替换。")
+            Text("\(pending?.exportedAt.formatted(date: .abbreviated, time: .shortened) ?? "")\n\(previewLines.joined(separator: "\n"))\n备份所含模块的数据和设置将被替换；旧备份未含的简单读数据保留。")
         }
         .alert("备份与恢复", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) {
             Button("好", role: .cancel) {}
@@ -164,7 +170,7 @@ struct WholeBackupView: View {
         do {
             try await WholeBackupService.coordinator().restore(backup, appVersion: WholeBackupService.appVersion)
             summary = previewLines
-            message = "整体恢复完成。六个模块的数据和设置已替换，恢复前安全副本已保留。"
+            message = "整体恢复完成。备份所含模块的数据和设置已替换，恢复前安全副本已保留。"
         } catch {
             message = error.localizedDescription
             do { needsRecovery = try WholeBackupService.coordinator().hasPendingRecovery() }

@@ -250,7 +250,7 @@ final class FreeDayTests: XCTestCase {
         XCTAssertEqual(ledger.usedAt, [date(2026, 11, 4)])
         let reopened = FreeDayStore(fileURL: store.fileURL)
         let later = try reopened.enableAutomaticFridays(now: date(2026, 11, 21))
-        XCTAssertEqual(try reopened.export(), before)
+        XCTAssertEqual(try FreeDayStore.decode(reopened.export()), try FreeDayStore.decode(before))
         XCTAssertEqual(later.completionKeys(now: date(2026, 11, 21)), ["2026-11-04", "2026-11-13", "2026-11-20"])
         XCTAssertThrowsError(try reopened.use(now: date(2026, 11, 13)))
         XCTAssertThrowsError(try FreeDayLedger(automaticFridaysFrom: date(2026, 11, 5, 0)).validated())

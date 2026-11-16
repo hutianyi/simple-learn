@@ -26,3 +26,7 @@ Reports/
 *.mobileprovision
 *.provisionprofile
 *.cer
+
+# Local reading samples made from personal source materials
+/outputs/simpledu-samples/
+/简单读-项目方案与进度.md

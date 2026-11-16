@@ -2,7 +2,7 @@ import SwiftUI
 import UIKit
 
 public enum StudyTheme: CaseIterable {
-    case ji, suan, lian, mo, ting, bei
+    case ji, suan, lian, mo, ting, bei, du
 
     private var colors: (light: UInt32, dark: UInt32) {
         switch self {
@@ -12,6 +12,7 @@ public enum StudyTheme: CaseIterable {
         case .mo: (0x8052B8, 0xC6A1EF)
         case .ting: (0x177C80, 0x79D0D5)
         case .bei: (0x5654B8, 0xABA8F5)
+        case .du: (0x8A5525, 0xF1BB83)
         }
     }
 

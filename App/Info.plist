@@ -42,5 +42,27 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>UTExportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.zip-archive</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>简单读阅读包</string>
+			<key>UTTypeIdentifier</key>
+			<string>com.hutianyi.simpledu</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>simpledu</string>
+				</array>
+				<key>public.mime-type</key>
+				<string>application/vnd.simpledu+zip</string>
+			</dict>
+		</dict>
+	</array>
 </dict>
 </plist>

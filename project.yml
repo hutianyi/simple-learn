@@ -12,8 +12,8 @@ settings:
     TARGETED_DEVICE_FAMILY: "2"
     SUPPORTS_MACCATALYST: NO
     GENERATE_INFOPLIST_FILE: YES
-    MARKETING_VERSION: "2.0.7"
-    CURRENT_PROJECT_VERSION: "46"
+    MARKETING_VERSION: "2.9.0"
+    CURRENT_PROJECT_VERSION: "52"
     CODE_SIGN_STYLE: Automatic
     ENABLE_USER_SCRIPT_SANDBOXING: YES
     STRING_CATALOG_GENERATE_SYMBOLS: YES
@@ -36,6 +36,13 @@ targets:
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UIBackgroundModes: [audio]
         NSMicrophoneUsageDescription: 用于录制背诵，并回听最近一次录音自行核对原文。
+        UTExportedTypeDeclarations:
+          - UTTypeIdentifier: com.hutianyi.simpledu
+            UTTypeDescription: 简单读阅读包
+            UTTypeConformsTo: [public.zip-archive]
+            UTTypeTagSpecification:
+              public.filename-extension: [simpledu]
+              public.mime-type: application/vnd.simpledu+zip
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
           UISceneConfigurations: {}
@@ -48,7 +55,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.hutianyi.SimpleXue
-        CURRENT_PROJECT_VERSION: "46"
+        CURRENT_PROJECT_VERSION: "52"
         GENERATE_INFOPLIST_FILE: NO
         TARGETED_DEVICE_FAMILY: "2"
         INFOPLIST_KEY_CFBundleDisplayName: 简单学
@@ -64,6 +71,7 @@ targets:
       - target: SimpleSuan
       - target: SimpleTing
       - target: SimpleBei
+      - target: SimpleDu
   StudyShell:
     type: framework
     platform: iOS
@@ -143,6 +151,27 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.hutianyi.SimpleXue.SimpleBei
         ENABLE_MODULE_VERIFIER: YES
         MODULE_VERIFIER_SUPPORTED_LANGUAGE_STANDARDS: "gnu11 gnu++14"
+  SimpleDu:
+    type: framework
+    platform: iOS
+    sources: [Modules/SimpleDu/Sources]
+    dependencies:
+      - target: StudyShell
+      - sdk: libz.tbd
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.hutianyi.SimpleXue.SimpleDu
+        ENABLE_MODULE_VERIFIER: YES
+        MODULE_VERIFIER_SUPPORTED_LANGUAGE_STANDARDS: "gnu11 gnu++14"
+  SimpleDuTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [Modules/SimpleDu/Tests]
+    dependencies:
+      - target: SimpleDu
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.hutianyi.SimpleXue.SimpleDuTests
   SimpleBeiTests:
     type: bundle.unit-test
     platform: iOS
@@ -223,4 +252,5 @@ schemes:
         - SimpleSuanTests
         - SimpleTingTests
         - SimpleBeiTests
+        - SimpleDuTests
         - SimpleXueUITests

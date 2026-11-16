@@ -14,7 +14,7 @@ final class WholeBackupTests: XCTestCase {
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         return url
     }
-    private func coordinator(_ store: Store, directory: URL, freeDayStore: FreeDayStore? = nil) -> WholeBackupCoordinator {
+    private func coordinator(_ store: Store, directory: URL, freeDayStore: FreeDayStore? = nil, preservingMissingModules: Set<String> = []) -> WholeBackupCoordinator {
         WholeBackupCoordinator(endpoints: ["a", "b"].map { id in
             WholeBackupEndpoint(id: id, title: id, export: { store.values[id]! }, validate: { data in
                 guard String(data: data, encoding: .utf8) != "invalid" else { throw WholeBackupError.message("invalid") }
@@ -25,10 +25,37 @@ final class WholeBackupTests: XCTestCase {
                 if id == "a", store.failRollback, data == Data("old-a".utf8) { throw WholeBackupError.message("rollback failed") }
                 store.values[id] = data
             })
-        }, directory: directory, freeDayStore: freeDayStore)
+        }, directory: directory, freeDayStore: freeDayStore, preservingMissingModules: preservingMissingModules)
     }
     private var incoming: WholeBackupEnvelope {
         WholeBackupEnvelope(appVersion: "1", modules: ["a": Data("new-a".utf8), "b": Data("new-b".utf8)])
+    }
+    func testOlderBackupPreservesOptionalNewModule() async throws {
+        let folder = try directory(); defer { try? FileManager.default.removeItem(at: folder) }
+        let store = Store()
+        let service = coordinator(store, directory: folder, preservingMissingModules: ["b"])
+        let old = WholeBackupEnvelope(appVersion: "old", modules: ["a": Data("new-a".utf8)])
+        XCTAssertTrue(try service.preview(old).contains { $0.contains("保留当前数据") })
+        try await service.restore(old, appVersion: "new")
+        XCTAssertEqual(store.values["a"], Data("new-a".utf8))
+        XCTAssertEqual(store.values["b"], Data("old-b".utf8))
+        XCTAssertEqual(store.writes, ["a"])
+        let missingRequired = WholeBackupEnvelope(appVersion: "old", modules: ["b": Data()])
+        XCTAssertThrowsError(try service.preview(missingRequired))
+    }
+    func testPreUpgradeInterruptedJournalPreservesNewModule() async throws {
+        let folder = try directory(); defer { try? FileManager.default.removeItem(at: folder) }
+        let old = WholeBackupEnvelope(appVersion: "old", modules: ["a": Data("old-a".utf8)])
+        try old.encoded().write(to: folder.appendingPathComponent("PreRestore-old.json"))
+        try Data("{\"safetyFilename\":\"PreRestore-old.json\",\"pending\":true}".utf8)
+            .write(to: folder.appendingPathComponent("RestoreJournal.json"))
+        let store = Store(); store.values["a"] = Data("partial".utf8)
+        let service = coordinator(store, directory: folder, preservingMissingModules: ["b"])
+        let recovered = try await service.recoverIfNeeded()
+        XCTAssertTrue(recovered)
+        XCTAssertEqual(store.values["a"], Data("old-a".utf8))
+        XCTAssertEqual(store.values["b"], Data("old-b".utf8))
+        XCTAssertFalse(try service.hasPendingRecovery())
     }
     func testFreeDayBackupRestoreLegacyAndFailedRestore() async throws {
         let folder = try directory(); defer { try? FileManager.default.removeItem(at: folder) }

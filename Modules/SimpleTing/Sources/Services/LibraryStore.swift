@@ -57,3 +57,32 @@ public enum SimpleTingBackupTransfer {
         try LibraryStore().restore(ListenBackup.decode(data), settings: ListenSettings())
     }
 }
+
+public enum SimpleTingArticleImportResult: Sendable { case added, alreadyPresent }
+
+@MainActor
+public enum SimpleTingArticleImport {
+    public static func addFromReading(title: String, bodyMarkdown: String, sourceID: String) throws -> SimpleTingArticleImportResult {
+        try addFromReading(title: title, bodyMarkdown: bodyMarkdown, sourceID: sourceID, file: nil)
+    }
+
+    static func addFromReading(title: String, bodyMarkdown: String, sourceID: String,
+                               file: LibraryFile?) throws -> SimpleTingArticleImportResult {
+        let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let markdown = bodyMarkdown.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty, !markdown.isEmpty, !sourceID.isEmpty, sourceID.utf8.count <= 512 else {
+            throw ListenError.message("简单读文章的标题、正文或来源编号不完整。")
+        }
+        let store = LibraryStore(file: file)
+        if let error = store.loadError { throw ListenError.message(error) }
+        let key = "simpledu:\(sourceID)"
+        if store.library.days.contains(where: { $0.sourceKey == key }) { return .alreadyPresent }
+        let speechText = try MarkdownCleaner.plainText(markdown)
+        guard !speechText.isEmpty else { throw ListenError.message("文章没有可朗读的正文，未添加到简单听。") }
+        let article = ListenArticle(articleNumber: 1, title: title, rawMarkdown: markdown, speechText: speechText)
+        let draft = ImportDraft(sourceFileName: "简单读", sourceMarkdown: "# Article 1: \(title)\n\n\(markdown)",
+            dayNumber: nil, sourceKey: key, title: title, articles: [article])
+        try store.commit([draft])
+        return .added
+    }
+}
