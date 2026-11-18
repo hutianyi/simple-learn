@@ -2,11 +2,11 @@
 
 一个使用 SwiftUI 编写的本地 iPad 学习 App，将单词记忆、错题复习、语音默写、心算练习、英文听读和图文阅读整合到同一入口。
 
-当前版本：**3.0.0（构建 64）**。
+当前 iPad 正式版本为 **[3.0.1（构建 65）](https://github.com/hutianyi/simple-learn/releases/tag/v3.0.1)**，支持 **iPadOS 27 及以上**。简单读改用玫瑰红，简单练沿用暖橙色。首页入口与模块内控件均采用各自的主题色。
 
-当前正式版本：**[3.0.0（构建 64）](https://github.com/hutianyi/simple-learn/releases/tag/v3.0.0)**。仅支持 **iPadOS 27 及以上**。
+[简单读安卓电视版](简单读%20-%20安卓电视版/README.md)是同仓库下的独立 Android 工程，目前为 **0.1.2**。它和 iPad 简单读使用相同的阅读包格式，各自保存进度并独立编号。
 
-[3.0.0 正式版](https://github.com/hutianyi/simple-learn/releases/tag/v3.0.0)汇总今天的功能与界面交互更新：简单练文件多选导入与去重、简单读阅读状态与进度重置、简单听文章编辑及滚动布局、简单记抄写键盘限制，以及简单记／简单算／简单练统一的每日完成卡片。发布内容为源码，不含安装包或个人学习资料；详见 [CHANGELOG.md](CHANGELOG.md)。
+[3.0.0 正式版](https://github.com/hutianyi/simple-learn/releases/tag/v3.0.0)汇总此前的功能与界面交互更新：简单练文件多选导入与去重、简单读阅读状态与进度重置、简单听文章编辑及滚动布局、简单记抄写键盘限制，以及简单记／简单算／简单练统一的每日完成卡片。发布内容为源码，不含安装包或个人学习资料；详见 [CHANGELOG.md](CHANGELOG.md)。
 
 [2.9.0 正式版](https://github.com/hutianyi/simple-learn/releases/tag/v2.9.0)汇总此前简单读本地更新：阅读包导入、图文翻页、互动选择题、书架与书柜、整体备份，以及阅读完成后询问添加到简单听。发布内容为源码，不含安装包或个人阅读材料；iPad 实机交互仍待验收。
 

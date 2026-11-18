@@ -6,6 +6,7 @@ struct DuQuizView: View {
     let book: DuBook
     let readEvidence: (String?) -> Void
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.studyTheme) private var theme
 
     var body: some View {
         ScrollView {
@@ -28,7 +29,7 @@ struct DuQuizView: View {
                 Text("读一读，想一想").font(.title2.bold())
                 Spacer(); Text("第 \(questionIndex + 1) / \(book.article.questions.count) 题").monospacedDigit().foregroundStyle(.secondary)
             }
-            ProgressView(value: Double(book.progress.answers.count), total: Double(book.article.questions.count)).tint(.teal)
+            ProgressView(value: Double(book.progress.answers.count), total: Double(book.article.questions.count))
             Text(question.prompt).font(.system(size: 28, weight: .semibold)).fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("du.question")
             VStack(spacing: 14) {
@@ -141,7 +142,7 @@ struct DuQuizView: View {
             if index == question.answer { return .green }
             if index == submitted { return .red }
         }
-        return isMarked(index) ? .teal : .primary
+        return isMarked(index) ? theme.accent : .primary
     }
     private func optionSymbol(_ index: Int) -> String {
         if submitted != nil && index == question.answer { return "checkmark.circle.fill" }

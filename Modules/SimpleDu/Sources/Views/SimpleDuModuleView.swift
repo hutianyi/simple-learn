@@ -15,6 +15,7 @@ public struct SimpleDuModuleView: View {
     @State private var selecting = false
     @State private var selectedIDs: Set<String> = []
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.studyTheme) private var theme
     @EnvironmentObject private var session: ModuleSession
     private let addToListening: (@MainActor (SimpleDuListeningArticle) async throws -> String)?
     public init(addToListening: (@MainActor (SimpleDuListeningArticle) async throws -> String)? = nil) {
@@ -119,13 +120,13 @@ public struct SimpleDuModuleView: View {
                 }
                 if location == .cabinet {
                     HStack(spacing: 12) {
-                        Image(systemName: "books.vertical.fill").font(.title2).foregroundStyle(.brown)
+                        Image(systemName: "books.vertical.fill").font(.title2).foregroundStyle(theme.accent)
                         VStack(alignment: .leading, spacing: 4) {
                             Text("已读文章").font(.headline)
                             Text("标为未读后可从头阅读，历史成绩保留。").font(.subheadline).foregroundStyle(.secondary)
                         }
                     }.padding(16).frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color.brown.opacity(0.08), in: RoundedRectangle(cornerRadius: 18))
+                        .background(theme.accent.opacity(0.08), in: RoundedRectangle(cornerRadius: 18))
                 } else if !selecting, let book = store.snapshot?.continuingBook {
                     NavigationLink(value: book.id) {
                         HStack(spacing: 16) {
@@ -167,7 +168,7 @@ public struct SimpleDuModuleView: View {
                         }
                     }
                     .padding(location == .cabinet ? 16 : 0)
-                    .background(Color.brown.opacity(location == .cabinet ? 0.04 : 0), in: RoundedRectangle(cornerRadius: 18))
+                    .background(theme.accent.opacity(location == .cabinet ? 0.04 : 0), in: RoundedRectangle(cornerRadius: 18))
                 }
             }.padding(24).frame(maxWidth: 1200).frame(maxWidth: .infinity)
                 .animation(reduceMotion ? nil : .spring(response: 0.36, dampingFraction: 0.85), value: visibleBooks.map(\.id))
@@ -183,7 +184,7 @@ public struct SimpleDuModuleView: View {
                     .overlay(alignment: .topTrailing) {
                         Image(systemName: selectedIDs.contains(book.id) ? "checkmark.circle.fill" : "circle")
                             .font(.title2).symbolRenderingMode(.palette)
-                            .foregroundStyle(selectedIDs.contains(book.id) ? Color.accentColor : Color.gray, .white)
+                            .foregroundStyle(selectedIDs.contains(book.id) ? theme.accent : Color.gray, .white)
                             .background(.white, in: Circle()).padding(6)
                     }
             }.buttonStyle(.plain)

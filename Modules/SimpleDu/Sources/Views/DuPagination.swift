@@ -2,13 +2,13 @@ import SwiftUI
 #if canImport(UIKit)
 import UIKit
 private typealias DuLayoutFont = UIFont
+private typealias DuLayoutColor = UIColor
 private let duLayoutTextColor = UIColor.label
-private let duLayoutTargetColor = UIColor.systemTeal
 #else
 import AppKit
 private typealias DuLayoutFont = NSFont
+private typealias DuLayoutColor = NSColor
 private let duLayoutTextColor = NSColor.labelColor
-private let duLayoutTargetColor = NSColor.systemTeal
 #endif
 
 struct DuPageBlock: Identifiable {
@@ -31,20 +31,21 @@ struct DuPage: Identifiable {
 
 @MainActor
 enum DuPagination {
-    static func attributed(_ paragraph: DuParagraph, fontSize: CGFloat) -> NSAttributedString {
+    private static func attributed(_ paragraph: DuParagraph, fontSize: CGFloat, targetColor: DuLayoutColor) -> NSAttributedString {
         let result = NSMutableAttributedString(string: "")
         let style = NSMutableParagraphStyle(); style.lineSpacing = fontSize * 0.18
         for run in paragraph.runs {
             result.append(NSAttributedString(string: run.text, attributes: [
                 .font: DuLayoutFont.systemFont(ofSize: fontSize, weight: run.target ? .bold : .regular),
-                .foregroundColor: run.target ? duLayoutTargetColor : duLayoutTextColor,
+                .foregroundColor: run.target ? targetColor : duLayoutTextColor,
                 .paragraphStyle: style
             ]))
         }
         return result
     }
-    static func pages(_ article: DuArticle, width: CGFloat, height: CGFloat, fontSize: CGFloat) -> [DuPage] {
+    static func pages(_ article: DuArticle, width: CGFloat, height: CGFloat, fontSize: CGFloat, targetColor: Color = .accentColor) -> [DuPage] {
         let width = max(100, width), budget = max(fontSize * 2, height - 100)
+        let targetColor = DuLayoutColor(targetColor)
         var result: [DuPage] = []
         for unit in article.units {
             var blocks: [DuPageBlock] = [], used: CGFloat = 0
@@ -52,7 +53,7 @@ enum DuPagination {
                 if !blocks.isEmpty { result.append(DuPage(unit: unit, blocks: blocks)); blocks = []; used = 0 }
             }
             for paragraph in unit.paragraphs {
-                let text = attributed(paragraph, fontSize: fontSize), plain = text.string as NSString
+                let text = attributed(paragraph, fontSize: fontSize, targetColor: targetColor), plain = text.string as NSString
                 var start = 0
                 while start < text.length {
                     let remaining = budget - used

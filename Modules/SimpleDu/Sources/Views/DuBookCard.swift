@@ -1,5 +1,6 @@
 import SwiftUI
 import ImageIO
+import StudyShell
 #if canImport(UIKit)
 import UIKit
 
@@ -31,15 +32,8 @@ struct DuPhoto: View {
 #endif
 
 struct DuBookCard: View {
+    @Environment(\.studyTheme) private var theme
     let book: DuBook
-    private var coverColor: Color {
-        switch (book.dayNumber ?? 1) % 4 {
-        case 0: Color(red: 0.50, green: 0.38, blue: 0.46)
-        case 1: Color(red: 0.57, green: 0.36, blue: 0.22)
-        case 2: Color(red: 0.29, green: 0.45, blue: 0.49)
-        default: Color(red: 0.34, green: 0.46, blue: 0.38)
-        }
-    }
     var body: some View {
         VStack(spacing: 9) {
             ZStack(alignment: .leading) {
@@ -48,7 +42,7 @@ struct DuBookCard: View {
                     .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.black.opacity(0.10)))
                     .padding(.leading, 5).padding(.top, 5)
                 RoundedRectangle(cornerRadius: 8)
-                    .fill(coverColor.gradient).padding(.trailing, 4).padding(.bottom, 5)
+                    .fill(theme.accent.gradient).padding(.trailing, 4).padding(.bottom, 5)
                 Rectangle().fill(Color.black.opacity(0.16)).frame(width: 12)
                     .padding(.leading, 5).padding(.vertical, 10)
                 Rectangle().fill(Color.white.opacity(0.20)).frame(width: 1)
@@ -59,7 +53,7 @@ struct DuBookCard: View {
                     Rectangle().fill(Color.white.opacity(0.38)).frame(height: 1).padding(.horizontal, 8)
                     Text(book.articleLabel).font(.system(size: 17, weight: .medium, design: .rounded))
                         .lineLimit(1).minimumScaleFactor(0.7)
-                }.foregroundStyle(.white)
+                }.foregroundStyle(theme.buttonForeground)
                     .padding(.leading, 27).padding(.trailing, 15)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }.aspectRatio(0.72, contentMode: .fit)

@@ -107,6 +107,7 @@ private struct DuReadingPages: View {
     let book: DuBook
     let evidence: String?
     let startQuiz: () -> Void
+    @Environment(\.studyTheme) private var theme
     @State private var pages: [DuPage] = []
     @State private var pageIndex = 0
     @State private var layoutKey = ""
@@ -148,7 +149,7 @@ private struct DuReadingPages: View {
             }
             .task(id: key) {
                 let anchor = pages.indices.contains(pageIndex) ? pages[pageIndex].anchor : book.progress.anchor
-                let newPages = DuPagination.pages(book.article, width: textWidth, height: textHeight, fontSize: font)
+                let newPages = DuPagination.pages(book.article, width: textWidth, height: textHeight, fontSize: font, targetColor: theme.accent)
                 layoutKey = ""; pages = newPages
                 if evidence != appliedEvidence, let evidence, let match = newPages.firstIndex(where: { $0.blocks.contains { $0.paragraphID == evidence } }) { pageIndex = match }
                 else if let anchor, let match = newPages.firstIndex(where: { $0.contains(anchor) }) { pageIndex = match }

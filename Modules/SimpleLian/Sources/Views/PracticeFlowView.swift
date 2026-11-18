@@ -120,6 +120,7 @@ private struct MarkingView: View {
 }
 
 private struct MarkingCard: View {
+    @Environment(\.studyTheme) private var theme
     @Bindable var attempt: Attempt
     let save: () -> Void
     @State private var showsExplanation = false
@@ -157,7 +158,7 @@ private struct MarkingCard: View {
 
     private func tint(for result: AttemptResult) -> Color {
         switch result {
-        case .correct: .accentColor
+        case .correct: theme.accent
         case .wrong: .orange
         case .excluded: .gray
         }
@@ -292,7 +293,7 @@ private struct SummaryView: View {
     let finish: () -> Void
     var body: some View {
         VStack(spacing: 20) {
-            Image(systemName: "checkmark.circle.fill").font(.system(size: 72)).foregroundStyle(.green)
+            Image(systemName: "checkmark.circle.fill").font(.system(size: 72)).foregroundStyle(theme.accent)
             Text("这次练习完成了").font(StudyAppearance.title)
             let correct = session.attempts.filter { $0.result == .correct }.count
             let wrong = session.attempts.filter { $0.result == .wrong }.count
