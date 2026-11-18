@@ -1,0 +1,13 @@
+<resources>
+    <string name="app_name">简单读</string>
+    <string name="page_position">%1$d / %2$d</string>
+    <string name="article_count">%1$d 篇文章</string>
+    <string name="unread_count">未读文章 · %1$d 篇</string>
+    <string name="read_archive_count">已读文章（%1$d）</string>
+    <style name="AppTheme" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">#111B22</item>
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:colorAccent">#9DE1C5</item>
+        <item name="android:navigationBarColor">#111B22</item>
+    </style>
+</resources>
