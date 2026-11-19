@@ -29,6 +29,44 @@ final class ModuleNavigationTests: XCTestCase {
         }
     }
 
+    func testSimpleJiStatisticsEndStaysAboveBottomNavigationAfterScrolling() {
+        XCUIDevice.shared.orientation = .portrait
+        defer { XCUIDevice.shared.orientation = .portrait }
+        let app = XCUIApplication()
+        app.launch()
+        let entry = app.buttons["module.ji"]
+        XCTAssertTrue(entry.waitForExistence(timeout: 10))
+        entry.tap()
+        let statistics = app.buttons["ji.page.statistics"]
+        XCTAssertTrue(statistics.waitForExistence(timeout: 10))
+        statistics.tap()
+
+        for orientation in [UIDeviceOrientation.portrait, .landscapeLeft] {
+            XCUIDevice.shared.orientation = orientation
+            let content = app.scrollViews["ji.statistics.content"]
+            let navigation = app.descendants(matching: .any)["ji.pageNavigation"].firstMatch
+            let end = content.descendants(matching: .any)["ji.statistics.weakCards"].firstMatch
+            XCTAssertTrue(content.waitForExistence(timeout: 5))
+            XCTAssertTrue(navigation.waitForExistence(timeout: 5))
+
+            // Drag beside the chart so its data inspection gesture does not capture the swipe.
+            let lowerEdge = content.coordinate(withNormalizedOffset: CGVector(dx: 0.06, dy: 0.86))
+            let upperEdge = content.coordinate(withNormalizedOffset: CGVector(dx: 0.06, dy: 0.16))
+            for _ in 0..<12 {
+                lowerEdge.press(forDuration: 0.05, thenDragTo: upperEdge)
+                if end.exists, end.frame.height > 0,
+                   end.frame.maxY <= min(content.frame.maxY, navigation.frame.minY) { break }
+            }
+            lowerEdge.press(forDuration: 0.05, thenDragTo: upperEdge)
+            XCTAssertTrue(end.exists)
+            XCTAssertGreaterThan(end.frame.height, 0)
+            XCTAssertGreaterThan(end.frame.maxY, content.frame.minY)
+            XCTAssertLessThanOrEqual(content.frame.maxY, navigation.frame.minY + 1)
+            XCTAssertLessThanOrEqual(end.frame.maxY, content.frame.maxY)
+            XCTAssertLessThanOrEqual(end.frame.maxY, navigation.frame.minY, "The last statistics card must stay fully visible after releasing the drag.")
+        }
+    }
+
     func testHomeOverviewAndAllSixCardsFitPortraitAndLandscape() {
         let app = XCUIApplication()
         app.launch()

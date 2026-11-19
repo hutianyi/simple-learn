@@ -197,12 +197,15 @@ struct StatisticsView: View {
                     .padding(20)
                     .background(AppPalette.surface)
                     .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                    .accessibilityElement(children: .contain)
+                    .accessibilityIdentifier("ji.statistics.weakCards")
                 }
             }
             .padding(22)
             .frame(maxWidth: 900)
             .frame(maxWidth: .infinity)
         }
+        .accessibilityIdentifier("ji.statistics.content")
         .task(id: "\(events.count)|\(dictationEvents.count)|\(states.count)|\(settings.dictationLimit.rawValue)|\(settings.masteredDictationTerms.count)") {
             do {
                 try await StudyCompletionRepository(container: persistence.container).refresh(

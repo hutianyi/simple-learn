@@ -16,7 +16,7 @@ struct ContentView: View {
                 .tabItem { Label("统计", systemImage: "chart.line.uptrend.xyaxis") }
                 .tag(Page.statistics)
         }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
+        .studyBottomBar {
             HStack(spacing: 30) {
                 StudyNavigationButton("练习", symbol: "plus.forwardslash.minus", isSelected: selectedPage == .practice) {
                     selectedPage = .practice

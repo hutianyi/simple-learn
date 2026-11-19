@@ -1,6 +1,7 @@
 import SwiftData
 import SwiftUI
 import UniformTypeIdentifiers
+import StudyShell
 
 struct ImportView: View {
     @Environment(\.dismiss) private var dismiss
@@ -37,7 +38,7 @@ struct ImportView: View {
                     }
                 }
             }
-            .safeAreaInset(edge: .bottom) {
+            .studyBottomBar {
                 HStack {
                     Spacer()
                     if didImport {

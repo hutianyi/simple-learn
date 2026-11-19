@@ -93,7 +93,7 @@ struct ContentView: View {
                 .frame(maxWidth: Self.maxContentWidth)
                 .frame(maxWidth: .infinity)
             }
-            .safeAreaInset(edge: .bottom, spacing: 0) {
+            .studyBottomBar {
                 // 内层 ViewThatFits 优先横排，窄窗口 / 大字号时退化为竖排；
                 // 外层 frame 链先限制内容宽度（960），再占满整个窗口宽度，
                 // 使 ultraThinMaterial 背景横向铺满窗口而不是只覆盖中央内容。

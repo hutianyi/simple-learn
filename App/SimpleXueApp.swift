@@ -202,7 +202,7 @@ struct LearningHomeView: View {
                         .padding(StudyAppearance.pagePadding).frame(maxWidth: 1000).frame(maxWidth: .infinity)
                     }
                     .scrollDisabled(isReordering)
-                    .safeAreaInset(edge: .bottom, spacing: 0) {
+                    .studyBottomBar {
                         HStack {
                             Spacer()
                             Text("v\(appVersion)")

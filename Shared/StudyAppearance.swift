@@ -60,6 +60,19 @@ public enum StudyAppearance {
     public static let surface = Color(uiColor: .secondarySystemGroupedBackground)
 }
 
+public extension View {
+    /// Gives scrolling content a viewport that ends above a fixed bottom bar.
+    func studyBottomBar<Bar: View>(@ViewBuilder _ bar: () -> Bar) -> some View {
+        VStack(spacing: 0) {
+            self
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .clipped()
+            bar()
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
 public struct StudyCompletionCard: View {
     @Environment(\.studyTheme) private var theme
     private let title: String

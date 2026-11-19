@@ -60,7 +60,7 @@ struct BeiLessonView: View {
                 if follow, audio.active { withAnimation { proxy.scrollTo(index, anchor: .center) } }
             }
         }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
+        .studyBottomBar {
             listeningPlaybackBar
         }
     }

@@ -24,7 +24,7 @@ struct RootView: View {
                             .toolbarVisibility(.hidden, for: .tabBar)
                     }
                 }
-                .safeAreaInset(edge: .bottom, spacing: 0) {
+                .studyBottomBar {
                     HStack(spacing: 30) {
                         StudyNavigationButton("今天", symbol: "checkmark.circle", isSelected: selectedPage == .today) {
                             selectedPage = .today

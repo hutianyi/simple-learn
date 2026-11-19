@@ -46,7 +46,7 @@ struct RootView: View {
                     .tabItem { Label(AppPage.settings.title, systemImage: AppPage.settings.symbol) }
                     .tag(AppPage.settings)
                 }
-                .safeAreaInset(edge: .bottom, spacing: 0) {
+                .studyBottomBar {
                     if !router.isStudying {
                         HStack(spacing: 0) {
                             ForEach(AppPage.allCases, id: \.self) { page in
@@ -63,6 +63,7 @@ struct RootView: View {
                         .padding(.top, 12)
                         .padding(.bottom, 24)
                         .background(StudyAppearance.background)
+                        .accessibilityElement(children: .contain)
                         .accessibilityIdentifier("ji.pageNavigation")
                     }
                 }

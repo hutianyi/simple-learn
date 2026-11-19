@@ -45,6 +45,9 @@ public struct SimpleDuModuleView: View {
                     }
                 } else { bookshelf }
             }
+            .studyBottomBar {
+                if selecting { selectionActions }
+            }
             .navigationTitle("KET 阅读")
             .background(StudyAppearance.background)
             .toolbar {
@@ -55,9 +58,6 @@ public struct SimpleDuModuleView: View {
                     Button("导入", systemImage: "plus") { importing = true }
                         .disabled(store.loadError != nil || selecting).accessibilityIdentifier("du.import")
                 }
-            }
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                if selecting { selectionActions }
             }
             .navigationDestination(for: String.self) { id in DuReaderView(store: store, bookID: id, addToListening: addToListening) }
             .disabled(store.busy)

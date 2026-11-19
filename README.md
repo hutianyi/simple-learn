@@ -2,7 +2,7 @@
 
 一个使用 SwiftUI 编写的本地 iPad 学习 App，将单词记忆、错题复习、语音默写、心算练习、英文听读和图文阅读整合到同一入口。
 
-当前 iPad 正式版本为 **[3.0.1（构建 65）](https://github.com/hutianyi/simple-learn/releases/tag/v3.0.1)**，支持 **iPadOS 27 及以上**。简单读改用玫瑰红，简单练沿用暖橙色。首页入口与模块内控件均采用各自的主题色。
+当前 iPad 正式版本为 **[3.0.2（构建 66）](https://github.com/hutianyi/simple-learn/releases/tag/v3.0.2)**，支持 **iPadOS 27 及以上**。全应用统一自定义固定底栏的布局，让滚动区域在底栏上方结束，包括简单记的统计页。
 
 [简单读安卓电视版](简单读%20-%20安卓电视版/README.md)是同仓库下的独立 Android 工程，目前为 **0.1.2**。它和 iPad 简单读使用相同的阅读包格式，各自保存进度并独立编号。
 

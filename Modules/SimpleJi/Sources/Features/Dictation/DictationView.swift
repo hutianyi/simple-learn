@@ -714,6 +714,11 @@ private struct DictationKeyboardSheet: View {
                 .frame(maxWidth: 760)
                 .frame(maxWidth: .infinity)
             }
+            .studyBottomBar {
+                if isVerification && deadline == nil && message != nil {
+                    Button("关闭后重试") { dismiss() }.padding()
+                }
+            }
             .navigationTitle(isVerification ? "键盘复核" : "键盘辅助抄写")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -737,11 +742,6 @@ private struct DictationKeyboardSheet: View {
             }
             .onReceive(Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()) { _ in checkDeadline() }
             .onChange(of: scenePhase) { _, phase in if phase == .active { checkDeadline() } }
-            .overlay(alignment: .bottom) {
-                if isVerification && deadline == nil && message != nil {
-                    Button("关闭后重试") { dismiss() }.padding()
-                }
-            }
         }
     }
 
