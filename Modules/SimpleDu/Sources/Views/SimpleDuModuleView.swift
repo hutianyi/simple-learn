@@ -11,14 +11,18 @@ public struct SimpleDuModuleView: View {
     @State private var importing = false
     @State private var sheet: DuSheet?
     @State private var pendingDeletion: DuBook?
+    @State private var listeningOffer: [DuBook] = []
     @State private var location = DuShelfLocation.shelf
     @State private var selecting = false
     @State private var selectedIDs: Set<String> = []
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.studyTheme) private var theme
     @EnvironmentObject private var session: ModuleSession
+    private let existingListeningSourceIDs: (@MainActor (Set<String>) async throws -> Set<String>)?
     private let addToListening: (@MainActor (SimpleDuListeningArticle) async throws -> String)?
-    public init(addToListening: (@MainActor (SimpleDuListeningArticle) async throws -> String)? = nil) {
+    public init(existingListeningSourceIDs: (@MainActor (Set<String>) async throws -> Set<String>)? = nil,
+                addToListening: (@MainActor (SimpleDuListeningArticle) async throws -> String)? = nil) {
+        self.existingListeningSourceIDs = existingListeningSourceIDs
         self.addToListening = addToListening
     }
 
@@ -60,6 +64,21 @@ public struct SimpleDuModuleView: View {
                 }
             }
             .navigationDestination(for: String.self) { id in DuReaderView(store: store, bookID: id, addToListening: addToListening) }
+            .alert("添加到简单听？", isPresented: Binding(
+                get: { !listeningOffer.isEmpty }, set: { if !$0 { listeningOffer = [] } }), presenting: listeningOffer) { books in
+                if let addToListening {
+                    Button(books.count == 1 ? "添加" : "全部添加") {
+                        Task { await store.addToListening(books.map(\.id), perform: addToListening) }
+                    }.accessibilityIdentifier("du.markReadListening.add")
+                }
+                Button("暂不添加", role: .cancel) {}.accessibilityIdentifier("du.markReadListening.skip")
+            } message: { books in
+                if books.count == 1, let book = books.first {
+                    Text("《\(book.article.title)》已标为已读。要把这篇文章添加到简单听吗？")
+                } else {
+                    Text("有 \(books.count) 篇刚标为已读的文章还未加入简单听。要全部添加吗？")
+                }
+            }
             .disabled(store.busy)
             .allowsHitTesting(!store.saving)
             .overlay { if store.busy { ProgressView("正在处理…").padding(24).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18)) } }
@@ -203,7 +222,7 @@ public struct SimpleDuModuleView: View {
     @ViewBuilder private func bookMenu(_ book: DuBook) -> some View {
         if let addToListening {
             Button("添加到简单听", systemImage: "headphones") {
-                Task { await store.addToListening(book.id, perform: addToListening) }
+                Task { await store.addToListening([book.id], perform: addToListening) }
             }.accessibilityIdentifier("du.addToListening")
             Divider()
         }
@@ -243,8 +262,10 @@ public struct SimpleDuModuleView: View {
 
     private func arrange(_ ids: Set<String>, action: DuLibraryAction) {
         Task {
-            if await store.arrange(ids, action: action) {
-                selectedIDs = []; selecting = false
+            guard await store.arrange(ids, action: action) else { return }
+            selectedIDs = []; selecting = false
+            if action == .markRead, addToListening != nil, let existingListeningSourceIDs {
+                listeningOffer = await store.booksMissingFromListening(ids, check: existingListeningSourceIDs)
             }
         }
     }

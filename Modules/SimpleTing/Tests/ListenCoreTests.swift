@@ -666,16 +666,39 @@ extension ListenCoreTests {
         defer { try? FileManager.default.removeItem(at: folder) }
         let file = LibraryFile(url: folder.appendingPathComponent("library.json"))
         _ = try SimpleTingArticleImport.addFromReading(title: "Title", bodyMarkdown: "A body.", sourceID: "reading:one", file: file)
+        XCTAssertEqual(try SimpleTingArticleImport.existingReadingSourceIDs(["reading:one"], file: file), ["reading:one"])
         let store = LibraryStore(file: file)
         let firstID = store.library.articlesNewestFirst[0].id
         try store.delete(store.library.articlesNewestFirst[0])
         XCTAssertTrue(try file.load().days.isEmpty)
+        XCTAssertTrue(try SimpleTingArticleImport.existingReadingSourceIDs(["reading:one"], file: file).isEmpty)
         XCTAssertEqual(try SimpleTingArticleImport.addFromReading(title: "Title", bodyMarkdown: "A body.", sourceID: "reading:one", file: file), .added)
         XCTAssertNotEqual(try file.load().articlesNewestFirst[0].id, firstID)
         let manual = LibraryStore(file: file)
         try manual.commit([MarkdownArticleParser.parsePastedText("# Article 1: Manual\n\nManual body.")])
         try manual.commit([MarkdownArticleParser.parsePastedText("# Article 1: Manual\n\nManual body.")])
         XCTAssertEqual(try file.load().articlesNewestFirst.count, 3)
+    }
+    @MainActor
+    func testReadingLinkChecksMultipleArticleVersionsWithoutWriting() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("TingLink-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let url = folder.appendingPathComponent("library.json")
+        let readOnlyFile = LibraryFile(url: url, writer: { _, _ in XCTFail("A presence check must not write") })
+        let ids: Set<String> = ["reading:v1:one", "reading:v2:one", "reading:v1:two"]
+        XCTAssertTrue(try SimpleTingArticleImport.existingReadingSourceIDs(ids, file: readOnlyFile).isEmpty)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
+
+        _ = try SimpleTingArticleImport.addFromReading(title: "Title", bodyMarkdown: "A body.",
+                                                       sourceID: "reading:v1:one", file: LibraryFile(url: url))
+        let before = try Data(contentsOf: url)
+        XCTAssertEqual(try SimpleTingArticleImport.existingReadingSourceIDs(ids, file: readOnlyFile), ["reading:v1:one"])
+        XCTAssertEqual(try Data(contentsOf: url), before)
+
+        let corrupt = Data("broken library".utf8)
+        try corrupt.write(to: url)
+        XCTAssertThrowsError(try SimpleTingArticleImport.existingReadingSourceIDs(ids, file: readOnlyFile))
+        XCTAssertEqual(try Data(contentsOf: url), corrupt)
     }
     @MainActor
     func testReadingLinkAcceptsEncodedLiteralAnglesAndPreservesText() throws {

@@ -88,12 +88,41 @@ final class DuStore {
             return false
         }
     }
-    func addToListening(_ id: String, perform: @MainActor (SimpleDuListeningArticle) async throws -> String) async {
-        guard !busy, !saving, let book = book(id) else { return }
+    func booksMissingFromListening(_ ids: Set<String>,
+                                  check: @MainActor (Set<String>) async throws -> Set<String>) async -> [DuBook] {
+        guard !busy, !saving else { return [] }
         saving = true
         defer { saving = false }
-        do { message = try await perform(book.listeningArticle()) }
-        catch { message = "未能添加到简单听：\(error.localizedDescription)" }
+        do {
+            let existing = try await check(ids)
+            return books.filter { ids.contains($0.id) && !existing.contains($0.id) }
+        } catch {
+            message = "已标为已读。无法检查简单听文章库：\(error.localizedDescription)"
+            return []
+        }
+    }
+    func addToListening(_ ids: [String], perform: @MainActor (SimpleDuListeningArticle) async throws -> String) async {
+        guard !busy, !saving else { return }
+        let booksByID = Dictionary(uniqueKeysWithValues: books.map { ($0.id, $0) })
+        saving = true
+        defer { saving = false }
+        var completed = 0
+        var failures: [String] = []
+        for id in ids {
+            guard let book = booksByID[id] else {
+                failures.append("所选文章已更新，请返回列表重试。")
+                continue
+            }
+            do {
+                let result = try await perform(book.listeningArticle())
+                completed += 1
+                if ids.count == 1 { message = result }
+            } catch {
+                failures.append("《\(book.article.title)》：\(error.localizedDescription)")
+            }
+        }
+        if ids.count > 1, completed > 0 { libraryNotice = "已同步到简单听 · \(completed) 篇" }
+        if !failures.isEmpty { message = "未能添加到简单听：\n" + failures.joined(separator: "\n") }
     }
     func answerListeningOffer(_ id: String, add: Bool, perform: @MainActor (SimpleDuListeningArticle) async throws -> String) async {
         guard !busy, !saving, let repository else { return }
@@ -105,7 +134,7 @@ final class DuStore {
             return
         }
         saving = false
-        if add { await addToListening(id, perform: perform) }
+        if add { await addToListening([id], perform: perform) }
     }
     func deleteArticle(_ id: String) async {
         guard !busy, !saving, let repository else { return }

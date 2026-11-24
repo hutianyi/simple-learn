@@ -9,7 +9,7 @@ final class LibraryStore {
     @ObservationIgnored private var file: LibraryFile?
     init(file override: LibraryFile? = nil) {
         do {
-            let file = try override ?? LibraryFile(url: ModuleStorage.directory("SimpleTing").appendingPathComponent("library-v1.json"))
+            let file = try override ?? .forSimpleTing()
             self.file = file
             library = try file.load()
         } catch { loadError = "无法打开文章库：\(error.localizedDescription)\n原文件已保留，请先处理读取问题。" }
@@ -69,6 +69,17 @@ public enum SimpleTingArticleImportResult: Sendable { case added, alreadyPresent
 
 @MainActor
 public enum SimpleTingArticleImport {
+    public nonisolated static func existingReadingSourceIDs(_ sourceIDs: Set<String>) async throws -> Set<String> {
+        try await Task.detached(priority: .userInitiated) {
+            try existingReadingSourceIDs(sourceIDs, file: .forSimpleTing())
+        }.value
+    }
+
+    nonisolated static func existingReadingSourceIDs(_ sourceIDs: Set<String>, file: LibraryFile) throws -> Set<String> {
+        let keys = Set(try file.load().days.compactMap(\.sourceKey))
+        return sourceIDs.filter { keys.contains(readingSourceKey($0)) }
+    }
+
     public static func addFromReading(title: String, bodyMarkdown: String, sourceID: String) throws -> SimpleTingArticleImportResult {
         try addFromReading(title: title, bodyMarkdown: bodyMarkdown, sourceID: sourceID, file: nil)
     }
@@ -82,7 +93,7 @@ public enum SimpleTingArticleImport {
         }
         let store = LibraryStore(file: file)
         if let error = store.loadError { throw ListenError.message(error) }
-        let key = "simpledu:\(sourceID)"
+        let key = readingSourceKey(sourceID)
         if store.library.days.contains(where: { $0.sourceKey == key }) { return .alreadyPresent }
         let speechText = try MarkdownCleaner.plainText(markdown)
         guard !speechText.isEmpty else { throw ListenError.message("文章没有可朗读的正文，未添加到简单听。") }
@@ -91,5 +102,13 @@ public enum SimpleTingArticleImport {
             dayNumber: nil, sourceKey: key, title: title, articles: [article])
         try store.commit([draft])
         return .added
+    }
+
+    private nonisolated static func readingSourceKey(_ sourceID: String) -> String { "simpledu:\(sourceID)" }
+}
+
+private extension LibraryFile {
+    static func forSimpleTing() throws -> Self {
+        try Self(url: ModuleStorage.directory("SimpleTing").appendingPathComponent("library-v1.json"))
     }
 }

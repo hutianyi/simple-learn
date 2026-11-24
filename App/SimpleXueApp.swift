@@ -552,7 +552,7 @@ struct LearningHomeView: View {
         case .suan: SimpleSuanModuleView()
         case .ting: SimpleTingModuleView()
         case .du:
-            SimpleDuModuleView { article in
+            SimpleDuModuleView(existingListeningSourceIDs: SimpleTingArticleImport.existingReadingSourceIDs) { article in
                 let result = try SimpleTingArticleImport.addFromReading(title: article.title, bodyMarkdown: article.bodyMarkdown, sourceID: article.sourceID)
                 switch result {
                 case .added: return "已添加到简单听：\(article.title)\n可返回首页进入简单听播放。"
